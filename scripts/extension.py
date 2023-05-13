@@ -1,11 +1,15 @@
+if __name__ == "__main__":
+    raise SystemExit("This script must be run from a Stable Diffusion WebUI")
+
 import logging
 from modules import scripts, shared, script_callbacks
 from modules.processing import StableDiffusionProcessing
 from modules.shared import opts
 from sendtonegative import SendToNegative
+import sys
+import os
 
-if __name__ == "__main__":
-    raise SystemExit("This script must be run from a Stable Diffusion WebUI")
+sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
 __all__ = ["SendToNegativeScript"]
 

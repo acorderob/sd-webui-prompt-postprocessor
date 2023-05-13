@@ -8,7 +8,7 @@
             "name": "Tests",
             "type": "python",
             "request": "launch",
-            "program": "scripts/tests.py",
+            "program": "tests/tests.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }
