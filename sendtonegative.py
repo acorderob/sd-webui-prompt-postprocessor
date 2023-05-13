@@ -3,9 +3,14 @@ import re
 
 
 class SendToNegative:
-
     NAME = "Send to Negative"
     VERSION = "0.3"
+
+    DEFAULT_tagStart = "<!"
+    DEFAULT_tagEnd = "!>"
+    DEFAULT_tagParamStart = "!"
+    DEFAULT_tagParamEnd = "!"
+    DEFAULT_separator = ", "
 
     def __init__(
         self,
@@ -32,9 +37,7 @@ class SendToNegative:
 
             pN - content is added where the insertion point N is in the negative prompt or at the start if it does not exist. N can be 0 to 9.
 
-            iN - marks the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
-
-        The tags will be removed from the prompt or negative prompt without considering neighboring whitespace or separators.
+            iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
         """
         if logger is None:
             self.logger = logging.getLogger(__name__)
@@ -43,18 +46,32 @@ class SendToNegative:
             self.logger = logger
 
         strStart = (
-            tagStart if tagStart is not None else getattr(opts, "stn_tagstart", "<!")
+            tagStart
+            if tagStart is not None
+            else getattr(opts, "stn_tagstart", self.DEFAULT_tagStart)
+            if opts is not None
+            else self.DEFAULT_tagStart
         )
-        strEnd = tagEnd if tagEnd is not None else getattr(opts, "stn_tagend", "!>")
+        strEnd = (
+            tagEnd
+            if tagEnd is not None
+            else getattr(opts, "stn_tagend", self.DEFAULT_tagEnd)
+            if opts is not None
+            else self.DEFAULT_tagEnd
+        )
         strParamStart = (
             tagParamStart
             if tagParamStart is not None
-            else getattr(opts, "stn_tagparamstart", "!")
+            else getattr(opts, "stn_tagparamstart", self.DEFAULT_tagParamStart)
+            if opts is not None
+            else self.DEFAULT_tagParamStart
         )
         strParamEnd = (
             tagParamEnd
             if tagParamEnd is not None
-            else getattr(opts, "stn_tagparamend", "!")
+            else getattr(opts, "stn_tagparamend", self.DEFAULT_tagParamEnd)
+            if opts is not None
+            else self.DEFAULT_tagParamEnd
         )
         escapeSequence = r"(?<!\\)"
         self.ignoreRepeats = (
@@ -63,10 +80,18 @@ class SendToNegative:
             else getattr(opts, "stn_ignorerepeats", True)
         )
         self.cleanup = (
-            cleanup if cleanup is not None else getattr(opts, "stn_cleanup", True)
+            cleanup
+            if cleanup is not None
+            else getattr(opts, "stn_cleanup", True)
+            if opts is not None
+            else True
         )
         self.separator = (
-            separator if separator is not None else getattr(opts, "stn_separator", ", ")
+            separator
+            if separator is not None
+            else getattr(opts, "stn_separator", self.DEFAULT_separator)
+            if opts is not None
+            else self.DEFAULT_separator
         )
         self.insertionPointTags = [
             (strStart + strParamStart + "i" + str(x) + strParamEnd + strEnd)
@@ -89,7 +114,7 @@ class SendToNegative:
 
     def processPrompt(self, original_prompt, original_negative_prompt):
         """
-        Extract from the prompt the marked parts and add them to the negative prompt
+        Extract from the prompt the tagged parts and add them to the negative prompt
         """
         try:
             prompt = original_prompt

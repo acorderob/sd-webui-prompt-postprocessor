@@ -1,28 +1,26 @@
 if __name__ == "__main__":
     raise SystemExit("This script must be run from a Stable Diffusion WebUI")
 
-import logging
-from modules import scripts, shared, script_callbacks
-from modules.processing import StableDiffusionProcessing
-from modules.shared import opts
-from sendtonegative import SendToNegative
 import sys
 import os
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
-__all__ = ["SendToNegativeScript"]
+from sendtonegative import SendToNegative
+import logging
+from modules import scripts, shared, script_callbacks
+from modules.processing import StableDiffusionProcessing
+from modules.shared import opts
 
 
 class SendToNegativeScript(scripts.Script):
-
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         if getattr(opts, "is_debug", False):
             self.logger.setLevel(logging.DEBUG)
         if not hasattr(self, "callbacks_added"):
-            script_callbacks.on_ui_settings(on_ui_settings)
+            script_callbacks.on_ui_settings(_on_ui_settings)
             self.callbacks_added = True
 
     def title(self):
@@ -39,12 +37,12 @@ class SendToNegativeScript(scripts.Script):
             )
 
 
-def on_ui_settings():
+def _on_ui_settings():
     section = ("send-to-negative", SendToNegative.NAME)
     shared.opts.add_option(
         key="stn_tagstart",
         info=shared.OptionInfo(
-            "<!",
+            SendToNegative.DEFAULT_tagStart,
             label="Tag start",
             section=section,
         ),
@@ -52,7 +50,7 @@ def on_ui_settings():
     shared.opts.add_option(
         key="stn_tagend",
         info=shared.OptionInfo(
-            "!>",
+            SendToNegative.DEFAULT_tagEnd,
             label="Tag end",
             section=section,
         ),
@@ -60,7 +58,7 @@ def on_ui_settings():
     shared.opts.add_option(
         key="stn_tagparamstart",
         info=shared.OptionInfo(
-            "!",
+            SendToNegative.DEFAULT_tagParamStart,
             label="Tag parameter start",
             section=section,
         ),
@@ -68,7 +66,7 @@ def on_ui_settings():
     shared.opts.add_option(
         key="stn_tagparamend",
         info=shared.OptionInfo(
-            "!",
+            SendToNegative.DEFAULT_tagParamEnd,
             label="Tag parameter end",
             section=section,
         ),
@@ -76,7 +74,7 @@ def on_ui_settings():
     shared.opts.add_option(
         key="stn_separator",
         info=shared.OptionInfo(
-            ", ",
+            SendToNegative.DEFAULT_separator,
             label="Separator used when adding to the negative prompt",
             section=section,
         ),
@@ -93,7 +91,7 @@ def on_ui_settings():
         key="stn_cleanup",
         info=shared.OptionInfo(
             True,
-            label="Try to clean-up the prompt after processing",
+            label="Try to clean-up the prompt after processing. Removes extra spaces or separators (the configured separator).",
             section=section,
         ),
     )
