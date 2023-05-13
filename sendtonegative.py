@@ -4,7 +4,7 @@ import re
 
 class SendToNegative:
     NAME = "Send to Negative"
-    VERSION = "0.3"
+    VERSION = "1.0"
 
     DEFAULT_tagStart = "<!"
     DEFAULT_tagEnd = "!>"
