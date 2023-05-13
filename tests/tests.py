@@ -2,7 +2,7 @@ import unittest
 import sys
 import os
 
-sys.path.insert(1, os.path.join(sys.path[0], '..'))
+sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
 from sendtonegative import SendToNegative
 
@@ -27,7 +27,8 @@ class TestSendToNegative(unittest.TestCase):
         expected_negative_prompt,
         stn=None,
     ):
-        result_prompt, result_negative_prompt = (self.defstn if stn is None else stn).processPrompts(
+        theObj = self.defstn if stn is None else stn
+        result_prompt, result_negative_prompt = theObj.processPrompt(
             prompt, negative_prompt
         )
         self.assertEqual(

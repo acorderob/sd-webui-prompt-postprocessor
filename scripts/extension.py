@@ -15,8 +15,6 @@ __all__ = ["SendToNegativeScript"]
 
 
 class SendToNegativeScript(scripts.Script):
-    NAME = "Send to Negative"
-    VERSION = "0.3"
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -28,7 +26,7 @@ class SendToNegativeScript(scripts.Script):
             self.callbacks_added = True
 
     def title(self):
-        return f"{self.NAME} v{self.VERSION}"
+        return f"{SendToNegative.NAME} v{SendToNegative.VERSION}"
 
     def show(self, is_img2img):
         return scripts.AlwaysVisible
@@ -36,13 +34,13 @@ class SendToNegativeScript(scripts.Script):
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
         stn = SendToNegative(opts=opts, logger=self.logger)
         for i in range(len(p.all_prompts)):
-            p.all_prompts[i], p.all_negative_prompts[i] = stn.processPrompts(
+            p.all_prompts[i], p.all_negative_prompts[i] = stn.processPrompt(
                 p.all_prompts[i], p.all_negative_prompts[i]
             )
 
 
 def on_ui_settings():
-    section = ("send-to-negative", SendToNegativeScript.NAME)
+    section = ("send-to-negative", SendToNegative.NAME)
     shared.opts.add_option(
         key="stn_tagstart",
         info=shared.OptionInfo(

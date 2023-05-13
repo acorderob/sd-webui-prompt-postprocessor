@@ -3,9 +3,9 @@ import re
 
 
 class SendToNegative:
-    """
-    This class contains the code independent of the webui interface
-    """
+
+    NAME = "Send to Negative"
+    VERSION = "0.3"
 
     def __init__(
         self,
@@ -20,14 +20,20 @@ class SendToNegative:
         logger=None,
     ):
         """
-        Default format:
+        Default format for the tag:
             <!content!>
+
             <!!x!content!>
+
         with x being:
             s - content is added at the start of the negative prompt. This is the default if no parameter exists.
+
             e - content is added at the end of the negative prompt.
+
             pN - content is added where the insertion point N is in the negative prompt or at the start if it does not exist. N can be 0 to 9.
+
             iN - marks the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
+
         The tags will be removed from the prompt or negative prompt without considering neighboring whitespace or separators.
         """
         if logger is None:
@@ -81,7 +87,7 @@ class SendToNegative:
             re.S,
         )
 
-    def processPrompts(self, original_prompt, original_negative_prompt):
+    def processPrompt(self, original_prompt, original_negative_prompt):
         """
         Extract from the prompt the marked parts and add them to the negative prompt
         """
