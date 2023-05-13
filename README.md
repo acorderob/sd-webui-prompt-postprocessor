@@ -1,5 +1,7 @@
 # Send To Negative for Stable Diffusion WebUI
 
+Extension for the [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) or compatible UIs.
+
 ## Purpose
 
 This extension allows the tagging of parts of the prompt and moves them to the
@@ -8,13 +10,14 @@ since you can add negative content from choices made in the positive prompt.
 
 Note: The extension must be loaded after the wildcard extension.
 
-With the "Dynamic Prompts" extension this happens by default due to default
-folder names for both extensions. But if this is not the case, you can just
-rename the extension folder so the ordering works out.
+With the ["Dynamic Prompts" extension](https://github.com/adieyal/sd-dynamic-prompts)
+this happens by default due to default folder names for both extensions. But if
+this is not the case, you can just rename the extension folder so the ordering
+works out.
 
-## Format
+## Usage
 
-The format is like this:
+The format of the tags is like this:
 
 ```text
 <!content!>
@@ -28,11 +31,11 @@ And an optional position in the negative prompt can be specified like this:
 
 Where position can be:
 
-* s: at the start
+* s: at the start (the default)
 * e: at the end
 * pN: at the position of the insertion point "<!!iN!!>" with N being 0-9
 
-The default position is the start, and also if the insertion point is not found.
+If the insertion point is not found it inserts at the start.
 
 ## Example
 
@@ -48,3 +51,14 @@ brunette
 
 Then, if that option is chosen this extension will process it later and move
 that part to the negative prompt.
+
+## Configuration
+
+The extension settings allow you to change the format of the tag in case there
+is some incompatibility with another extension.
+
+You can also specify the separator added to the negative prompt which by
+default is ", ".
+
+By default it ignores repeated content and also tries to clean up the prompt
+after removing the tags, but these can also be changed in the settings.
