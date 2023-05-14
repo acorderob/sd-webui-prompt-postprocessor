@@ -4,18 +4,18 @@ import os
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
-from sendtonegative import SendToNegative
+from sendtonegative import SendToNegative  # pylint: disable=import-error
 
 
 class TestSendToNegative(unittest.TestCase):
     def setUp(self):
         self.defstn = SendToNegative(
-            tagStart="<!",
-            tagEnd="!>",
-            tagParamStart="!",
-            tagParamEnd="!",
+            tag_start="<!",
+            tag_end="!>",
+            tag_param_start="!",
+            tag_param_end="!",
             separator=", ",
-            ignoreRepeats=True,
+            ignore_repeats=True,
             cleanup=True,
         )
 
@@ -27,20 +27,16 @@ class TestSendToNegative(unittest.TestCase):
         expected_negative_prompt,
         stn=None,
     ):
-        theObj = self.defstn if stn is None else stn
-        result_prompt, result_negative_prompt = theObj.processPrompt(
-            prompt, negative_prompt
-        )
-        self.assertEqual(
-            result_prompt, expected_prompt, f"Prompt should be '{expected_prompt}'"
-        )
+        the_obj = self.defstn if stn is None else stn
+        result_prompt, result_negative_prompt = the_obj.process_prompt(prompt, negative_prompt)
+        self.assertEqual(result_prompt, expected_prompt, f"Prompt should be '{expected_prompt}'")
         self.assertEqual(
             result_negative_prompt,
             expected_negative_prompt,
             f"Negative Prompt should be '{expected_negative_prompt}'",
         )
 
-    def test_tagDefault(self):
+    def test_tag_default(self):
         self.process(
             "flowers<!red!>",
             "normal quality, worse quality",
@@ -48,7 +44,7 @@ class TestSendToNegative(unittest.TestCase):
             "red, normal quality, worse quality",
         )
 
-    def test_tagStart(self):
+    def test_tag_start(self):
         self.process(
             "flowers<!!s!red!>",
             "normal quality, worse quality",
@@ -56,7 +52,7 @@ class TestSendToNegative(unittest.TestCase):
             "red, normal quality, worse quality",
         )
 
-    def test_tagEnd(self):
+    def test_tag_end(self):
         self.process(
             "flowers<!!e!red!>",
             "normal quality, worse quality",
@@ -64,7 +60,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, worse quality, red",
         )
 
-    def test_tagInsertion_midSep(self):
+    def test_tag_insertion_mid_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "normal quality, <!!i0!!>, worse quality",
@@ -72,7 +68,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, red, worse quality",
         )
 
-    def test_tagInsertion_midNoSep(self):
+    def test_tag_insertion_mid_no_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "normal quality<!!i0!!>worse quality",
@@ -80,7 +76,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, red, worse quality",
         )
 
-    def test_tagInsertion_startSep(self):
+    def test_tag_insertion_start_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "<!!i0!!>, normal quality, worse quality",
@@ -88,7 +84,7 @@ class TestSendToNegative(unittest.TestCase):
             "red, normal quality, worse quality",
         )
 
-    def test_tagInsertion_startNoSep(self):
+    def test_tag_insertion_start_no_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "<!!i0!!>normal quality, worse quality",
@@ -96,7 +92,7 @@ class TestSendToNegative(unittest.TestCase):
             "red, normal quality, worse quality",
         )
 
-    def test_tagInsertion_endSep(self):
+    def test_tag_insertion_end_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "normal quality, worse quality, <!!i0!!>",
@@ -104,7 +100,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, worse quality, red",
         )
 
-    def test_tagInsertion_endNoSep(self):
+    def test_tag_insertion_end_no_sep(self):
         self.process(
             "flowers<!!p0!red!>",
             "normal quality, worse quality<!!i0!!>",
@@ -114,25 +110,25 @@ class TestSendToNegative(unittest.TestCase):
 
     def test_complex(self):
         self.process(
-            "<!red!> <!!s!pink!>, flowers, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> <!!s!pink!>, flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
             "flowers",
-            "red, pink, normal quality, yellow, bad quality, green, worse quality, blue",
+            "red, pink, normal quality, yellow, bad quality, green, worse quality, purple, blue",
         )
 
-    def test_complexNoCleanUp(self):
+    def test_complex_no_cleanup(self):
         self.process(
-            "<!red!> <!!s!pink!>, flowers, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> <!!s!pink!>, flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
-            " , flowers, ,  ",
-            "red, pink, normal quality, yellow, bad quality, green, worse quality, blue",
+            " , flowers , ,  ",
+            "red, pink, normal quality, yellow, bad quality, green, worse quality, purple, blue",
             SendToNegative(
-                tagStart="<!",
-                tagEnd="!>",
-                tagParamStart="!",
-                tagParamEnd="!",
+                tag_start="<!",
+                tag_end="!>",
+                tag_param_start="!",
+                tag_param_end="!",
                 separator=", ",
-                ignoreRepeats=True,
+                ignore_repeats=True,
                 cleanup=False,
             ),
         )

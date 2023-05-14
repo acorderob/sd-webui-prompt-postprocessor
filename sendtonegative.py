@@ -2,27 +2,26 @@ import logging
 import re
 
 
-class SendToNegative:
+class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "1.0"
+    VERSION = "1.1"
 
-    DEFAULT_tagStart = "<!"
-    DEFAULT_tagEnd = "!>"
-    DEFAULT_tagParamStart = "!"
-    DEFAULT_tagParamEnd = "!"
-    DEFAULT_separator = ", "
+    DEFAULT_TAG_START = "<!"
+    DEFAULT_TAG_END = "!>"
+    DEFAULT_TAG_PARAM_START = "!"
+    DEFAULT_TAG_PARAM_END = "!"
+    DEFAULT_SEPARATOR = ", "
 
     def __init__(
         self,
-        tagStart=None,
-        tagEnd=None,
-        tagParamStart=None,
-        tagParamEnd=None,
+        tag_start=None,
+        tag_end=None,
+        tag_param_start=None,
+        tag_param_end=None,
         separator=None,
-        ignoreRepeats=None,
+        ignore_repeats=None,
         cleanup=None,
         opts=None,
-        logger=None,
     ):
         """
         Default format for the tag:
@@ -39,171 +38,162 @@ class SendToNegative:
 
             iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
         """
-        if logger is None:
-            self.logger = logging.getLogger(__name__)
-            self.logger.setLevel(logging.INFO)
-        else:
-            self.logger = logger
+        self.__logger = logging.getLogger(__name__)
 
-        strStart = (
-            tagStart
-            if tagStart is not None
-            else getattr(opts, "stn_tagstart", self.DEFAULT_tagStart)
+        str_start = (
+            tag_start
+            if tag_start is not None
+            else getattr(opts, "stn_tagstart", self.DEFAULT_TAG_START)
             if opts is not None
-            else self.DEFAULT_tagStart
+            else self.DEFAULT_TAG_START
         )
-        strEnd = (
-            tagEnd
-            if tagEnd is not None
-            else getattr(opts, "stn_tagend", self.DEFAULT_tagEnd)
+        str_end = (
+            tag_end
+            if tag_end is not None
+            else getattr(opts, "stn_tagend", self.DEFAULT_TAG_END)
             if opts is not None
-            else self.DEFAULT_tagEnd
+            else self.DEFAULT_TAG_END
         )
-        strParamStart = (
-            tagParamStart
-            if tagParamStart is not None
-            else getattr(opts, "stn_tagparamstart", self.DEFAULT_tagParamStart)
+        str_param_start = (
+            tag_param_start
+            if tag_param_start is not None
+            else getattr(opts, "stn_tagparamstart", self.DEFAULT_TAG_PARAM_START)
             if opts is not None
-            else self.DEFAULT_tagParamStart
+            else self.DEFAULT_TAG_PARAM_START
         )
-        strParamEnd = (
-            tagParamEnd
-            if tagParamEnd is not None
-            else getattr(opts, "stn_tagparamend", self.DEFAULT_tagParamEnd)
+        str_param_end = (
+            tag_param_end
+            if tag_param_end is not None
+            else getattr(opts, "stn_tagparamend", self.DEFAULT_TAG_PARAM_END)
             if opts is not None
-            else self.DEFAULT_tagParamEnd
+            else self.DEFAULT_TAG_PARAM_END
         )
-        escapeSequence = r"(?<!\\)"
-        self.ignoreRepeats = (
-            ignoreRepeats
-            if ignoreRepeats is not None
-            else getattr(opts, "stn_ignorerepeats", True)
+        escape_sequence = r"(?<!\\)"
+        self.__ignore_repeats = (
+            ignore_repeats if ignore_repeats is not None else getattr(opts, "stn_ignorerepeats", True)
         )
-        self.cleanup = (
-            cleanup
-            if cleanup is not None
-            else getattr(opts, "stn_cleanup", True)
-            if opts is not None
-            else True
+        self.__cleanup = (
+            cleanup if cleanup is not None else getattr(opts, "stn_cleanup", True) if opts is not None else True
         )
-        self.separator = (
+        self.__separator = (
             separator
             if separator is not None
-            else getattr(opts, "stn_separator", self.DEFAULT_separator)
+            else getattr(opts, "stn_separator", self.DEFAULT_SEPARATOR)
             if opts is not None
-            else self.DEFAULT_separator
+            else self.DEFAULT_SEPARATOR
         )
-        self.insertionPointTags = [
-            (strStart + strParamStart + "i" + str(x) + strParamEnd + strEnd)
-            for x in range(10)
+        self.__insertion_point_tags = [
+            (str_start + str_param_start + "i" + str(x) + str_param_end + str_end) for x in range(10)
         ]
-        self.regex = re.compile(
+        self.__regex = re.compile(
             "("
-            + escapeSequence
-            + re.escape(strStart)
+            + escape_sequence
+            + re.escape(str_start)
             + "(?:"
-            + re.escape(strParamStart)
+            + re.escape(str_param_start)
             + "([se]|(?:[pi][0-9]))"
-            + re.escape(strParamEnd)
+            + re.escape(str_param_end)
             + ")?(.*?)"
-            + escapeSequence
-            + re.escape(strEnd)
+            + escape_sequence
+            + re.escape(str_end)
             + ")",
             re.S,
         )
 
-    def processPrompt(self, original_prompt, original_negative_prompt):
+    def process_prompt(self, original_prompt, original_negative_prompt):
         """
         Extract from the prompt the tagged parts and add them to the negative prompt
         """
         try:
             prompt = original_prompt
             negative_prompt = original_negative_prompt
-            alreadyProcessed = []
-            addAtStart = []
-            addAtEnd = []
-            addAtInsertionPoint = [[] for x in range(10)]
-            # process tags in prompt
-            matches = self.regex.findall(prompt)
-            for match in matches:
-                position = match[1] or "s"
-                content = match[2]
-                if len(content) > 0:
-                    if content not in alreadyProcessed:
-                        if self.ignoreRepeats:
-                            alreadyProcessed.append(content)
-                        self.logger.debug("Processing content: %s", content)
-                        if position == "e":
-                            addAtEnd.append(content)
-                        elif position.startswith("p"):
-                            n = int(position[1])
-                            addAtInsertionPoint[n].append(content)
-                        else:  # position == "s" or invalid
-                            addAtStart.append(content)
-                    else:
-                        self.logger.warn("Ignoring repeated content: %s", content)
-                # clean-up
-                prompt = prompt.replace(match[0], "")
-                if self.cleanup:
-                    prompt = (
-                        prompt.replace("  ", " ")
-                        .replace(self.separator + self.separator, self.separator)
-                        .removeprefix(self.separator)
-                        .removesuffix(self.separator)
-                        .strip()
-                    )
-
-            # Add content to insertion points
-            for n in range(10):
-                ipp = negative_prompt.find(self.insertionPointTags[n])
-                if ipp >= 0:
-                    ipl = len(self.insertionPointTags[n])
-                    if (
-                        negative_prompt[ipp - len(self.separator) : ipp]
-                        == self.separator
-                    ):
-                        ipp -= len(
-                            self.separator
-                        )  # adjust for existing start separator
-                        ipl += len(self.separator)
-                    addAtInsertionPoint[n].insert(0, negative_prompt[:ipp])
-                    if (
-                        negative_prompt[ipp + ipl : ipp + ipl + len(self.separator)]
-                        == self.separator
-                    ):
-                        ipl += len(self.separator)  # adjust for existing end separator
-                    endPart = negative_prompt[ipp + ipl :]
-                    if len(endPart) > 0:
-                        addAtInsertionPoint[n].append(endPart)
-                    negative_prompt = self.separator.join(addAtInsertionPoint[n])
-                else:
-                    ipp = 0
-                    if negative_prompt.startswith(self.separator):
-                        ipp = len(self.separator)
-                    addAtInsertionPoint[n].append(negative_prompt[ipp:])
-                    negative_prompt = self.separator.join(addAtInsertionPoint[n])
-
-            # Add content to start
-            if len(addAtStart) > 0:
-                if len(negative_prompt) > 0:
-                    ipp = 0
-                    if negative_prompt.startswith(self.separator):
-                        ipp = len(self.separator)  # adjust for existing end separator
-                    addAtStart.append(negative_prompt[ipp:])
-                negative_prompt = self.separator.join(addAtStart)
-
-            # Add content to end
-            if len(addAtEnd) > 0:
-                if len(negative_prompt) > 0:
-                    ipl = len(negative_prompt)
-                    if negative_prompt.endswith(self.separator):
-                        ipl -= len(
-                            self.separator
-                        )  # adjust for existing start separator
-                    addAtEnd.insert(0, negative_prompt[:ipl])
-                negative_prompt = self.separator.join(addAtEnd)
-
+            self.__logger.debug(f"Input prompt: {prompt}")
+            self.__logger.debug(f"Input negative_prompt: {negative_prompt}")
+            prompt, add_at = self.__find_tags(prompt)
+            negative_prompt = self.__add_to_insertion_points(negative_prompt, add_at["insertion_point"])
+            if len(add_at["start"]) > 0:
+                negative_prompt = self.__add_to_start(negative_prompt, add_at["start"])
+            if len(add_at["end"]) > 0:
+                negative_prompt = self.__add_to_end(negative_prompt, add_at["end"])
+            self.__logger.debug(f"Output prompt: {prompt}")
+            self.__logger.debug(f"Output negative_prompt: {negative_prompt}")
             return prompt, negative_prompt
-        except Exception as e:
-            self.logger.exception(e)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.__logger.exception(e)
             return original_prompt, original_negative_prompt
+
+    def __find_tags(self, prompt):
+        already_processed = []
+        add_at = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
+        # process tags in prompt
+        matches = self.__regex.findall(prompt)
+        for match in matches:
+            position = match[1] or "s"
+            content = match[2]
+            if len(content) > 0:
+                if content not in already_processed:
+                    if self.__ignore_repeats:
+                        already_processed.append(content)
+                    self.__logger.debug(f"Processing content at position {position}: {content}")
+                    if position == "e":
+                        add_at["end"].append(content)
+                    elif position.startswith("p"):
+                        n = int(position[1])
+                        add_at["insertion_point"][n].append(content)
+                    else:  # position == "s" or invalid
+                        add_at["start"].append(content)
+                else:
+                    self.__logger.warning(f"Ignoring repeated content: {content}")
+                # clean-up
+            prompt = prompt.replace(match[0], "")
+            if self.__cleanup:
+                prompt = (
+                    prompt.replace("  ", " ")
+                    .replace(self.__separator + self.__separator, self.__separator)
+                    .replace(" " + self.__separator, self.__separator)
+                    .removeprefix(self.__separator)
+                    .removesuffix(self.__separator)
+                    .strip()
+                )
+        return prompt, add_at
+
+    def __add_to_insertion_points(self, negative_prompt, add_at_insertion_point):
+        for n in range(10):
+            ipp = negative_prompt.find(self.__insertion_point_tags[n])
+            if ipp >= 0:
+                ipl = len(self.__insertion_point_tags[n])
+                if negative_prompt[ipp - len(self.__separator) : ipp] == self.__separator:
+                    ipp -= len(self.__separator)  # adjust for existing start separator
+                    ipl += len(self.__separator)
+                add_at_insertion_point[n].insert(0, negative_prompt[:ipp])
+                if negative_prompt[ipp + ipl : ipp + ipl + len(self.__separator)] == self.__separator:
+                    ipl += len(self.__separator)  # adjust for existing end separator
+                endPart = negative_prompt[ipp + ipl :]
+                if len(endPart) > 0:
+                    add_at_insertion_point[n].append(endPart)
+                negative_prompt = self.__separator.join(add_at_insertion_point[n])
+            else:
+                ipp = 0
+                if negative_prompt.startswith(self.__separator):
+                    ipp = len(self.__separator)
+                add_at_insertion_point[n].append(negative_prompt[ipp:])
+                negative_prompt = self.__separator.join(add_at_insertion_point[n])
+        return negative_prompt
+
+    def __add_to_start(self, negative_prompt, add_at_start):
+        if len(negative_prompt) > 0:
+            ipp = 0
+            if negative_prompt.startswith(self.__separator):
+                ipp = len(self.__separator)  # adjust for existing end separator
+            add_at_start.append(negative_prompt[ipp:])
+        negative_prompt = self.__separator.join(add_at_start)
+        return negative_prompt
+
+    def __add_to_end(self, negative_prompt, add_at_end):
+        if len(negative_prompt) > 0:
+            ipl = len(negative_prompt)
+            if negative_prompt.endswith(self.__separator):
+                ipl -= len(self.__separator)  # adjust for existing start separator
+            add_at_end.insert(0, negative_prompt[:ipl])
+        negative_prompt = self.__separator.join(add_at_end)
+        return negative_prompt
