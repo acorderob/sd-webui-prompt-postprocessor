@@ -23,8 +23,8 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**Version (please complete the following information):**
+**Commit where the problem happens**
 Installed commit or version tag
 
-**Additional context**
+**Additional information**
 Add any other context about the problem here.
