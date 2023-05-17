@@ -24,7 +24,7 @@ When in doubt, just rename this extension's folder with a "z" in front (for exam
 ## Installation
 
 1. Go to Extensions > Install from URL
-2. Paste https://github.com/acorderob/sd-webui-sendtonegative in the URL for extension's git repository text field
+2. Paste <https://github.com/acorderob/sd-webui-sendtonegative> in the URL for extension's git repository text field
 3. Click the Install button
 4. Restart the webui
 
