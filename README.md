@@ -21,6 +21,13 @@ you will have to rename one of the folders, so that it loads before than "Send t
 
 When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
+## Installation
+
+1. Go to Extensions > Install from URL
+2. Paste https://github.com/acorderob/sd-webui-sendtonegative in the URL for extension's git repository text field
+3. Click the Install button
+4. Restart the webui
+
 ## Usage
 
 The format of the tags is like this:
@@ -68,3 +75,11 @@ default is ", ".
 
 By default it ignores repeated content and also tries to clean up the prompt
 after removing the tags, but these can also be changed in the settings.
+
+## License
+
+MIT
+
+## Contact
+
+If you have any questions or concerns, please leave an issue, or start a thread in the discussions.
