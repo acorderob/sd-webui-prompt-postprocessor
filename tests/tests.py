@@ -1,3 +1,4 @@
+import logging
 import unittest
 import sys
 import os
@@ -10,14 +11,12 @@ from sendtonegative import SendToNegative  # pylint: disable=import-error
 class TestSendToNegative(unittest.TestCase):
     def setUp(self):
         self.defstn = SendToNegative(
-            tag_start="<!",
-            tag_end="!>",
-            tag_param_start="!",
-            tag_param_end="!",
             separator=", ",
             ignore_repeats=True,
+            join_attention=True,
             cleanup=True,
         )
+        logging.basicConfig(level=logging.DEBUG)
 
     def process(
         self,
@@ -110,27 +109,80 @@ class TestSendToNegative(unittest.TestCase):
 
     def test_complex(self):
         self.process(
-            "<!red!> <!!s!pink!>, flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> (<!!s!pink!>), flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
             "flowers",
-            "red, pink, normal quality, yellow, bad quality, green, worse quality, purple, blue",
+            "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
         )
 
     def test_complex_no_cleanup(self):
         self.process(
-            "<!red!> <!!s!pink!>, flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> (<!!s!pink!>), flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
-            " , flowers , ,  ",
-            "red, pink, normal quality, yellow, bad quality, green, worse quality, purple, blue",
+            " (), flowers , ,  ",
+            "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
             SendToNegative(
-                tag_start="<!",
-                tag_end="!>",
-                tag_param_start="!",
-                tag_param_end="!",
                 separator=", ",
                 ignore_repeats=True,
+                join_attention=True,
                 cleanup=False,
             ),
+        )
+
+    def test_inside_attention1(self):
+        self.process(
+            "[<!neg1!>] this is a ((test<!!e!neg2!>) (test:2.0):1.5)",
+            "normal quality",
+            "this is a ((test) (test:2.0):1.5)",
+            "[neg1], normal quality, (neg2:1.65)",
+        )
+
+    def test_inside_attention2(self):
+        self.process(
+            "(red<![square]!>:1.5)",
+            "",
+            "(red:1.5)",
+            "([square]:1.5)",
+        )
+
+    def test_inside_alternation1(self):
+        self.process(
+            "this is a (([complex|simple<!neg1!>|regular] test)(test:2.0):1.5)",
+            "normal quality",
+            "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
+            "([|neg1|]:1.65), normal quality",
+        )
+
+    def test_inside_alternation2(self):
+        self.process(
+            "this is a (([complex<!neg1!>|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
+            "normal quality",
+            "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
+            "([neg1||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
+        )
+
+    def test_inside_alternation3(self):
+        self.process(
+            "this is a (([complex<!neg1!>[one|two<!neg12!>|three|four(<!neg14!>)]|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
+            "normal quality",
+            "this is a (([complex[one|two|three|four]|simple|regular] test)(test:2.0):1.5)",
+            "([neg1||]:1.65), ([[|neg12||]||]:1.65), ([[|||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
+        )
+
+    def test_inside_scheduling(self):
+        self.process(
+            "this is [abc<!neg1!>:def<!!e!neg2!>:5]",
+            "normal quality",
+            "this is [abc:def:5]",
+            "[neg1::5], normal quality, [neg2:5]",
+        )
+
+    def test_complex_features(self):
+        self.process(
+            "[<!neg5!>] this is: a (([complex|simple<!neg6!>|regular] test<!neg1!>)(test:2.0):1.5) \nBREAK with [abc<!neg4!>:def<!!p0!neg2(neg3:1.6)!>:5] <lora:xxx:1>",
+            "normal quality, <!!i0!!>",
+            "this is: a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5] <lora:xxx:1>",
+            "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
         )
 
 

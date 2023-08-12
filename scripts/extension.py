@@ -37,38 +37,6 @@ class SendToNegativeScript(scripts.Script):
     def __on_ui_settings(self):
         section = ("send-to-negative", SendToNegative.NAME)
         shared.opts.add_option(
-            key="stn_tagstart",
-            info=shared.OptionInfo(
-                SendToNegative.DEFAULT_TAG_START,
-                label="Tag start",
-                section=section,
-            ),
-        )
-        shared.opts.add_option(
-            key="stn_tagend",
-            info=shared.OptionInfo(
-                SendToNegative.DEFAULT_TAG_END,
-                label="Tag end",
-                section=section,
-            ),
-        )
-        shared.opts.add_option(
-            key="stn_tagparamstart",
-            info=shared.OptionInfo(
-                SendToNegative.DEFAULT_TAG_PARAM_START,
-                label="Tag parameter start",
-                section=section,
-            ),
-        )
-        shared.opts.add_option(
-            key="stn_tagparamend",
-            info=shared.OptionInfo(
-                SendToNegative.DEFAULT_TAG_PARAM_END,
-                label="Tag parameter end",
-                section=section,
-            ),
-        )
-        shared.opts.add_option(
             key="stn_separator",
             info=shared.OptionInfo(
                 SendToNegative.DEFAULT_SEPARATOR,
@@ -81,6 +49,14 @@ class SendToNegativeScript(scripts.Script):
             info=shared.OptionInfo(
                 True,
                 label="Ignore tags with repeated content",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="stn_joinattention",
+            info=shared.OptionInfo(
+                True,
+                label="Join attention modifiers (weights) when possible",
                 section=section,
             ),
         )

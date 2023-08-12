@@ -67,14 +67,34 @@ that part to the negative prompt.
 
 ## Configuration
 
-The extension settings allow you to change the format of the tag in case there
-is some incompatibility with another extension.
+Separator used when adding to the negative prompt: You can specify the separator used when adding to the negative prompt (by default it's ", ").
 
-You can also specify the separator added to the negative prompt which by
-default is ", ".
+Ignore tags with repeated content: by default it ignores repeated content to avoid repetitions in the negative prompt.
 
-By default it ignores repeated content and also tries to clean up the prompt
-after removing the tags, but these can also be changed in the settings.
+Join attention modifiers (weights) when possible: by default it joins attention modifiers when possible (joins into one, multipliying their values).
+
+Try to clean-up the prompt after processing: by default cleans up the positive prompt after processing, removing extra spaces and separators.
+
+## Notes
+
+The content of the negative tags is not processed and is copied as is to the negative prompt. Other modifiers around the tags are processed in the following way.
+
+### Attention modifiers (weights)
+
+They will be translated to the negative prompt. For example:
+
+* `(red<!square!>:1.5)` will end up as `(square:1.5)` in the negative prompt
+* `(red[<!square!>]:1.5)` will end up as `(square:1.35)` in the negative prompt (weight=1.5*0.9)
+* However `(red<![square]!>:1.5)` will end up as `([square]:1.5)` in the negative prompt. The content of the negative tag is copied as is, and not joined with the surrounding modifier.
+
+### Prompt editing constructs (alternation and scheduling)
+
+Negative tags inside such constructs will copy the construct to the negative prompt, but separating its elements. For example:
+
+* Alternation: `[red<!square!>|blue<!circle!>]` will end up as `[square|], [|circle]` in the negative prompt, instead of `[square|circle]`
+* Scheduling: `[red<!square!>:blue<!circle!>:0.5]` will end up as `[square::0.5], [:circle:0.5]` instead of `[square:circle:0.5]`
+
+This should still work as intended, and the only negative point i see is the unnecessary separators.
 
 ## License
 
