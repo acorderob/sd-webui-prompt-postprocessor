@@ -6,17 +6,15 @@ import os
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
 from sendtonegative import SendToNegative  # pylint: disable=import-error
+from stnlogging import SendToNegativeLogFactory
 
 
 class TestSendToNegative(unittest.TestCase):
     def setUp(self):
-        self.defstn = SendToNegative(
-            separator=", ",
-            ignore_repeats=True,
-            join_attention=True,
-            cleanup=True,
-        )
-        logging.basicConfig(level=logging.DEBUG)
+        lf = SendToNegativeLogFactory()
+        self.__log = lf.log
+        self.__log.setLevel(logging.DEBUG)
+        self.defstn = SendToNegative(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=True)
 
     def process(
         self,
@@ -121,12 +119,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
             " (), flowers , ,  ",
             "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
-            SendToNegative(
-                separator=", ",
-                ignore_repeats=True,
-                join_attention=True,
-                cleanup=False,
-            ),
+            SendToNegative(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=False),
         )
 
     def test_inside_attention1(self):

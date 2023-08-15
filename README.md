@@ -21,6 +21,16 @@ you will have to rename one of the folders, so that it loads before than "Send t
 
 When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
+Note: it only recognizes regular A1111 prompt formats. So:
+
+* Attention: \[prompt\] (prompt) (prompt:weight)
+* Alternation: \[prompt1|prompt2|...\]
+* Scheduling: \[prompt1:prompt2:step\]
+
+In SD.Next that means only the A1111 or Full parsers.
+
+It does not build AND/BREAK separations into the negative prompt.
+
 ## Installation
 
 1. Go to Extensions > Install from URL

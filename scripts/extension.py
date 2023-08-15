@@ -13,11 +13,14 @@ from modules import scripts, shared, script_callbacks
 from modules.processing import StableDiffusionProcessing
 from modules.shared import opts
 from sendtonegative import SendToNegative
+from stnlogging import SendToNegativeLogFactory
 
 
 class SendToNegativeScript(scripts.Script):
     def __init__(self):
         if not hasattr(self, "callbacks_added"):
+            lf = SendToNegativeLogFactory()
+            self.__logstn = lf.log
             script_callbacks.on_ui_settings(self.__on_ui_settings)
             self.callbacks_added = True
 
@@ -28,7 +31,7 @@ class SendToNegativeScript(scripts.Script):
         return scripts.AlwaysVisible
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
-        stn = SendToNegative(opts=opts)
+        stn = SendToNegative(self.__logstn, opts=opts)
         for i in range(len(p.all_prompts)):  # pylint: disable=consider-using-enumerate
             p.all_prompts[i], p.all_negative_prompts[i] = stn.process_prompt(
                 p.all_prompts[i], p.all_negative_prompts[i]

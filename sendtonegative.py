@@ -1,17 +1,18 @@
 from collections import namedtuple
 import logging
-import lark
 import re
+import lark
 
 
 class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "2.0"
+    VERSION = "2.1"
 
     DEFAULT_SEPARATOR = ", "
 
     def __init__(
         self,
+        log,
         separator=None,
         ignore_repeats=None,
         join_attention=None,
@@ -33,7 +34,9 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
 
             iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
         """
-        self.__logger = logging.getLogger(__name__)
+        self.__logger = log
+        if opts is not None and opts.prompt_attention == "Compel parser":
+            self.__logger.warning("Compel parser is not supported!")
         self.__ignore_repeats = (
             ignore_repeats if ignore_repeats is not None else getattr(opts, "stn_ignorerepeats", True)
         )
@@ -194,14 +197,14 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
                             else:
                                 start += "("
                                 end = f":{s.info1})" + end
-                        #case "sc":
+                        # case "sc":
                         case "scb":
                             start += "["
                             end = f"::{s.info1}]" + end
                         case "sca":
                             start += "["
                             end = f":{s.info1}]" + end
-                        #case "al":
+                        # case "al":
                         case "alo":
                             start += "[" + ("|" * int(s.info1 - 1))
                             end = ("|" * int(s.info2 - s.info1)) + "]" + end
@@ -253,7 +256,7 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
     def __find_tags(self, prompt):
         add_at = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
         tree = self.__schedule_parser.parse(prompt)
-        self.__logger.debug(f"Initial tree: {tree.pretty()}")
+        self.__logger.debug(f"Initial tree:\n{tree.pretty()}")
 
         readtree = self.ReadTree(self.__logger, self.__ignore_repeats, self.__join_attention, prompt, add_at)
         readtree.visit(tree)
@@ -261,9 +264,9 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         for r in readtree.remove[::-1]:
             prompt = prompt[: r[0]] + prompt[r[1] :]
         if self.__cleanup:
-            prompt = re.sub(r"\((?::[\d\.]+)?\)", "", prompt)  # clean up empty attention
+            prompt = re.sub(r"\((?::[+-]?[\d\.]+)?\)", "", prompt)  # clean up empty attention
             prompt = re.sub(r"\[\]", "", prompt)  # clean up empty attention
-            prompt = re.sub(r"\[:?:[\d\.]+\]", "", prompt)  # clean up empty scheduling
+            prompt = re.sub(r"\[:?:[+-]?[\d\.]+\]", "", prompt)  # clean up empty scheduling
             prompt = re.sub(r"\[\|+\]", "", prompt)  # clean up empty alternation
             # clean up whitespace and extra separators
             prompt = (
