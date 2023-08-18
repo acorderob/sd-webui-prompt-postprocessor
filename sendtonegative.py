@@ -1,12 +1,11 @@
 from collections import namedtuple
-import logging
 import re
 import lark
 
 
 class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "2.1"
+    VERSION = "2.1.1"
 
     DEFAULT_SEPARATOR = ", "
 
@@ -35,7 +34,7 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
         """
         self.__logger = log
-        if opts is not None and opts.prompt_attention == "Compel parser":
+        if opts is not None and getattr(opts, "prompt_attention", "") == "Compel parser":
             self.__logger.warning("Compel parser is not supported!")
         self.__ignore_repeats = (
             ignore_repeats if ignore_repeats is not None else getattr(opts, "stn_ignorerepeats", True)
