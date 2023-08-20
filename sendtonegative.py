@@ -1,11 +1,12 @@
 from collections import namedtuple
 import re
+import math
 import lark
 
 
 class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "2.1.1"
+    VERSION = "2.1.2"
 
     DEFAULT_SEPARATOR = ", "
 
@@ -178,7 +179,8 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
                         if nt.shell[i].type == "at" and nt.shell[i - 1].type == "at":
                             nt.shell[i - 1] = self.AccumulatedShell(
                                 "at",
-                                (100 * nt.shell[i - 1].info1 * nt.shell[i].info1) / 100,  # we limit to two decimals
+                                math.floor(100 * nt.shell[i - 1].info1 * nt.shell[i].info1)
+                                / 100,  # we limit to two decimals
                                 None,
                             )
                             nt.shell.pop(i)
