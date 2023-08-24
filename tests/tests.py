@@ -124,9 +124,9 @@ class TestSendToNegative(unittest.TestCase):
 
     def test_inside_attention1(self):
         self.process(
-            "[<!neg1!>] this is a ((test<!!e!neg2!>) (test:2.0):1.5)",
+            "[<!neg1!>] this is a ((test<!!e!neg2!>) (test:2.0): 1.5 )",
             "normal quality",
-            "this is a ((test) (test:2.0):1.5)",
+            "this is a ((test) (test:2.0): 1.5 )",
             "[neg1], normal quality, (neg2:1.65)",
         )
 
@@ -156,17 +156,17 @@ class TestSendToNegative(unittest.TestCase):
 
     def test_inside_alternation3(self):
         self.process(
-            "this is a (([complex<!neg1!>[one|two<!neg12!>|three|four(<!neg14!>)]|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
+            "this is a (([complex<!neg1!>[one|two<!neg12!>||three|four(<!neg14!>)]|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
             "normal quality",
-            "this is a (([complex[one|two|three|four]|simple|regular] test)(test:2.0):1.5)",
-            "([neg1||]:1.65), ([[|neg12||]||]:1.65), ([[|||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
+            "this is a (([complex[one|two||three|four]|simple|regular] test)(test:2.0):1.5)",
+            "([neg1||]:1.65), ([[|neg12|||]||]:1.65), ([[||||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
         )
 
     def test_inside_scheduling(self):
         self.process(
-            "this is [abc<!neg1!>:def<!!e!neg2!>:5]",
+            "this is [abc<!neg1!>:def<!!e!neg2!>: 5 ]",
             "normal quality",
-            "this is [abc:def:5]",
+            "this is [abc:def: 5 ]",
             "[neg1::5], normal quality, [neg2:5]",
         )
 

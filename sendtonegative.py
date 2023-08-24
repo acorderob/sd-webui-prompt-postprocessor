@@ -6,7 +6,7 @@ import lark
 
 class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "2.1.2"
+    VERSION = "2.1.3"
 
     DEFAULT_SEPARATOR = ", "
 
@@ -97,6 +97,9 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             self.add_at = add_at
             self.remove = []
 
+        def __get_numpar_value(self, numpar):
+            return float(next(x for x in numpar.children if x.type == "NUMBER").value)
+
         def scheduled(self, tree):
             if len(tree.children) > 2:  # before & after
                 before = tree.children[0]
@@ -104,20 +107,20 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
                 before = None
             after = tree.children[-2]
             numpar = tree.children[-1]
-            pos = float(numpar.children[0].value)
+            pos = self.__get_numpar_value(numpar)
             if pos >= 1:
                 pos = int(pos)
             # self.__shell.append(self.AccumulatedShell("sc", tree.meta.start_pos, pos))
             if before is not None and hasattr(before, "data"):
                 self.__logger.debug(
-                    f"Shell scheduled before at {[before.meta.start_pos,before.meta.end_pos] if hasattr(before,'meta') else '?'} : {pos}"
+                    f"Shell scheduled before at {[before.meta.start_pos,before.meta.end_pos] if hasattr(before,'meta') and not before.meta.empty else '?'} : {pos}"
                 )
                 self.__shell.append(self.AccumulatedShell("scb", pos, None))
                 self.visit(before)
                 self.__shell.pop()
             if hasattr(after, "data"):
                 self.__logger.debug(
-                    f"Shell scheduled after at {[after.meta.start_pos,after.meta.end_pos] if hasattr(after,'meta') else '?'} : {pos}"
+                    f"Shell scheduled after at {[after.meta.start_pos,after.meta.end_pos] if hasattr(after,'meta') and not after.meta.empty else '?'} : {pos}"
                 )
                 self.__shell.append(self.AccumulatedShell("sca", pos, None))
                 self.visit(after)
@@ -128,7 +131,7 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             # self.__shell.append(self.AccumulatedShell("al", tree.meta.start_pos, len(tree.children)))
             for i, opt in enumerate(tree.children):
                 self.__logger.debug(
-                    f"Shell alternate at {[opt.meta.start_pos,opt.meta.end_pos] if hasattr(opt,'meta') else '?'} : {i+1}"
+                    f"Shell alternate at {[opt.meta.start_pos,opt.meta.end_pos] if hasattr(opt,'meta') and not opt.meta.empty else '?'} : {i+1}"
                 )
                 if hasattr(opt, "data"):
                     self.__shell.append(self.AccumulatedShell("alo", i + 1, len(tree.children)))
@@ -138,9 +141,9 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
 
         def emphasized(self, tree):
             numpar = tree.children[-1]
-            weight = float(numpar.children[0].value) if numpar is not None else 1.1
+            weight = self.__get_numpar_value(numpar) if numpar is not None else 1.1
             self.__logger.debug(
-                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') else '?'}: {weight}"
+                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {weight}"
             )
             self.__shell.append(self.AccumulatedShell("at", weight, None))
             self.visit_children(tree)
@@ -149,7 +152,7 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         def deemphasized(self, tree):
             weight = 0.9
             self.__logger.debug(
-                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') else '?'}: {weight}"
+                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {weight}"
             )
             self.__shell.append(self.AccumulatedShell("at", weight, None))
             self.visit_children(tree)
@@ -160,13 +163,13 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             parameters = negtagparameters.children[0].value if negtagparameters is not None else ""
             rest = []
             for x in tree.children[1::]:
-                rest.append(self.__prompt[x.meta.start_pos : x.meta.end_pos] if hasattr(x, "meta") else x.value)
+                rest.append(self.__prompt[x.meta.start_pos : x.meta.end_pos] if hasattr(x, "meta") and not x.meta.empty else x.value)
             content = "".join(rest)
             self.__negtags.append(
                 self.NegTag(tree.meta.start_pos, tree.meta.end_pos, content, parameters, self.__shell.copy())
             )
             self.__logger.debug(
-                f"Negative tag at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') else '?'}: {parameters}: {content.encode('unicode_escape').decode('utf-8')}"
+                f"Negative tag at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {parameters}: {content.encode('unicode_escape').decode('utf-8')}"
             )
 
         def start(self, tree):
