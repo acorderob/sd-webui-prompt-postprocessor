@@ -25,7 +25,7 @@ class SendToNegativeScript(scripts.Script):
             self.callbacks_added = True
 
     def title(self):
-        return f"{SendToNegative.NAME} v{SendToNegative.VERSION}"
+        return SendToNegative.NAME
 
     def show(self, is_img2img):
         return scripts.AlwaysVisible
@@ -36,6 +36,12 @@ class SendToNegativeScript(scripts.Script):
             p.all_prompts[i], p.all_negative_prompts[i] = stn.process_prompt(
                 p.all_prompts[i], p.all_negative_prompts[i]
             )
+        # make it compatible with A1111 hires fix
+        if hasattr(p, "all_hr_prompts") and hasattr(p, "all_hr_negative_prompts"):
+            for i in range(len(p.all_hr_prompts)):  # pylint: disable=consider-using-enumerate
+                p.all_hr_prompts[i], p.all_hr_negative_prompts[i] = stn.process_prompt(
+                    p.all_hr_prompts[i], p.all_hr_negative_prompts[i]
+                )
 
     def __on_ui_settings(self):
         section = ("send-to-negative", SendToNegative.NAME)
