@@ -6,7 +6,7 @@ import lark
 
 class SendToNegative:  # pylint: disable=too-few-public-methods
     NAME = "Send to Negative"
-    VERSION = "2.1.3"
+    VERSION = "2.1.4"
 
     DEFAULT_SEPARATOR = ", "
 
@@ -163,7 +163,11 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             parameters = negtagparameters.children[0].value if negtagparameters is not None else ""
             rest = []
             for x in tree.children[1::]:
-                rest.append(self.__prompt[x.meta.start_pos : x.meta.end_pos] if hasattr(x, "meta") and not x.meta.empty else x.value)
+                rest.append(
+                    self.__prompt[x.meta.start_pos : x.meta.end_pos]
+                    if hasattr(x, "meta") and not x.meta.empty
+                    else x.value
+                )
             content = "".join(rest)
             self.__negtags.append(
                 self.NegTag(tree.meta.start_pos, tree.meta.end_pos, content, parameters, self.__shell.copy())
