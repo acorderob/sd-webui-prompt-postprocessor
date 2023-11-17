@@ -4,9 +4,9 @@ import math
 import lark
 
 
-class SendToNegative:  # pylint: disable=too-few-public-methods
-    NAME = "Send to Negative"
-    VERSION = "2.1.4"
+class PromptPostProcessor:  # pylint: disable=too-few-public-methods
+    NAME = "Prompt Post-Processor"
+    VERSION = "2.1.5"
 
     DEFAULT_SEPARATOR = ", "
 
@@ -34,26 +34,28 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
 
             iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
         """
+        self.__opts = opts
         self.__logger = log
+        self.__debug = getattr(self.__opts, "ppp_debug", False)
         if opts is not None and getattr(opts, "prompt_attention", "") == "Compel parser":
             self.__logger.warning("Compel parser is not supported!")
         self.__ignore_repeats = (
-            ignore_repeats if ignore_repeats is not None else getattr(opts, "stn_ignorerepeats", True)
+            ignore_repeats if ignore_repeats is not None else getattr(opts, "ppp_stn_ignorerepeats", True)
         )
         self.__join_attention = (
             join_attention
             if join_attention is not None
-            else getattr(opts, "stn_joinattention", True)
+            else getattr(opts, "ppp_stn_joinattention", True)
             if opts is not None
             else True
         )
         self.__cleanup = (
-            cleanup if cleanup is not None else getattr(opts, "stn_cleanup", True) if opts is not None else True
+            cleanup if cleanup is not None else getattr(opts, "ppp_cleanup", True) if opts is not None else True
         )
         self.__separator = (
             separator
             if separator is not None
-            else getattr(opts, "stn_separator", self.DEFAULT_SEPARATOR)
+            else getattr(opts, "ppp_separator", self.DEFAULT_SEPARATOR)
             if opts is not None
             else self.DEFAULT_SEPARATOR
         )
@@ -81,9 +83,10 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         )
 
     class ReadTree(lark.visitors.Interpreter):
-        def __init__(self, logger, ignorerepeats, joinattention, prompt, add_at):
+        def __init__(self, logger, debug, ignorerepeats, joinattention, prompt, add_at):
             super().__init__()
             self.__logger = logger
+            self.__debug = debug
             self.__ignore_repeats = ignorerepeats
             self.__join_attention = joinattention
             self.__prompt = prompt
@@ -112,16 +115,18 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
                 pos = int(pos)
             # self.__shell.append(self.AccumulatedShell("sc", tree.meta.start_pos, pos))
             if before is not None and hasattr(before, "data"):
-                self.__logger.debug(
-                    f"Shell scheduled before at {[before.meta.start_pos,before.meta.end_pos] if hasattr(before,'meta') and not before.meta.empty else '?'} : {pos}"
-                )
+                if self.__debug:
+                    self.__logger.info(
+                        f"Shell scheduled before at {[before.meta.start_pos,before.meta.end_pos] if hasattr(before,'meta') and not before.meta.empty else '?'} with position {pos}"
+                    )
                 self.__shell.append(self.AccumulatedShell("scb", pos, None))
                 self.visit(before)
                 self.__shell.pop()
             if hasattr(after, "data"):
-                self.__logger.debug(
-                    f"Shell scheduled after at {[after.meta.start_pos,after.meta.end_pos] if hasattr(after,'meta') and not after.meta.empty else '?'} : {pos}"
-                )
+                if self.__debug:
+                    self.__logger.info(
+                        f"Shell scheduled after at {[after.meta.start_pos,after.meta.end_pos] if hasattr(after,'meta') and not after.meta.empty else '?'} with position {pos}"
+                    )
                 self.__shell.append(self.AccumulatedShell("sca", pos, None))
                 self.visit(after)
                 self.__shell.pop()
@@ -130,9 +135,10 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         def alternate(self, tree):
             # self.__shell.append(self.AccumulatedShell("al", tree.meta.start_pos, len(tree.children)))
             for i, opt in enumerate(tree.children):
-                self.__logger.debug(
-                    f"Shell alternate at {[opt.meta.start_pos,opt.meta.end_pos] if hasattr(opt,'meta') and not opt.meta.empty else '?'} : {i+1}"
-                )
+                if self.__debug:
+                    self.__logger.info(
+                        f"Shell alternate at {[opt.meta.start_pos,opt.meta.end_pos] if hasattr(opt,'meta') and not opt.meta.empty else '?'} option {i+1}"
+                    )
                 if hasattr(opt, "data"):
                     self.__shell.append(self.AccumulatedShell("alo", i + 1, len(tree.children)))
                     self.visit(opt)
@@ -142,18 +148,20 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         def emphasized(self, tree):
             numpar = tree.children[-1]
             weight = self.__get_numpar_value(numpar) if numpar is not None else 1.1
-            self.__logger.debug(
-                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {weight}"
-            )
+            if self.__debug:
+                self.__logger.info(
+                    f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'} with weight {weight}"
+                )
             self.__shell.append(self.AccumulatedShell("at", weight, None))
             self.visit_children(tree)
             self.__shell.pop()
 
         def deemphasized(self, tree):
             weight = 0.9
-            self.__logger.debug(
-                f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {weight}"
-            )
+            if self.__debug:
+                self.__logger.info(
+                    f"Shell attention at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'} with weight {weight}"
+                )
             self.__shell.append(self.AccumulatedShell("at", weight, None))
             self.visit_children(tree)
             self.__shell.pop()
@@ -172,9 +180,10 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
             self.__negtags.append(
                 self.NegTag(tree.meta.start_pos, tree.meta.end_pos, content, parameters, self.__shell.copy())
             )
-            self.__logger.debug(
-                f"Negative tag at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {parameters}: {content.encode('unicode_escape').decode('utf-8')}"
-            )
+            if self.__debug:
+                self.__logger.info(
+                    f"Negative tag at {[tree.meta.start_pos,tree.meta.end_pos] if hasattr(tree,'meta') and not tree.meta.empty else '?'}: {parameters or 'with no parameters :'} {content.encode('unicode_escape').decode('utf-8')}"
+                )
 
         def start(self, tree):
             self.visit_children(tree)
@@ -222,9 +231,10 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
                     if content not in self.__already_processed:
                         if self.__ignore_repeats:
                             self.__already_processed.append(content)
-                        self.__logger.debug(
-                            f"Adding content at position {position}: {content.encode('unicode_escape').decode('utf-8')}"
-                        )
+                        if self.__debug:
+                            self.__logger.info(
+                                f"Adding content at position {position}: {content.encode('unicode_escape').decode('utf-8')}"
+                            )
                         if position == "e":
                             self.add_at["end"].append(content)
                         elif position.startswith("p"):
@@ -246,16 +256,21 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
         try:
             prompt = original_prompt
             negative_prompt = original_negative_prompt
-            self.__logger.debug(f"Input prompt: {prompt.encode('unicode_escape').decode('utf-8')}")
-            self.__logger.debug(f"Input negative_prompt: {negative_prompt.encode('unicode_escape').decode('utf-8')}")
+            self.__debug = getattr(self.__opts, "ppp_debug", False)
+            if self.__debug:
+                self.__logger.info(f"Input prompt: {prompt.encode('unicode_escape').decode('utf-8')}")
+                self.__logger.info(f"Input negative_prompt: {negative_prompt.encode('unicode_escape').decode('utf-8')}")
             prompt, add_at = self.__find_tags(prompt)
             negative_prompt = self.__add_to_insertion_points(negative_prompt, add_at["insertion_point"])
             if len(add_at["start"]) > 0:
                 negative_prompt = self.__add_to_start(negative_prompt, add_at["start"])
             if len(add_at["end"]) > 0:
                 negative_prompt = self.__add_to_end(negative_prompt, add_at["end"])
-            self.__logger.debug(f"Output prompt: {prompt.encode('unicode_escape').decode('utf-8')}")
-            self.__logger.debug(f"Output negative_prompt: {negative_prompt.encode('unicode_escape').decode('utf-8')}")
+            if self.__debug:
+                self.__logger.info(f"Output prompt: {prompt.encode('unicode_escape').decode('utf-8')}")
+                self.__logger.info(
+                    f"Output negative_prompt: {negative_prompt.encode('unicode_escape').decode('utf-8')}"
+                )
             return prompt, negative_prompt
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.__logger.exception(e)
@@ -264,29 +279,35 @@ class SendToNegative:  # pylint: disable=too-few-public-methods
     def __find_tags(self, prompt):
         add_at = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
         tree = self.__schedule_parser.parse(prompt)
-        self.__logger.debug(f"Initial tree:\n{tree.pretty()}")
+        # if self.__debug:
+        #    self.__logger.info(f"Initial tree:\n{tree.pretty()}")
 
-        readtree = self.ReadTree(self.__logger, self.__ignore_repeats, self.__join_attention, prompt, add_at)
+        readtree = self.ReadTree(
+            self.__logger, self.__debug, self.__ignore_repeats, self.__join_attention, prompt, add_at
+        )
         readtree.visit(tree)
 
         for r in readtree.remove[::-1]:
             prompt = prompt[: r[0]] + prompt[r[1] :]
         if self.__cleanup:
+            if self.__debug:
+                self.__logger.info(f"Prompt before cleanup: {prompt.encode('unicode_escape').decode('utf-8')}")
             prompt = re.sub(r"\((?::[+-]?[\d\.]+)?\)", "", prompt)  # clean up empty attention
             prompt = re.sub(r"\[\]", "", prompt)  # clean up empty attention
             prompt = re.sub(r"\[:?:[+-]?[\d\.]+\]", "", prompt)  # clean up empty scheduling
             prompt = re.sub(r"\[\|+\]", "", prompt)  # clean up empty alternation
-            # clean up whitespace and extra separators
+            prompt = re.sub(r"[ ]{2,}", " ", prompt)  # collapse spaces
+            # clean up extra separators
             prompt = (
-                prompt.replace("  ", " ")
-                .replace(self.__separator + self.__separator, self.__separator)
+                prompt.replace(self.__separator + self.__separator, self.__separator)
                 .replace(" " + self.__separator, self.__separator)
                 .removeprefix(self.__separator)
                 .removesuffix(self.__separator)
                 .strip()
             )
         add_at = readtree.add_at
-        self.__logger.debug(f"New negative additions: {add_at}")
+        if self.__debug:
+            self.__logger.info(f"New negative additions: {add_at}")
 
         return prompt, add_at
 

@@ -5,16 +5,16 @@ import os
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
-from sendtonegative import SendToNegative  # pylint: disable=import-error
-from stnlogging import SendToNegativeLogFactory
+from ppp import PromptPostProcessor  # pylint: disable=import-error
+from ppp_logging import PromptPostProcessorLogFactory
 
 
-class TestSendToNegative(unittest.TestCase):
+class TestPromptPostProcessor(unittest.TestCase):
     def setUp(self):
-        lf = SendToNegativeLogFactory()
+        lf = PromptPostProcessorLogFactory()
         self.__log = lf.log
         self.__log.setLevel(logging.DEBUG)
-        self.defstn = SendToNegative(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=True)
+        self.defppp = PromptPostProcessor(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=True)
 
     def process(
         self,
@@ -22,9 +22,9 @@ class TestSendToNegative(unittest.TestCase):
         negative_prompt,
         expected_prompt,
         expected_negative_prompt,
-        stn=None,
+        ppp=None,
     ):
-        the_obj = self.defstn if stn is None else stn
+        the_obj = self.defppp if ppp is None else ppp
         result_prompt, result_negative_prompt = the_obj.process_prompt(prompt, negative_prompt)
         self.assertEqual(result_prompt, expected_prompt, f"Prompt should be '{expected_prompt}'")
         self.assertEqual(
@@ -119,7 +119,7 @@ class TestSendToNegative(unittest.TestCase):
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
             " (), flowers , ,  ",
             "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
-            SendToNegative(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=False),
+            PromptPostProcessor(self.__log, separator=", ", ignore_repeats=True, join_attention=True, cleanup=False),
         )
 
     def test_inside_attention1(self):

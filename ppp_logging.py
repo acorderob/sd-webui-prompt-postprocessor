@@ -3,7 +3,7 @@ import copy
 import logging
 
 
-class SendToNegativeLogFactory:
+class PromptPostProcessorLogFactory:
     class ColoredFormatter(logging.Formatter):
         COLORS = {
             "DEBUG": "\033[0;36m",  # CYAN
@@ -22,19 +22,16 @@ class SendToNegativeLogFactory:
             return super().format(colored_record)
 
     def __init__(self):
-        logsd = logging.getLogger("sd")
-        stnlog = logging.getLogger("SendToNegative")
-        stnlog.setLevel(logging.INFO)
-        stnlog.handlers = logsd.handlers
-        if not stnlog.handlers:
+        ppplog = logging.getLogger("PromptPostProcessor")
+        ppplog.propagate = False
+        if not ppplog.handlers:
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(self.ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-            stnlog.addHandler(handler)
-            self.log = stnlog
-        else:
-            self.log = SendToNegativeLogCustomAdapter(stnlog)
+            ppplog.addHandler(handler)
+        ppplog.setLevel(logging.INFO)
+        self.log = PromptPostProcessorLogCustomAdapter(ppplog)
 
 
-class SendToNegativeLogCustomAdapter(logging.LoggerAdapter):
+class PromptPostProcessorLogCustomAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
-        return f"[SendToNegative] {msg}", kwargs
+        return f"[PromptPostProcessor] {msg}", kwargs
