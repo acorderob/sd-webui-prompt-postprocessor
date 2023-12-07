@@ -7,35 +7,94 @@ import os
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 
 
-# pylint: disable=import-error
-
 from modules import scripts, shared, script_callbacks
 from modules.processing import StableDiffusionProcessing
 from modules.shared import opts
+import gradio as gr
 from ppp import PromptPostProcessor
 from ppp_logging import PromptPostProcessorLogFactory
 
 
 class PromptPostProcessorScript(scripts.Script):
+    """
+    This class represents a script for prompt post-processing.
+    It is responsible for processing prompts and applying various settings and cleanup operations.
+
+    Attributes:
+        callbacks_added (bool): Flag indicating whether the script callbacks have been added.
+
+    Methods:
+        __init__(): Initializes the PromptPostProcessorScript object.
+        title(): Returns the title of the script.
+        show(is_img2img): Determines whether the script should be shown based on the input type.
+        process(p, *args, **kwargs): Processes the prompts and applies post-processing operations.
+        __on_ui_settings(): Callback function for UI settings.
+    """
+
     def __init__(self):
-        if not hasattr(self, "callbacks_added"):
+        """
+        Initializes the PromptPostProcessor object.
+
+        This method adds callbacks for UI settings and initializes the logger.
+
+        Parameters:
+            None
+
+        Returns:
+            None
+        """
+        if not hasattr(self, "ppp_callbacks_added"):
             lf = PromptPostProcessorLogFactory()
-            self.__logppp = lf.log
+            self.ppp_logger = lf.log
+            self.ppp_debug = getattr(opts, "ppp_gen_debug", False) if opts is not None else False
             script_callbacks.on_ui_settings(self.__on_ui_settings)
-            self.callbacks_added = True
+            self.ppp_callbacks_added = True
 
     def title(self):
+        """
+        Returns the title of the script.
+
+        Returns:
+            str: The title of the script.
+        """
         return PromptPostProcessor.NAME
 
     def show(self, is_img2img):
+        """
+        Determines whether the script should be shown based on the kind of processing.
+
+        Args:
+            is_img2img (bool): Flag indicating whether the processing is image-to-image.
+
+        Returns:
+            scripts.Visibility: The visibility setting for the script.
+        """
         return scripts.AlwaysVisible
 
-    def process(self, p: StableDiffusionProcessing, *args, **kwargs):
-        ppp = PromptPostProcessor(self.__logppp, opts=opts)
-        for i in range(len(p.all_prompts)):  # pylint: disable=consider-using-enumerate
-            p.all_prompts[i], p.all_negative_prompts[i] = ppp.process_prompt(
-                p.all_prompts[i], p.all_negative_prompts[i]
-            )
+    def process(self, p: StableDiffusionProcessing, *args, **kwargs):  # pylint: disable=unused-argument
+        """
+        Processes the prompts and applies post-processing operations.
+
+        Args:
+            p (StableDiffusionProcessing): The StableDiffusionProcessing object containing the prompts.
+
+        Returns:
+            None
+        """
+        is_i2i = getattr(p, "init_images", [None])[0] is not None
+        self.ppp_debug = getattr(opts, "ppp_gen_debug", False) if opts is not None else False
+        if self.ppp_debug:
+            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'} mode)")
+        ppp = PromptPostProcessor(self, opts, is_i2i)
+        # processes regular prompts
+        if (
+            hasattr(p, "all_prompts")
+            and p.all_prompts is not None
+            and hasattr(p, "all_negative_prompts")
+            and p.all_negative_prompts is not None
+        ):
+            for i, (prompt, negative_prompt) in enumerate(zip(p.all_prompts, p.all_negative_prompts)):
+                p.all_prompts[i], p.all_negative_prompts[i] = ppp.process_prompt(prompt, negative_prompt)
         # make it compatible with A1111 hires fix
         if (
             hasattr(p, "all_hr_prompts")
@@ -43,17 +102,66 @@ class PromptPostProcessorScript(scripts.Script):
             and hasattr(p, "all_hr_negative_prompts")
             and p.all_hr_negative_prompts is not None
         ):
-            for i in range(len(p.all_hr_prompts)):  # pylint: disable=consider-using-enumerate
-                p.all_hr_prompts[i], p.all_hr_negative_prompts[i] = ppp.process_prompt(
-                    p.all_hr_prompts[i], p.all_hr_negative_prompts[i]
-                )
+            for i, (hr_prompt, hr_negative_prompt) in enumerate(zip(p.all_hr_prompts, p.all_hr_negative_prompts)):
+                p.all_hr_prompts[i], p.all_hr_negative_prompts[i] = ppp.process_prompt(hr_prompt, hr_negative_prompt)
+
+    def ppp_interrupt(self):
+        """
+        Interrupts the generation.
+
+        Returns:
+            None
+        """
+        shared.state.interrupted = True
 
     def __on_ui_settings(self):
+        """
+        Callback function for UI settings.
+
+        Returns:
+            None
+        """
+        # general settings
         section = ("prompt-post-processor", PromptPostProcessor.NAME)
         shared.opts.add_option(
-            key="ppp_separator",
+            key="ppp_gen_sep", info=shared.OptionInfo("<h2>General settings</h2>", "", gr.HTML, section=section)
+        )
+        shared.opts.add_option(
+            key="ppp_gen_debug",
             info=shared.OptionInfo(
-                PromptPostProcessor.DEFAULT_SEPARATOR,
+                False,
+                label="Debug",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_gen_ifwildcards",
+            info=shared.OptionInfo(
+                default=PromptPostProcessor.IFWILDCARDS_CHOICES["ignore"],
+                label="What to do with remaining wildcards?",
+                component=gr.Radio,
+                component_args={"choices": PromptPostProcessor.IFWILDCARDS_CHOICES.values()},
+                section=section,
+            ),
+        )
+
+        # send to negative settings
+        shared.opts.add_option(
+            key="ppp_stn_sep",
+            info=shared.OptionInfo("<h2>Send to Negative settings</h2>", "", gr.HTML, section=section),
+        )
+        shared.opts.add_option(
+            key="ppp_stn_doi2i",
+            info=shared.OptionInfo(
+                False,
+                label="Apply in img2img (this includes any pass that contains an initial image, like refiner, hires fix, adetailer)",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_stn_separator",
+            info=shared.OptionInfo(
+                PromptPostProcessor.DEFAULT_STN_SEPARATOR,
                 label="Separator used when adding to the negative prompt",
                 section=section,
             ),
@@ -74,19 +182,47 @@ class PromptPostProcessorScript(scripts.Script):
                 section=section,
             ),
         )
+        # clean-up settings
         shared.opts.add_option(
-            key="ppp_cleanup",
+            key="ppp_cup_sep", info=shared.OptionInfo("<h2>Clean-up settings</h2>", "", gr.HTML, section=section)
+        )
+        shared.opts.add_option(
+            key="ppp_cup_doi2i",
             info=shared.OptionInfo(
-                True,
-                label="Try to clean-up the prompt after processing (removes extra spaces, empty attention, or the configured separator)",
+                False,
+                label="Apply in img2img (this includes any pass that contains an initial image, like refiner, hires fix, adetailer)",
                 section=section,
             ),
         )
         shared.opts.add_option(
-            key="ppp_debug",
+            key="ppp_cup_extraspaces",
             info=shared.OptionInfo(
-                False,
-                label="Debug",
+                True,
+                label="Remove extra spaces",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_emptyconstructs",
+            info=shared.OptionInfo(
+                True,
+                label="Remove empty constructs (attention, alternation, scheduling)",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_extraseparators",
+            info=shared.OptionInfo(
+                True,
+                label="Remove extra separators",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_breaks",
+            info=shared.OptionInfo(
+                True,
+                label="Clean up around BREAKs",
                 section=section,
             ),
         )
