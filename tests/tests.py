@@ -49,12 +49,29 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "ppp_cup_extraseparators": True,
                 "ppp_cup_extraspaces": True,
                 "ppp_cup_breaks": True,
+                "ppp_cup_ands": True,
+                "ppp_cup_extranetworktags": True,
+            }
+        )
+        self.__nocupopts = DictToObj(
+            {
+                "ppp_gen_debug": True,
+                "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["ignore"],
+                "ppp_stn_doi2i": False,
+                "ppp_stn_separator": ", ",
+                "ppp_stn_ignore_repeats": True,
+                "ppp_stn_join_attention": True,
+                "ppp_cup_doi2i": False,
+                "ppp_cup_emptyconstructs": False,
+                "ppp_cup_extraseparators": False,
+                "ppp_cup_extraspaces": False,
+                "ppp_cup_breaks": False,
+                "ppp_cup_ands": False,
+                "ppp_cup_extranetworktags": False,
             }
         )
         self.defppp = PromptPostProcessor(self, self.__defopts)
-
-    def ppp_interrupt(self):
-        pass # fake interrupt
+        self.nocupppp = PromptPostProcessor(self, self.__nocupopts)
 
     def process(
         self,
@@ -88,131 +105,40 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     # Send To Negative tests
 
-    def test_tag_default(self):  # negtag with no parameters
+    def test_nt_simple(self):  # negtags with different parameters and separations
         self.process(
-            "flowers<!red!>",
-            "normal quality, worse quality",
+            "flowers<!red!>, <!!s!green!>, <!!e!blue!><!!p0!yellow!>, <!!p1!purple!><!!p2!black!>",
+            "<!!i0!!>normal quality<!!i1!!>, worse quality<!!i2!!>",
             "flowers",
-            "red, normal quality, worse quality",
+            "red, green, yellow, normal quality, purple, worse quality, black, blue",
         )
 
-    def test_tag_start(self):  # negtag with s parameter
+    def test_nt_complex(self):  # complex negtags
         self.process(
-            "flowers<!!s!red!>",
-            "normal quality, worse quality",
-            "flowers",
-            "red, normal quality, worse quality",
-        )
-
-    def test_tag_end(self):  # negtag with e parameter
-        self.process(
-            "flowers<!!e!red!>",
-            "normal quality, worse quality",
-            "flowers",
-            "normal quality, worse quality, red",
-        )
-
-    def test_tag_insertion_mid_sep(self):  # negtag with p parameter and insertion in the middle
-        self.process(
-            "flowers<!!p0!red!>",
-            "normal quality, <!!i0!!>, worse quality",
-            "flowers",
-            "normal quality, red, worse quality",
-        )
-
-    def test_tag_insertion_mid_no_sep(self):  # negtag with p parameter and insertion in the middle without separator
-        self.process(
-            "flowers<!!p0!red!>",
-            "normal quality<!!i0!!>worse quality",
-            "flowers",
-            "normal quality, red, worse quality",
-        )
-
-    def test_tag_insertion_start_sep(self):  # negtag with p parameter and insertion at the start
-        self.process(
-            "flowers<!!p0!red!>",
-            "<!!i0!!>, normal quality, worse quality",
-            "flowers",
-            "red, normal quality, worse quality",
-        )
-
-    def test_tag_insertion_start_no_sep(self):  # negtag with p parameter and insertion at the start without separator
-        self.process(
-            "flowers<!!p0!red!>",
-            "<!!i0!!>normal quality, worse quality",
-            "flowers",
-            "red, normal quality, worse quality",
-        )
-
-    def test_tag_insertion_end_sep(self):  # negtag with p parameter and insertion at the end
-        self.process(
-            "flowers<!!p0!red!>",
-            "normal quality, worse quality, <!!i0!!>",
-            "flowers",
-            "normal quality, worse quality, red",
-        )
-
-    def test_tag_insertion_end_no_sep(self):  # negtag with p parameter and insertion at the end without separator
-        self.process(
-            "flowers<!!p0!red!>",
-            "normal quality, worse quality<!!i0!!>",
-            "flowers",
-            "normal quality, worse quality, red",
-        )
-
-    def test_complex(self):  # complex negtags
-        self.process(
-            "<!red!> (<!!s!pink!>), flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> ((<!!s!pink!>)), flowers <!!e!purple!>, <!!p0!mauve!><!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
             "flowers",
-            "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
+            "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
         )
 
-    def test_complex_no_cleanup(self):  # complex negtags with no cleanup
+    def test_nt_complex_nocleanup(self):  # complex negtags with no cleanup
         self.process(
-            "<!red!> (<!!s!pink!>), flowers <!!e!purple!>, <!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
+            "<!red!> ((<!!s!pink!>)), flowers <!!e!purple!>, <!!p0!mauve!><!!e!blue!>, <!!p0!yellow!> <!!p1!green!>",
             "normal quality, <!!i0!!>, bad quality<!!i1!!>, worse quality",
-            " (), flowers , ,  ",
-            "red, (pink), normal quality, yellow, bad quality, green, worse quality, purple, blue",
-            PromptPostProcessor(
-                self,
-                DictToObj(
-                    {
-                        **self.__defopts.__dict__,
-                        "ppp_cup_emptyconstructs": False,
-                        "ppp_cup_extraseparators": False,
-                        "ppp_cup_extraspaces": False,
-                        "ppp_cup_breaks": False,
-                    }
-                ),
-            ),
+            " (()), flowers , ,  ",
+            "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
+            self.nocupppp,
         )
 
-    def test_inside_attention1(self):  # negtag inside attention
+    def test_nt_inside_attention(self):  # negtag inside attention
         self.process(
-            "[<!neg1!>] this is a ((test<!!e!neg2!>) (test:2.0): 1.5 )",
+            "[<!neg1!>] this is a ((test<!!e!neg2!>) (test:2.0): 1.5 ) (red<![square]!>:1.5)",
             "normal quality",
-            "this is a ((test) (test:2.0):1.5)",
-            "[neg1], normal quality, (neg2:1.65)",
+            "this is a ((test) (test:2.0):1.5) (red:1.5)",
+            "[neg1], ([square]:1.5), normal quality, (neg2:1.65)",
         )
 
-    def test_inside_attention2(self):  # negtag inside attention
-        self.process(
-            "(red<![square]!>:1.5)",
-            "",
-            "(red:1.5)",
-            "([square]:1.5)",
-        )
-
-    def test_inside_alternation1(self):  # negtag inside alternation
-        self.process(
-            "this is a (([complex|simple<!neg1!>|regular] test)(test:2.0):1.5)",
-            "normal quality",
-            "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
-            "([|neg1|]:1.65), normal quality",
-        )
-
-    def test_inside_alternation2(self):  # negtag inside alternation
+    def test_nt_inside_alternation(self):  # negtag inside alternation
         self.process(
             "this is a (([complex<!neg1!>|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
             "normal quality",
@@ -220,7 +146,7 @@ class TestPromptPostProcessor(unittest.TestCase):
             "([neg1||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
         )
 
-    def test_inside_alternation3(self):  # negtag inside alternation (recursive alternation)
+    def test_nt_inside_alternation_recursive(self):  # negtag inside alternation (recursive alternation)
         self.process(
             "this is a (([complex<!neg1!>[one|two<!neg12!>||three|four(<!neg14!>)]|simple<!neg2!>|regular<!neg3!>] test)(test:2.0):1.5)",
             "normal quality",
@@ -228,7 +154,7 @@ class TestPromptPostProcessor(unittest.TestCase):
             "([neg1||]:1.65), ([[|neg12|||]||]:1.65), ([[||||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
         )
 
-    def test_inside_scheduling(self):  # negtag inside scheduling
+    def test_nt_inside_scheduling(self):  # negtag inside scheduling
         self.process(
             "this is [abc<!neg1!>:def<!!e!neg2!>: 5 ]",
             "normal quality",
@@ -236,17 +162,17 @@ class TestPromptPostProcessor(unittest.TestCase):
             "[neg1::5], normal quality, [neg2:5]",
         )
 
-    def test_complex_features(self):  # complex negtags with features
+    def test_nt_complex_features(self):  # complex negtags with AND, BREAK and other features
         self.process(
-            "[<!neg5!>] this is: a (([complex|simple<!neg6!>|regular] test<!neg1!>)(test:2.0):1.5) \nBREAK, BREAK with [abc<!neg4!>:def<!!p0!neg2(neg3:1.6)!>:5] <lora:xxx:1>",
+            "[<!neg5!>] this \\(is\\): a (([complex|simple<!neg6!>|regular] test<!neg1!>)(test:2.0):1.5) \nBREAK, BREAK with [abc<!neg4!>:def<!!p0!neg2(neg3:1.6)!>:5]:0.5 AND loraword <lora:xxx:1> AND AND hypernetword <hypernet:yyy>:0.3",
             "normal quality, <!!i0!!>",
-            "this is: a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5] <lora:xxx:1>",
+            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]:0.5 AND loraword <lora:xxx:1> AND hypernetword <hypernet:yyy>:0.3",
             "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
         )
 
     # Wildcard tests
 
-    def test_wildcards_ignore(self):  # wildcards with ignore option
+    def test_wc_ignore(self):  # wildcards with ignore option
         self.process(
             "__bad_wildcard__",
             "{option1|option2}",
@@ -263,11 +189,11 @@ class TestPromptPostProcessor(unittest.TestCase):
             ),
         )
 
-    def test_wildcards_remove(self):  # wildcards with remove option
+    def test_wc_remove(self):  # wildcards with remove option
         self.process(
             "[<!neg5!>] this is: __bad_wildcard__ a (([complex|simple<!neg6!>|regular] test<!neg1!>)(test:2.0):1.5) \nBREAK, BREAK with [abc<!neg4!>:def<!!p0!neg2(neg3:1.6)!>:5] <lora:xxx:1>",
             "normal quality, <!!i0!!> {option1|option2}",
-            "this is: a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5] <lora:xxx:1>",
+            "this is: a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]<lora:xxx:1>",
             "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             PromptPostProcessor(
                 self,
@@ -280,7 +206,7 @@ class TestPromptPostProcessor(unittest.TestCase):
             ),
         )
 
-    def test_wildcards_warn(self):  # wildcards with warn option
+    def test_wc_warn(self):  # wildcards with warn option
         self.process(
             "__bad_wildcard__",
             "{option1|option2}",
@@ -297,7 +223,7 @@ class TestPromptPostProcessor(unittest.TestCase):
             ),
         )
 
-    def test_wildcards_stop(self):  # wildcards with stop option
+    def test_wc_stop(self):  # wildcards with stop option
         self.process(
             "__bad_wildcard__",
             "{option1|option2}",
@@ -312,6 +238,24 @@ class TestPromptPostProcessor(unittest.TestCase):
                     }
                 ),
             ),
+        )
+
+    # Cleanup tests
+
+    def test_cl_simple(self):  # simple cleanup
+        self.process(
+            "  this is a ((test ), ,  () [] ( , test ,:2.0):1.5) (red:1.5)  ",
+            "  normal quality  ",
+            "this is a ((test), (test,:2.0):1.5) (red:1.5)",
+            "normal quality",
+        )
+
+    def test_cl_complex(self):  # complex cleanup
+        self.process(
+            "  this is BREAKABLE a ((test), ,AND AND() [] <lora:test> ANDERSON (test:2.0):1.5) :o BREAK \n BREAK (red:1.5)  ",
+            "  [:hands, feet, :0.15]normal quality  ",
+            "this is BREAKABLE a ((test) AND <lora:test> ANDERSON (test:2.0):1.5) :o BREAK (red:1.5)",
+            "[:hands, feet, :0.15]normal quality",
         )
 
 

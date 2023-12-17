@@ -195,14 +195,6 @@ class PromptPostProcessorScript(scripts.Script):
             ),
         )
         shared.opts.add_option(
-            key="ppp_cup_extraspaces",
-            info=shared.OptionInfo(
-                True,
-                label="Remove extra spaces",
-                section=section,
-            ),
-        )
-        shared.opts.add_option(
             key="ppp_cup_emptyconstructs",
             info=shared.OptionInfo(
                 True,
@@ -223,6 +215,30 @@ class PromptPostProcessorScript(scripts.Script):
             info=shared.OptionInfo(
                 True,
                 label="Clean up around BREAKs",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_ands",
+            info=shared.OptionInfo(
+                True,
+                label="Clean up around ANDs",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_extranetworktags",
+            info=shared.OptionInfo(
+                False,
+                label="Clean up around extra network tags",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_extraspaces",
+            info=shared.OptionInfo(
+                True,
+                label="Remove extra spaces",
                 section=section,
             ),
         )

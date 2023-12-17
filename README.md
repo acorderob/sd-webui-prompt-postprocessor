@@ -8,7 +8,7 @@ Currently this extension has these functions:
 * Detect invalid wildcards and act on them.
 * Clean up the prompt and negative prompt.
 
-Note: The extension must be loaded after the installed wildcards extension (or any other that modifies the prompt). Extensions load by their folder name in alphanumeric order.
+Note: The extension must be loaded after the installed wildcards extension (or any other that modifies the prompt or has it's own syntax expressions). Extensions load by their folder name in alphanumeric order.
 
 With the ["Dynamic Prompts" extension](https://github.com/adieyal/sd-dynamic-prompts) this happens by default due to default folder names for both extensions. But if this is not the case, you can just rename this extension's folder so the ordering works out.
 
@@ -23,11 +23,14 @@ Notes:
     * **Attention**: \[prompt\] (prompt) (prompt:weight)
     * **Alternation**: \[prompt1|prompt2|...\]
     * **Scheduling**: \[prompt1:prompt2:step\]
-    * **Models**: \<model\>
+    * **Extra networks**: \<kind:model...\>
+    * **BREAK**: prompt1 BREAK prompt2
+    * **Composable Diffusion**: prompt1 AND prompt2
 
     In SD.Next that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
 2. It only recognizes wildcards in the *\_\_wildcard\_\_* and *{choice|choice}* formats.
-3. It does not translate equivalent *AND/BREAK* separations into the negative prompt.
+3. Since it should run after other extensions that apply to the prompt, the content should have already been processed by them and there should't be any non recognized syntax anymore.
+4. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 
 ## Installation
 
@@ -100,11 +103,15 @@ Then, if that option is chosen this extension will process it later and move tha
 
 * **Apply in img2img**: check if you want to do this processing in img2img processes.
 * **Remove empty constructs**: removes attention/scheduling/alternation constructs when they are invalid.
-* **Remove extra separators**: removes unnecesary separators. This applies to the configured separator and regular commas.
-* **Clean up around BREAKs**: removes consecutive BREAKs and unnecesary commas and space around them.
-* **Remove extra spaces**: removes unnecesary spaces.
+* **Remove extra separators**: removes unnecessary separators. This applies to the configured separator and regular commas.
+* **Clean up around BREAKs**: removes consecutive BREAKs and unnecessary commas and space around them.
+* **Clean up around ANDs**: removes consecutive ANDs and unnecessary commas and space around them.
+* **Clean up around extra network tags**: removes spaces around them.
+* **Remove extra spaces**: removes other unnecessary spaces.
 
-## Notes
+## Notes on negative tags
+
+Positional insertion tags have less priority that start/end tags, so even if they are at the start or end of the negative prompt, they will end up inside any start/end (and default position) tags.
 
 The content of the negative tags is not processed and is copied as-is to the negative prompt. Other modifiers around the tags are processed in the following way.
 

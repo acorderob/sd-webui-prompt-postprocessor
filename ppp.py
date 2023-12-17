@@ -40,7 +40,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
 
     NAME = "Prompt Post-Processor"
-    VERSION = "2.2.0"
+    VERSION = "2.3.0"
 
     DEFAULT_STN_SEPARATOR = ", "
     IFWILDCARDS_CHOICES = {
@@ -92,30 +92,44 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.cup_emptyconstructs = getattr(opts, "ppp_cup_emptyconstructs", True) if opts is not None else True
         self.cup_extraseparators = getattr(opts, "ppp_cup_extraseparators", True) if opts is not None else True
         self.cup_breaks = getattr(opts, "ppp_cup_breaks", True) if opts is not None else True
+        self.cup_ands = getattr(opts, "ppp_cup_ands", True) if opts is not None else True
+        self.cup_extranetworktags = getattr(opts, "ppp_cup_extranetworktags", False) if opts is not None else False
 
         self.__insertion_point_tags = [f"<!!i{x}!!>" for x in range(10)]
         # Process with lark (debug with https://www.lark-parser.org/ide/)
         self.__parser_complete = lark.Lark(
             r"""
-                start: (prompt | /[\][():|<>!{}]/+)*
-                prompt: (emphasized | deemphasized | scheduled | alternate | modeltag | negtag | wildcard | choices | plain)*
-                nonegprompt: (emphasized | deemphasized | scheduled | alternate | modeltag | wildcard | choices | plain)*
-                wildcard: "__" /(?:(?!__)\S)+/ "__"
-                choices: "{" choice ("|" choice)* "}"
-                choice: prompt # we ignore weight and any other parameters
-                emphasized: "(" prompt [":" numpar] ")"
-                deemphasized: "[" prompt "]"
-                scheduled: "[" [prompt ":"] prompt ":" numpar "]"
+                start: (promptcomp | specialchars)* // BUG: sometimes it chooses specialchars instead of promptcomp and fails!!!
+                // prompt composition with AND
+                promptcomp: promptcomppart ([":" numpar] (/\bAND\b/ promptcomppart [":" numpar])+)?
+                promptcomppart: prompt
+                // prompt scheduling and alternation
                 alternate: "[" alternateoption ("|" alternateoption)+ "]"
                 alternateoption: prompt
+                scheduled: "[" [prompt ":"] prompt ":" numpar "]"
+                // wildcard extension support
+                wildcard: "__" /(?:(?!__)\S)+/ "__"
+                choices: "{" choice ("|" choice)* "}"
+                // we ignore weight and any other parameters in each choice
+                choice: prompt
+                // simple prompts
+                prompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | negtag | wildcard | choices | plain)*
+                nonegprompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | wildcard | choices | plain)*
+                // attention modifiers
+                emphasized: "(" prompt [":" numpar] ")"
+                deemphasized: "[" prompt "]"
+                // extra network tags
+                extranetworktag: "<" /(?!!)[^>]+/ ">"
+                // negative tags
                 negtag: "<!" [negtagparameters] nonegprompt "!>"
                 negtagparameters: "!" /s|e|[ip]\d/ "!"
-                modeltag: "<" /(?!!)[^>]+/ ">"
+                // plain text and weights
                 numpar: WHITESPACE* NUMBER WHITESPACE*
                 WHITESPACE: /\s+/
-                plain: /((?!__)[^\\[\]():|<>!{}]|\\.)+/s
+                plain: /((?!__|\bAND\b)[^\\[\]():|<>!{}]|\\.)+/s
+                specialchars: /[\]():|<>!{}]|\bAND\b/+
                 %import common.SIGNED_NUMBER -> NUMBER
-            """,  # prompt, nonegprompt, plain with ?
+            """,
             propagate_positions=True,
         )
 
@@ -158,7 +172,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             super().__init__()
             self.__ppp = ppp
             self.__prompt = prompt
-            self.AccumulatedShell = namedtuple("AccumulatedShell", ["type", "info1", "info2"])
+            self.AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data", "position"])
             AccumulatedShell = self.AccumulatedShell
             self.__shell: list[AccumulatedShell] = []
             self.NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
@@ -190,6 +204,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 None
             """
+            treemetaposition = (
+                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+            )
             if len(tree.children) > 2:  # before & after
                 before = tree.children[0]
             else:
@@ -199,7 +216,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             pos = self.__get_numpar_value(numpar)
             if pos >= 1:
                 pos = int(pos)
-            # self.__shell.append(self.AccumulatedShell("sc", tree.meta.start_pos, pos))
+            # self.__shell.append(self.AccumulatedShell("sc", pos, treemetaposition))
             if before is not None and hasattr(before, "data"):
                 if self.__ppp.debug:
                     before_metaposition = (
@@ -208,7 +225,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         else "?"
                     )
                     self.__ppp.logger.info(f"Shell scheduled before at {before_metaposition} with position {pos}")
-                self.__shell.append(self.AccumulatedShell("scb", pos, None))
+                self.__shell.append(self.AccumulatedShell("scb", pos, treemetaposition))
                 self.visit(before)
                 self.__shell.pop()
             if hasattr(after, "data"):
@@ -219,7 +236,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         else "?"
                     )
                     self.__ppp.logger.info(f"Shell scheduled after at {after_metaposition} with position {pos}")
-                self.__shell.append(self.AccumulatedShell("sca", pos, None))
+                self.__shell.append(self.AccumulatedShell("sca", pos, treemetaposition))
                 self.visit(after)
                 self.__shell.pop()
             # self.__shell.pop()
@@ -234,7 +251,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 None
             """
-            # self.__shell.append(self.AccumulatedShell("al", tree.meta.start_pos, len(tree.children)))
+            treemetaposition = (
+                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+            )
+            # self.__shell.append(self.AccumulatedShell("al", len(tree.children), treemetaposition))
             for i, opt in enumerate(tree.children):
                 if self.__ppp.debug:
                     metaposition = (
@@ -242,7 +262,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
                     self.__ppp.logger.info(f"Shell alternate at {metaposition} option {i+1}")
                 if hasattr(opt, "data"):
-                    self.__shell.append(self.AccumulatedShell("alo", i + 1, len(tree.children)))
+                    self.__shell.append(
+                        self.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}, treemetaposition)
+                    )
                     self.visit(opt)
                     self.__shell.pop()
             # self.__shell.pop()
@@ -257,14 +279,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 None
             """
+            treemetaposition = (
+                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+            )
             numpar = tree.children[-1]
             weight = self.__get_numpar_value(numpar) if numpar is not None else 1.1
             if self.__ppp.debug:
-                metaposition = (
-                    [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else "?"
-                )
-                self.__ppp.logger.info(f"Shell attention at {metaposition} with weight {weight}")
-            self.__shell.append(self.AccumulatedShell("at", weight, None))
+                self.__ppp.logger.info(f"Shell attention at {treemetaposition or '?'} with weight {weight}")
+            self.__shell.append(self.AccumulatedShell("at", weight, treemetaposition))
             self.visit_children(tree)
             self.__shell.pop()
 
@@ -279,12 +301,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 None
             """
             weight = 0.9
+            treemetaposition = (
+                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+            )
             if self.__ppp.debug:
-                metaposition = (
-                    [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else "?"
-                )
-                self.__ppp.logger.info(f"Shell attention at {metaposition} with weight {weight}")
-            self.__shell.append(self.AccumulatedShell("at", weight, None))
+                self.__ppp.logger.info(f"Shell attention at {treemetaposition or '?'} with weight {weight}")
+            self.__shell.append(self.AccumulatedShell("at", weight, treemetaposition))
             self.visit_children(tree)
             self.__shell.pop()
 
@@ -298,6 +320,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 None
             """
+            treemetaposition = (
+                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+            )
             negtagparameters = tree.children[0]
             parameters = negtagparameters.children[0].value if negtagparameters is not None else ""
             rest = []
@@ -312,11 +337,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.NegTag(tree.meta.start_pos, tree.meta.end_pos, content, parameters, self.__shell.copy())
             )
             if self.__ppp.debug:
-                metaposition = (
-                    [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else "?"
-                )
                 self.__ppp.logger.info(
-                    f"Negative tag at {metaposition}: {parameters or 'with no parameters :'} {self.__ppp.formatOutput(content)}"
+                    f"Negative tag at {treemetaposition or '?'}: {parameters or 'with no parameters :'} {self.__ppp.formatOutput(content)}"
                 )
 
         def start(self, tree):
@@ -338,9 +360,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         if negtag.shell[i].type == "at" and negtag.shell[i - 1].type == "at":
                             negtag.shell[i - 1] = self.AccumulatedShell(
                                 "at",
-                                math.floor(100 * negtag.shell[i - 1].info1 * negtag.shell[i].info1)
+                                math.floor(100 * negtag.shell[i - 1].data * negtag.shell[i].data)
                                 / 100,  # we limit the new weight to two decimals
-                                None,
+                                negtag.shell[i - 1].position,
                             )
                             negtag.shell.pop(i)
                 start = ""
@@ -348,26 +370,26 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 for s in negtag.shell:
                     match s.type:
                         case "at":
-                            if s.info1 == 0.9:
+                            if s.data == 0.9:
                                 start += "["
                                 end = "]" + end
-                            elif s.info1 == 1.1:
+                            elif s.data == 1.1:
                                 start += "("
                                 end = ")" + end
                             else:
                                 start += "("
-                                end = f":{s.info1})" + end
+                                end = f":{s.data})" + end
                         # case "sc":
                         case "scb":
                             start += "["
-                            end = f"::{s.info1}]" + end
+                            end = f"::{s.data}]" + end
                         case "sca":
                             start += "["
-                            end = f":{s.info1}]" + end
+                            end = f":{s.data}]" + end
                         # case "al":
                         case "alo":
-                            start += "[" + ("|" * int(s.info1 - 1))
-                            end = ("|" * int(s.info2 - s.info1)) + "]" + end
+                            start += "[" + ("|" * int(s.data["pos"] - 1))
+                            end = ("|" * int(s.data["len"] - s.data["pos"])) + "]" + end
                 content = start + negtag.content + end
                 position = negtag.parameters or "s"
                 if len(content) > 0:
@@ -403,7 +425,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         add_at = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
         tree = self.__parser_complete.parse(prompt)
-        # self.logger.info(f"tree from prompt:\n{tree.pretty()}")
 
         readtree = self.STNTree(self, prompt, add_at)
         readtree.visit(tree)
@@ -526,11 +547,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             __ppp (object): An instance of the parent class `ppp`.
 
         Methods:
+            promptcomp(tree): Replicates prompt composition constructs.
             scheduled(tree): Replicates or removes scheduling constructs based on conditions.
             alternate(tree): Replicates or removes alternation constructs based on conditions.
             emphasized(tree): Replicates or removes attention constructs based on conditions.
             deemphasized(tree): Replicates or removes attention constructs based on conditions.
-            modeltag(tree): Replicates model constructs.
+            extranetworktag(tree): Replicates extra network constructs.
             numpar(tree): Cleans up number parameter.
             negtag(tree): Replicates or removes negative tag constructs based on conditions.
             wildcard(tree): Replicates or removes wildcard constructs based on conditions.
@@ -538,7 +560,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             choice(tree): Replicates choices.
             plain(tree): Cleans up plain text based on conditions.
             __default__(data, children, meta): Default method for joining children and cleaning up text based on conditions.
-
         """
 
         def __init__(self, ppp, phase="cleanup"):
@@ -546,6 +567,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__ppp = ppp
             self.__phase = phase
             self.detectedWildcards = []
+
+        def promptcomp(self, tree):
+            r = tree[0]
+            if len(tree) > 1:
+                if tree[1] is not None:
+                    r += f":{tree[1]}"
+                for i in range(2, len(tree), 3):
+                    if self.__phase == "cleanup" and self.__ppp.cup_ands:
+                        r = re.sub(r"[, ]+$", " ", r)
+                    if r[-1:].isalnum():  # add space if needed
+                        r += " "
+                    r += "AND"
+                    t = tree[i + 1]
+                    if self.__phase == "cleanup" and self.__ppp.cup_ands:
+                        t = re.sub(r"^[, ]+", " ", t)
+                    if t[0:1].isalnum():  # add space if needed
+                        r += " "
+                    r += t
+                    if tree[i + 2] is not None:
+                        r += f":{tree[i+2]}"
+            return r
 
         def scheduled(self, tree):
             if len(tree) == 0 and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
@@ -572,8 +614,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 return ""  # remove empty attention construct (invalid scheduling or alternation constructs end up here too?)
             return f"[{tree[0]}]"  # replicate attention construct
 
-        def modeltag(self, tree):
-            return f"<{tree[0]}>"  # replicate model construct
+        def extranetworktag(self, tree):
+            return f"<{tree[0]}>"  # replicate extra network construct
 
         def numpar(self, tree):
             return next(x for x in tree if x.type == "NUMBER").value.strip()  # clean up number parameter
@@ -610,7 +652,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         def __default__(self, data, children, meta):
             joined = "".join(children)  # join all children
             if self.__phase == "cleanup":
-                # clean up joined text if there are no constructs to take care of cleaning the joints
+                # take care of cleaning the joints only if there are no constructs that can be affected
                 if not re.match(r"[([<{]", joined):
                     joined = self.__ppp.cleanup_text(joined)
             return joined
@@ -648,7 +690,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def cleanup_text(self, text):
         """
-        Cleans up the given text by removing extra separators, breaks, and spaces.
+        Cleans up the given text by removing extra separators, breaks, and spaces. This is called for plain text only or when there are no constructs.
 
         Args:
             text (str): The text to be cleaned up.
@@ -656,24 +698,38 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             str: The cleaned up text.
         """
+        # NOTE: we can't use start/end of line regex since the text might only be a part of a larger line due to the parser
         if self.cup_extraseparators:
+            #
             # sendtonegative separator
+            #
             escapedSeparator = re.escape(self.stn_separator)
+            # collapse separators
             text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*){2,}", self.stn_separator, text)
+            #
             # regular comma separator
+            #
+            # collapse separators
             text = re.sub(r"(?:\s*,\s*){2,}", ", ", text)
         if self.cup_breaks:
+            # collapse separators and commas before BREAK
+            text = re.sub(r"[, ]+BREAK\b", " BREAK", text)
+            # collapse separators and commas after BREAK
+            text = re.sub(r"\bBREAK[, ]+", "BREAK ", text)
+            # collapse separators and commas around BREAK
             text = re.sub(r"[, ]+BREAK[, ]+", " BREAK ", text)
-            text = re.sub(r"BREAK(?:\s+BREAK)+[ ]+", "BREAK ", text)
-            text = re.sub(r"[ ]+BREAK(?:\s+BREAK)+", " BREAK", text)
+            # collapse BREAKs
+            text = re.sub(r"\bBREAK(?:\s+BREAK)+\b", " BREAK ", text)
         if self.cup_extraspaces:
-            text = re.sub(r"[ ]+,", ",", text)  # remove spaces before comma
-            text = re.sub(r"[ ]{2,}", " ", text)  # collapse spaces
+            # remove spaces before comma
+            text = re.sub(r"[ ]+,", ",", text)
+            # collapse spaces
+            text = re.sub(r"[ ]{2,}", " ", text)
         return text
 
     def trim_text(self, text):
         """
-        Trims the given text based on the specified cleanup options.
+        Trims the given text based on the specified cleanup options. This is only called for the reconstructed prompt.
 
         Args:
             text (str): The text to be trimmed.
@@ -681,18 +737,69 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             str: The trimmed text.
         """
+        # NOTE: here we can only do cleanups that can be done on the whole text, including inside constructs and around them
         if self.cup_extraseparators:
+            #
             # sendtonegative separator
+            #
             escapedSeparator = re.escape(self.stn_separator)
-            text = re.sub(r"^(?:\s*" + escapedSeparator + r"\s*)", "", text)
-            text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*)$", "", text)
+            # remove duplicate separator after starting parenthesis or bracket
+            text = re.sub(r"(\s*" + escapedSeparator + r"\s*[([])\s*" + escapedSeparator + r"\s*", r"\1", text)
+            # remove before colon or ending parenthesis or bracket
+            text = re.sub(r"\s*" + escapedSeparator + r"\s*([:)\]]\s*" + escapedSeparator + r"\s*)", r"\1", text)
+            # remove at start of prompt or line
+            text = re.sub(r"^(?:\s*" + escapedSeparator + r"\s*)", "", text, flags=re.MULTILINE)
+            # remove at end of prompt or line
+            text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*)$", "", text, flags=re.MULTILINE)
+            #
             # regular comma separator
-            text = re.sub(r"^\s*,\s*", "", text)
-            text = re.sub(r"\s*,\s*$", "", text)
+            #
+            # remove duplicate separators after starting parenthesis or bracket
+            text = re.sub(r"(\s*,\s*[([])\s*,\s*", r"\1", text)
+            # remove duplicate separators before colon or ending parenthesis or bracket
+            text = re.sub(r"\s*,\s*([:)\]]\s*,\s*)", r"\1", text)
+            # remove at start of prompt or line
+            text = re.sub(r"^\s*,\s*", "", text, flags=re.MULTILINE)
+            # remove at end of prompt or line
+            text = re.sub(r"\s*,\s*$", "", text, flags=re.MULTILINE)
         if self.cup_breaks:
-            text = re.sub(r"^BREAK\s+", "", text)
-            text = re.sub(r"\s+BREAK$", "", text)
+            # remove spaces between start of line and BREAK
+            text = re.sub(r"^[ ]+BREAK\b", "BREAK", text, flags=re.MULTILINE)
+            # remove spaces between BREAK and end of line
+            text = re.sub(r"\bBREAK[ ]+$", "BREAK", text, flags=re.MULTILINE)
+            # remove at start of prompt
+            text = re.sub(r"\ABREAK\b", "", text)
+            # remove at end of prompt
+            text = re.sub(r"\bBREAK\Z", "", text)
+        if self.cup_ands:
+            # collapse ANDs with space after
+            text = re.sub(r"\bAND(?:\s+AND)+\s+", "AND ", text)
+            # collapse ANDs without space after
+            text = re.sub(r"\bAND(?:\s+AND)+\b", "AND", text)
+            # collapse separators and spaces before ANDs
+            text = re.sub(r"[, ]+AND\b", " AND", text)
+            # collapse separators and spaces after ANDs
+            text = re.sub(r"\bAND[, ]+", "AND ", text)
+            # remove at start of prompt
+            text = re.sub(r"\AAND\b", "", text)
+            # remove at end of prompt
+            text = re.sub(r"\bAND\Z", "", text)
+        if self.cup_extranetworktags:
+            #
+            # all cases since we can't find them inside plain text
+            #
+            # remove spaces before <
+            text = re.sub(r"\B\s+<(?!!)", "<", text)
+            # remove spaces after >
+            text = re.sub(r"(?<!!)>\s+\B", ">", text)
         if self.cup_extraspaces:
+            # remove extra spaces after starting parenthesis or bracket
+            text = re.sub(r"([,\.;\s]+[([])\s+", r"\1", text)
+            # remove extra spaces before ending parenthesis or bracket
+            text = re.sub(r"\s+([)\]][,\.;\s]+)", r"\1", text)
+            # collapse spaces
+            # text = re.sub(r"[ ]{2,}", " ", text)
+            # remove spaces at start and end
             text = text.strip()
         return text
 
@@ -714,7 +821,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         p_transformtree = self.TransformerTree(self, phase="wildcards")
         try:
             p_tree = self.__parser_complete.parse(prompt)
-            # self.logger.info(f"Wildcards tree from prompt:\n{p_tree.pretty()}")
             prompt = p_transformtree.transform(p_tree)
         except Exception as e:  # pylint: disable=broad-except
             self.logger.warning("Wildcards parsing failed in prompt!: %s", e)
@@ -722,7 +828,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         np_transformtree = self.TransformerTree(self, phase="wildcards")
         try:
             np_tree = self.__parser_complete.parse(negative_prompt)
-            # self.logger.info(f"Wildcards tree from negative prompt:\n{np_tree.pretty()}")
             negative_prompt = np_transformtree.transform(np_tree)
         except Exception as e:  # pylint: disable=broad-except
             self.logger.warning("Wildcards parsing failed in negative prompt!: %s", e)
@@ -745,7 +850,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     prompt = self.WILDCARD_STOP + prompt
                 if foundNP:
                     negative_prompt = self.WILDCARD_STOP + negative_prompt
-                self.script.ppp_interrupt()
+                if hasattr(self.script, "ppp_interrupt"):
+                    self.script.ppp_interrupt()
             if self.debug:
                 self.logger.info(f"prompt after wildcards: {self.formatOutput(prompt)}")
                 self.logger.info(f"negative_prompt after wildcards: {self.formatOutput(negative_prompt)}")
@@ -769,7 +875,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if not self.is_i2i or self.stn_doi2i or self.cup_doi2i:
                 if self.debug:
                     self.logger.info(f"Input prompt: {self.formatOutput(prompt)}")
+                    p_tree = self.__parser_complete.parse(prompt)
+                    self.logger.info(f"Tree from prompt:\n{p_tree.pretty()}")
                     self.logger.info(f"Input negative_prompt: {self.formatOutput(negative_prompt)}")
+                    np_tree = self.__parser_complete.parse(negative_prompt)
+                    self.logger.info(f"Tree from negative prompt:\n{np_tree.pretty()}")
 
                 if self.ifwildcards != self.IFWILDCARDS_CHOICES["ignore"]:
                     prompt, negative_prompt = self.__findwildcards(prompt, negative_prompt)
@@ -779,10 +889,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
                 # pylint: disable-next=too-many-boolean-expressions
                 if (not self.is_i2i or self.cup_doi2i) and (
-                    self.cup_extraspaces or self.cup_emptyconstructs or self.cup_extraseparators or self.cup_breaks
+                    self.cup_extraspaces
+                    or self.cup_emptyconstructs
+                    or self.cup_extraseparators
+                    or self.cup_breaks
+                    or self.cup_ands
+                    or self.cup_extranetworktags
                 ):
                     prompt, negative_prompt = self.__cleanup(prompt, negative_prompt)
-
             return prompt, negative_prompt
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.exception(e)
