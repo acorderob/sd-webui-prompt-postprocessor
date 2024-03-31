@@ -8,17 +8,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
     The PromptPostProcessor class is responsible for processing and manipulating prompt strings.
 
-    The format for the negative tags is:
-        <!content!>
-
-        <!!x!content!>
-
-    with x being:
-        s - content is added at the start of the negative prompt. This is the default if no parameter exists.
-        e - content is added at the end of the negative prompt.
-        pN - content is added where the insertion point N is in the negative prompt or at the start if it does not exist. N can be 0 to 9.
-        iN - tags the position of insertion point N. Used only in the negative prompt and does not accept content. N can be 0 to 9.
-
     Attributes:
         NAME (str): The name of the prompt post-processor.
         VERSION (str): The version of the prompt post-processor.
@@ -40,7 +29,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
 
     NAME = "Prompt Post-Processor"
-    VERSION = "2.3.0"
+    VERSION = "2.4.0"
 
     DEFAULT_STN_SEPARATOR = ", "
     IFWILDCARDS_CHOICES = {
@@ -49,12 +38,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         "warn": "Add visible warning",
         "stop": "Stop the generation",
     }
-    WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5) BREAK\n'
-    WILDCARD_STOP = "INVALID WILDCARD! BREAK\n"
+    WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
+    WILDCARD_STOP = "INVALID WILDCARD!\nBREAK "
+    UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
 
     def __init__(
         self,
         script,
+        processing,
+        state,
         opts=None,
         is_i2i=False,
     ):
@@ -69,6 +61,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.logger = script.ppp_logger
         self.opts = opts
         self.is_i2i = is_i2i
+        self.processing = processing
+        self.state = state
+        self.variables = {}
         self.debug = getattr(self.opts, "ppp_gen_debug", False) if opts is not None else False
         if opts is not None and getattr(opts, "prompt_attention", "") == "Compel parser":
             self.logger.warning("Compel parser is not supported!")
@@ -91,44 +86,79 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.cup_extraspaces = getattr(opts, "ppp_cup_extraspaces", True) if opts is not None else True
         self.cup_emptyconstructs = getattr(opts, "ppp_cup_emptyconstructs", True) if opts is not None else True
         self.cup_extraseparators = getattr(opts, "ppp_cup_extraseparators", True) if opts is not None else True
+        self.cup_extraseparators2 = getattr(opts, "ppp_cup_extraseparators2", True) if opts is not None else True
         self.cup_breaks = getattr(opts, "ppp_cup_breaks", True) if opts is not None else True
+        self.cup_breaks_eol = getattr(opts, "ppp_cup_breaks_eol", False) if opts is not None else False
         self.cup_ands = getattr(opts, "ppp_cup_ands", True) if opts is not None else True
+        self.cup_ands_eol = getattr(opts, "ppp_cup_ands_eol", False) if opts is not None else False
         self.cup_extranetworktags = getattr(opts, "ppp_cup_extranetworktags", False) if opts is not None else False
-
-        self.__insertion_point_tags = [f"<!!i{x}!!>" for x in range(10)]
+        self.rem_removeextranetworktags = (
+            getattr(opts, "ppp_rem_removeextranetworktags", False) if opts is not None else False
+        )
         # Process with lark (debug with https://www.lark-parser.org/ide/)
         self.__parser_complete = lark.Lark(
             r"""
-                start: (promptcomp | specialchars)* // BUG: sometimes it chooses specialchars instead of promptcomp and fails!!!
+                start: (promptcomp | specialchars)*
+
                 // prompt composition with AND
                 promptcomp: promptcomppart ([":" numpar] (/\bAND\b/ promptcomppart [":" numpar])+)?
                 promptcomppart: prompt
+
                 // prompt scheduling and alternation
                 alternate: "[" alternateoption ("|" alternateoption)+ "]"
                 alternateoption: prompt
                 scheduled: "[" [prompt ":"] prompt ":" numpar "]"
+
                 // wildcard extension support
                 wildcard: "__" /(?:(?!__)\S)+/ "__"
                 choices: "{" choice ("|" choice)* "}"
                 // we ignore weight and any other parameters in each choice
                 choice: prompt
+
                 // simple prompts
-                prompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | negtag | wildcard | choices | plain)*
-                nonegprompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | wildcard | choices | plain)*
+                prompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | commandstn | commandstni | negtag | commandset | commandif | commandecho | wildcard | choices | plain)*
+
+                nonegprompt: (emphasized | deemphasized | scheduled | alternate | extranetworktag | commandset | commandif | commandecho | wildcard | choices | plain)*
+                
                 // attention modifiers
                 emphasized: "(" prompt [":" numpar] ")"
                 deemphasized: "[" prompt "]"
+
                 // extra network tags
-                extranetworktag: "<" /(?!!)[^>]+/ ">"
+                extranetworktag: "<" /(?!!|ppp:)[^>]+/ ">"
+
                 // negative tags
                 negtag: "<!" [negtagparameters] nonegprompt "!>"
                 negtagparameters: "!" /s|e|[ip]\d/ "!"
+
+                // command: stn (send to negative)
+                commandstn: "<ppp:stn" [WHITESPACE /s|e|p\d/] WHITESPACE? ">" nonegprompt "<ppp:/stn>"
+                commandstni: "<ppp:stn" WHITESPACE /i\d/ WHITESPACE? ">"
+
+                // command: if
+                commandif: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
+                commandif_if: "<ppp:if" WHITESPACE condition WHITESPACE? ">" prompt
+                commandif_elif: "<ppp:elif" WHITESPACE condition WHITESPACE? ">" prompt
+                commandif_else: "<ppp:else" WHITESPACE? ">" prompt
+                condition: IDENTIFIER WHITESPACE /eq|ne|gt|lt|ge|le/ WHITESPACE VALUE
+                IDENTIFIER: CNAME
+                VALUE: STRING | INT
+
+                // command: set
+                commandset: "<ppp:set" WHITESPACE IDENTIFIER WHITESPACE? ">" prompt "<ppp:/set>"
+
+                // command: echo
+                commandecho: "<ppp:echo" WHITESPACE IDENTIFIER WHITESPACE? ">"
+
                 // plain text and weights
-                numpar: WHITESPACE* NUMBER WHITESPACE*
+                numpar: WHITESPACE? NUMBER WHITESPACE?
                 WHITESPACE: /\s+/
+                STRING: /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
                 plain: /((?!__|\bAND\b)[^\\[\]():|<>!{}]|\\.)+/s
                 specialchars: /[\]():|<>!{}]|\bAND\b/+
                 %import common.SIGNED_NUMBER -> NUMBER
+                %import common.CNAME -> CNAME
+                %import common.INT -> INT
             """,
             propagate_positions=True,
         )
@@ -145,9 +175,127 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         return text.encode("unicode_escape").decode("utf-8")
 
+    def eval_condition(self, cond_var, cond_comp, cond_value):
+        """
+        Evaluate a condition based on the given variable, comparison, and value.
+
+        Args:
+            cond_var (str): The variable to be compared.
+            cond_comp (str): The comparison operator.
+            cond_value (str): The value to be compared with.
+
+        Returns:
+            bool: The result of the condition evaluation.
+        """
+        result = False
+        var_value = self.variables.get(cond_var, "")
+        value_is_int = False
+        if cond_value.startswith('"') or cond_value.startswith("'"):
+            cond_value = cond_value[1:-1]
+        else:
+            value_is_int = True
+        if cond_comp == "eq":
+            result = var_value == cond_value
+        elif cond_comp == "ne":
+            result = var_value != cond_value
+        elif cond_comp == "gt":
+            if value_is_int:
+                result = int(var_value) > int(cond_value)
+            else:
+                result = var_value > cond_value
+        elif cond_comp == "lt":
+            if value_is_int:
+                result = int(var_value) < int(cond_value)
+            else:
+                result = var_value < cond_value
+        elif cond_comp == "ge":
+            if value_is_int:
+                result = int(var_value) >= int(cond_value)
+            else:
+                result = var_value >= cond_value
+        elif cond_comp == "le":
+            if value_is_int:
+                result = int(var_value) <= int(cond_value)
+            else:
+                result = var_value <= cond_value
+        return result
+
+    class VARTree(lark.visitors.Interpreter):
+        """
+        A class for interpreting and processing a tree generated by the prompt parser in the context of initializing variables.
+
+        Attributes:
+            __ppp (object): The instance of the parent class.
+            variables (dict): The dictionary to store the detected variables.
+
+        Methods:
+            commandset(node): Process a set command in the tree and add it to the dictionary of variables.
+            commandif(node): Process an if command in the tree.
+            start(node): Process the given tree and perform necessary operations on the found variables.
+        """
+
+        def __init__(self, ppp, prompt):
+            super().__init__()
+            self.__ppp = ppp
+            self.__prompt = prompt
+
+        def commandset(self, node):
+            """
+            Process a set command in the tree and add it to the dictionary of variables.
+
+            Args:
+                node (Node): The tree node representing the set command.
+
+            Returns:
+                None
+            """
+            variable = node.children[1]
+            content = node.children[2]
+            value = self.__prompt[content.meta.start_pos : content.meta.end_pos]
+            self.__ppp.variables[variable.value] = value
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"Setting variable {variable} to '{value}'")
+
+        def commandif(self, node):
+            """
+            Process an if command in the tree.
+
+            Args:
+                node (Node): The tree node representing the if command.
+
+            Returns:
+                None
+            """
+            for n in node.children:
+                if len(n.children) >= 3 and n.children[1].data.type != "WHITESPACE":
+                    # has a condition
+                    condition = n.children[1]
+                    cond_var = condition.children[0].value
+                    cond_comp = condition.children[2].value
+                    cond_value = condition.children[4].value
+                    # there could be a whitespace node here
+                    content = n.children[-1]
+                    if self.__ppp.eval_condition(cond_var, cond_comp, cond_value):
+                        if self.__ppp.debug:
+                            conditiontext = self.__prompt[condition.meta.start_pos : condition.meta.end_pos]
+                            contenttext = self.__prompt[content.meta.start_pos : content.meta.end_pos]
+                            self.__ppp.logger.info(f"Applying if condition ({conditiontext}): {contenttext}")
+                        self.visit(content)
+                        return
+                else:
+                    # its an else
+                    content = n.children[-1]
+                    if self.__ppp.debug:
+                        contenttext = self.__prompt[content.meta.start_pos : content.meta.end_pos]
+                        self.__ppp.logger.info(f"Applying if else: {contenttext}")
+                    self.visit(content)
+
+        def start(self, node):
+            self.visit_children(node)
+
     class STNTree(lark.visitors.Interpreter):
         """
-        A class for interpreting and processing a tree generated by the prompt parser.
+        A class for interpreting and processing a tree generated by the prompt parser in the context of processing send to negative prompt commands.
 
         Attributes:
             __ppp (object): The instance of the parent class.
@@ -165,10 +313,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             emphasized(tree): Process an attention change construct in the tree and add it to the accumulated shell.
             deemphasized(tree): Process a decrease attention construct in the tree and add it to the accumulated shell.
             negtag(tree): Process a negative tag in the tree and add it to the list of negative tags.
+            commandstn(tree): Process a send to negative command in the tree and add it to the list of negative tags.
+            commandstni(tree): Process a send to negative command in the tree and add it to the list of negative tags.
             start(tree): Process the given tree and perform necessary operations on the found negative tags.
         """
 
-        def __init__(self, ppp, prompt, add_at):
+        def __init__(self, ppp, prompt, add_at, insertion_at):
             super().__init__()
             self.__ppp = ppp
             self.__prompt = prompt
@@ -180,6 +330,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__negtags: list[NegTag] = []
             self.__already_processed = []
             self.add_at = add_at
+            self.insertion_at = insertion_at
             self.remove = []
 
         def __get_numpar_value(self, numpar):
@@ -194,25 +345,25 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             return float(next(x for x in numpar.children if x.type == "NUMBER").value)
 
-        def scheduled(self, tree):
+        def scheduled(self, node):
             """
             Process a scheduling construct in the tree and add it to the accumulated shell.
 
             Args:
-                tree (Node): The tree node representing the scheduling construct.
+                node (Node): The tree node representing the scheduling construct.
 
             Returns:
                 None
             """
             treemetaposition = (
-                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
             )
-            if len(tree.children) > 2:  # before & after
-                before = tree.children[0]
+            if len(node.children) > 2:  # before & after
+                before = node.children[0]
             else:
                 before = None
-            after = tree.children[-2]
-            numpar = tree.children[-1]
+            after = node.children[-2]
+            numpar = node.children[-1]
             pos = self.__get_numpar_value(numpar)
             if pos >= 1:
                 pos = int(pos)
@@ -241,21 +392,21 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.__shell.pop()
             # self.__shell.pop()
 
-        def alternate(self, tree):
+        def alternate(self, node):
             """
             Process an alternation construct in the tree and add it to the accumulated shell.
 
             Args:
-                tree (Node): The tree node representing the alternation construct.
+                node (Node): The tree node representing the alternation construct.
 
             Returns:
                 None
             """
             treemetaposition = (
-                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
             )
             # self.__shell.append(self.AccumulatedShell("al", len(tree.children), treemetaposition))
-            for i, opt in enumerate(tree.children):
+            for i, opt in enumerate(node.children):
                 if self.__ppp.debug:
                     metaposition = (
                         [opt.meta.start_pos, opt.meta.end_pos] if hasattr(opt, "meta") and not opt.meta.empty else "?"
@@ -263,95 +414,135 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__ppp.logger.info(f"Shell alternate at {metaposition} option {i+1}")
                 if hasattr(opt, "data"):
                     self.__shell.append(
-                        self.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}, treemetaposition)
+                        self.AccumulatedShell("alo", {"pos": i + 1, "len": len(node.children)}, treemetaposition)
                     )
                     self.visit(opt)
                     self.__shell.pop()
             # self.__shell.pop()
 
-        def emphasized(self, tree):
+        def emphasized(self, node):
             """
             Process a attention change construct in the tree and add it to the accumulated shell.
 
             Args:
-                tree (Node): The tree node representing the attention construct.
+                node (Node): The tree node representing the attention construct.
 
             Returns:
                 None
             """
             treemetaposition = (
-                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
             )
-            numpar = tree.children[-1]
+            numpar = node.children[-1]
             weight = self.__get_numpar_value(numpar) if numpar is not None else 1.1
             if self.__ppp.debug:
                 self.__ppp.logger.info(f"Shell attention at {treemetaposition or '?'} with weight {weight}")
             self.__shell.append(self.AccumulatedShell("at", weight, treemetaposition))
-            self.visit_children(tree)
+            self.visit_children(node)
             self.__shell.pop()
 
-        def deemphasized(self, tree):
+        def deemphasized(self, node):
             """
             Process a decrease attention construct in the tree and add it to the accumulated shell.
 
             Args:
-                tree (Node): The tree node representing the decreased attention construct.
+                node (Node): The tree node representing the decreased attention construct.
 
             Returns:
                 None
             """
             weight = 0.9
             treemetaposition = (
-                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
             )
             if self.__ppp.debug:
                 self.__ppp.logger.info(f"Shell attention at {treemetaposition or '?'} with weight {weight}")
             self.__shell.append(self.AccumulatedShell("at", weight, treemetaposition))
-            self.visit_children(tree)
+            self.visit_children(node)
             self.__shell.pop()
 
-        def negtag(self, tree):
+        def negtag(self, node):
             """
             Process a negative tag in the tree and add it to the list of negative tags.
 
             Args:
-                tree (Node): The tree node representing the negative tag.
+                node (Node): The tree node representing the negative tag.
 
             Returns:
                 None
             """
             treemetaposition = (
-                [tree.meta.start_pos, tree.meta.end_pos] if hasattr(tree, "meta") and not tree.meta.empty else None
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
             )
-            negtagparameters = tree.children[0]
+            negtagparameters = node.children[0]
             parameters = negtagparameters.children[0].value if negtagparameters is not None else ""
             rest = []
-            for x in tree.children[1::]:
+            for x in node.children[1::]:
                 rest.append(
                     self.__prompt[x.meta.start_pos : x.meta.end_pos]
                     if hasattr(x, "meta") and not x.meta.empty
-                    else x.value
+                    else x.value if hasattr(x, "value") else ""
                 )
             content = "".join(rest)
             self.__negtags.append(
-                self.NegTag(tree.meta.start_pos, tree.meta.end_pos, content, parameters, self.__shell.copy())
+                self.NegTag(node.meta.start_pos, node.meta.end_pos, content, parameters, self.__shell.copy())
             )
             if self.__ppp.debug:
                 self.__ppp.logger.info(
-                    f"Negative tag at {treemetaposition or '?'}: {parameters or 'with no parameters :'} {self.__ppp.formatOutput(content)}"
+                    f"Negative tag at {treemetaposition or '?'}: {parameters or 'with no parameters'} : {self.__ppp.formatOutput(content)}"
                 )
 
-        def start(self, tree):
+        def commandstn(self, node):
             """
-            Process the given tree and perform necessary operations on the found negative tags.
+            Process a send to negative command in the tree and add it to the list of negative tags.
 
             Args:
-                tree: The tree to be processed.
+                node (Node): The tree node representing the stn command.
 
             Returns:
                 None
             """
-            self.visit_children(tree)
+            treemetaposition = (
+                [node.meta.start_pos, node.meta.end_pos] if hasattr(node, "meta") and not node.meta.empty else None
+            )
+            negtagparameters = node.children[1]
+            if negtagparameters is not None:
+                if hasattr(negtagparameters, "children"):
+                    parameters = negtagparameters.children[0].value
+                else:
+                    parameters = negtagparameters.value
+            else:
+                parameters = ""
+            rest = []
+            for x in node.children[2::]:
+                rest.append(
+                    self.__prompt[x.meta.start_pos : x.meta.end_pos]
+                    if hasattr(x, "meta") and not x.meta.empty
+                    else x.value if hasattr(x, "value") else ""
+                )
+            content = "".join(rest)
+            self.__negtags.append(
+                self.NegTag(node.meta.start_pos, node.meta.end_pos, content, parameters, self.__shell.copy())
+            )
+            if self.__ppp.debug:
+                self.__ppp.logger.info(
+                    f"Negative tag at {treemetaposition or '?'}: {parameters or 'with no parameters'} : {self.__ppp.formatOutput(content)}"
+                )
+
+        def commandstni(self, node):
+            self.commandstn(node)
+
+        def start(self, node):
+            """
+            Process the given tree and perform necessary operations on the found negative tags.
+
+            Args:
+                node: The tree to be processed.
+
+            Returns:
+                None
+            """
+            self.visit_children(node)
             # process the found negative tags
             for negtag in self.__negtags:
                 if self.__ppp.stn_join_attention:
@@ -392,7 +583,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             end = ("|" * int(s.data["len"] - s.data["pos"])) + "]" + end
                 content = start + negtag.content + end
                 position = negtag.parameters or "s"
-                if len(content) > 0:
+                if position.startswith("i"):
+                    n = int(position[1])
+                    self.insertion_at[n] = [negtag.start, negtag.end]
+                elif len(content) > 0:
                     if content not in self.__already_processed:
                         if self.__ppp.stn_ignore_repeats:
                             self.__already_processed.append(content)
@@ -412,7 +606,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 # remove from prompt
                 self.remove.append([negtag.start, negtag.end])
 
-    def __find_tags(self, prompt):
+    def __find_tags(self, prompt, negative_prompt):
         """
         Finds tags in the given prompt and returns the modified prompt and tag information.
 
@@ -424,34 +618,44 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         """
         add_at = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
+        insertion_at = [None for x in range(10)]
+
         tree = self.__parser_complete.parse(prompt)
-
-        readtree = self.STNTree(self, prompt, add_at)
+        readtree = self.STNTree(self, prompt, add_at, insertion_at)
         readtree.visit(tree)
-
         for r in readtree.remove[::-1]:
             prompt = prompt[: r[0]] + prompt[r[1] :]
+        add_at = readtree.add_at  # we only use the additions from the prompt
 
-        add_at = readtree.add_at
+        tree = self.__parser_complete.parse(negative_prompt)
+        readtree = self.STNTree(self, negative_prompt, add_at, insertion_at)
+        readtree.visit(tree)
+        insertion_at = readtree.insertion_at  # we only use the insertion positions from the negative prompt
+
         if self.debug:
             self.logger.info(f"New negative additions: {add_at}")
-        return prompt, add_at
+            self.logger.info(f"New negative indexes: {insertion_at}")
+        return prompt, negative_prompt, add_at, insertion_at
 
-    def __add_to_insertion_points(self, negative_prompt, add_at_insertion_point):
+    def __add_to_insertion_points(self, negative_prompt, add_at_insertion_point, insertion_at):
         """
         Adds the negative prompt to the insertion points.
 
         Args:
             negative_prompt (str): The negative prompt to be added.
             add_at_insertion_point (list): A list of insertion points.
+            insertion_at (list): A list of insertion blocks.
 
         Returns:
             str: The modified negative prompt.
         """
-        for n in range(10):
-            ipp = negative_prompt.find(self.__insertion_point_tags[n])
-            if ipp >= 0:
-                ipl = len(self.__insertion_point_tags[n])
+        ordered_range = sorted(
+            range(10), key=lambda x: insertion_at[x][0] if insertion_at[x] is not None else float("-inf"), reverse=True
+        )
+        for n in ordered_range:
+            if insertion_at[n] is not None:
+                ipp = insertion_at[n][0]
+                ipl = insertion_at[n][1] - insertion_at[n][0]
                 if negative_prompt[ipp - len(self.stn_separator) : ipp] == self.stn_separator:
                     ipp -= len(self.stn_separator)  # adjust for existing start separator
                     ipl += len(self.stn_separator)
@@ -521,8 +725,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         if self.debug:
             self.logger.info("Doing send-to-negative")
-        prompt, add_at = self.__find_tags(prompt)
-        negative_prompt = self.__add_to_insertion_points(negative_prompt, add_at["insertion_point"])
+        prompt, negative_prompt, add_at, insertion_at = self.__find_tags(prompt, negative_prompt)
+        negative_prompt = self.__add_to_insertion_points(negative_prompt, add_at["insertion_point"], insertion_at)
         if len(add_at["start"]) > 0:
             negative_prompt = self.__add_to_start(negative_prompt, add_at["start"])
         if len(add_at["end"]) > 0:
@@ -542,23 +746,31 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         Args:
             ppp (object): An instance of the parent class `ppp`.
+            phase (str): The phase of the transformation.
 
         Attributes:
             __ppp (object): An instance of the parent class `ppp`.
+            __phase (str): The phase of the transformation.
+            detectedWildcards (list): A list of detected wildcards.
 
         Methods:
-            promptcomp(tree): Replicates prompt composition constructs.
-            scheduled(tree): Replicates or removes scheduling constructs based on conditions.
-            alternate(tree): Replicates or removes alternation constructs based on conditions.
-            emphasized(tree): Replicates or removes attention constructs based on conditions.
-            deemphasized(tree): Replicates or removes attention constructs based on conditions.
-            extranetworktag(tree): Replicates extra network constructs.
-            numpar(tree): Cleans up number parameter.
-            negtag(tree): Replicates or removes negative tag constructs based on conditions.
-            wildcard(tree): Replicates or removes wildcard constructs based on conditions.
-            choices(tree): Replicates or removes choices constructs based on conditions.
-            choice(tree): Replicates choices.
-            plain(tree): Cleans up plain text based on conditions.
+            promptcomp(children): Replicates prompt composition constructs.
+            scheduled(children): Replicates or removes scheduling constructs based on conditions.
+            alternate(children): Replicates or removes alternation constructs based on conditions.
+            emphasized(children): Replicates or removes attention constructs based on conditions.
+            deemphasized(children): Replicates or removes attention constructs based on conditions.
+            extranetworktag(children): Replicates extra network constructs.
+            numpar(children): Cleans up number parameter.
+            negtag(children): Replicates or removes negative tag constructs based on conditions.
+            commandstn(children): Replicates or removes send to negative constructs based on conditions.
+            commandstni(children): Replicates or removes send to negative constructs based on conditions.
+            commandif(children): Replicates or removes if constructs based on conditions.
+            commandset(children): Replicates or removes set constructs based on conditions.
+            commandecho(children): Replicates or removes echo constructs based on conditions.
+            wildcard(children): Replicates or removes wildcard constructs based on conditions.
+            choices(children): Replicates or removes choices constructs based on conditions.
+            choice(children): Replicates choices.
+            plain(children): Cleans up plain text based on conditions.
             __default__(data, children, meta): Default method for joining children and cleaning up text based on conditions.
         """
 
@@ -568,94 +780,275 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__phase = phase
             self.detectedWildcards = []
 
-        def promptcomp(self, tree):
-            r = tree[0]
-            if len(tree) > 1:
-                if tree[1] is not None:
-                    r += f":{tree[1]}"
-                for i in range(2, len(tree), 3):
+        def promptcomp(self, children):
+            r = children[0]
+            if len(children) > 1:
+                if children[1] is not None:
+                    r += f":{children[1]}"
+                for i in range(2, len(children), 3):
                     if self.__phase == "cleanup" and self.__ppp.cup_ands:
-                        r = re.sub(r"[, ]+$", " ", r)
+                        r = re.sub(r"[, ]+$", "\n" if self.__ppp.cup_ands_eol else " ", r)
                     if r[-1:].isalnum():  # add space if needed
                         r += " "
                     r += "AND"
-                    t = tree[i + 1]
+                    t = children[i + 1]
                     if self.__phase == "cleanup" and self.__ppp.cup_ands:
                         t = re.sub(r"^[, ]+", " ", t)
                     if t[0:1].isalnum():  # add space if needed
                         r += " "
                     r += t
-                    if tree[i + 2] is not None:
-                        r += f":{tree[i+2]}"
+                    if children[i + 2] is not None:
+                        r += f":{children[i+2]}"
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.promptcomp: {r}")
             return r
 
-        def scheduled(self, tree):
-            if len(tree) == 0 and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
-                return ""  # remove invalid scheduling construct (probably this is not reachable)
-            # replicate scheduling construct
-            if len(tree) > 0 and tree[0] is None:
-                return f"[{':'.join(tree[1:])}]"
-            return f"[{':'.join(tree)}]"
+        def scheduled(self, children):
+            if len(children) == 0 and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
+                r = ""  # remove invalid scheduling construct (probably this is not reachable)
+            else:
+                # replicate scheduling construct
+                if len(children) > 0 and children[0] is None:
+                    r = f"[{':'.join(children[1:])}]"
+                else:
+                    r = f"[{':'.join(children)}]"
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.scheduled: {r}")
+            return r
 
-        def alternate(self, tree):
-            if len(tree) == 0 and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
-                return ""  # remove invalid alternation construct (probably this is not reachable)
-            return f"[{'|'.join(tree)}]"  # replicate alternation construct
+        def alternate(self, children):
+            if len(children) == 0 and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
+                r = ""  # remove invalid alternation construct (probably this is not reachable)
+            else:
+                r = f"[{'|'.join(children)}]"  # replicate alternation construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.alternate: {r}")
+            return r
 
-        def emphasized(self, tree):
-            if (len(tree) == 0 or tree[0] == "") and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
-                return ""  # remove empty attention construct
-            if len(tree) > 1 and tree[1] is not None:
-                return f"({tree[0]}:{tree[1]})"  # replicate attention construct with weight
-            return f"({tree[0]})"  # replicate attention construct without weight
+        def emphasized(self, children):
+            if (
+                (len(children) == 0 or children[0] == "")
+                and self.__phase == "cleanup"
+                and self.__ppp.cup_emptyconstructs
+            ):
+                r = ""  # remove empty attention construct
+            else:
+                if len(children) > 1 and children[1] is not None:
+                    r = f"({children[0]}:{children[1]})"  # replicate attention construct with weight
+                else:
+                    r = f"({children[0]})"  # replicate attention construct without weight
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.emphasized: {r}")
+            return r
 
-        def deemphasized(self, tree):
-            if (len(tree) == 0 or tree[0] == "") and self.__phase == "cleanup" and self.__ppp.cup_emptyconstructs:
-                return ""  # remove empty attention construct (invalid scheduling or alternation constructs end up here too?)
-            return f"[{tree[0]}]"  # replicate attention construct
+        def deemphasized(self, children):
+            if (
+                (len(children) == 0 or children[0] == "")
+                and self.__phase == "cleanup"
+                and self.__ppp.cup_emptyconstructs
+            ):
+                r = ""  # remove empty attention construct (invalid scheduling or alternation constructs end up here too?)
+            else:
+                r = f"[{children[0]}]"  # replicate attention construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.deemphasized: {r}")
+            return r
 
-        def extranetworktag(self, tree):
-            return f"<{tree[0]}>"  # replicate extra network construct
+        def extranetworktag(self, children):
+            if self.__phase == "removecontent" and self.__ppp.rem_removeextranetworktags:
+                r = ""  # remove extra network construct
+            else:
+                r = f"<{children[0]}>"  # replicate extra network construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.deemphasized: {r}")
+            return r
 
-        def numpar(self, tree):
-            return next(x for x in tree if x.type == "NUMBER").value.strip()  # clean up number parameter
+        def numpar(self, children):
+            r = next(x for x in children if x.type == "NUMBER").value.strip()  # clean up number parameter
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.numpar: {r}")
+            return r
 
-        def negtag(self, tree):
+        def negtag(self, children):
             if self.__phase == "cleanup":
-                return ""  # remove negative tag construct (there shouldn't be any at this point)
-            parameters = "!" + tree[0] + "!" if tree[0] is not None else ""
-            content = "".join(tree[1::])
-            return f"<!{parameters}{content}!>"  # replicate negative tag construct
+                r = ""  # remove negative tag construct (there shouldn't be any at this point)
+            else:
+                parameters = f"!{children[0]}!" if children[0] is not None else ""
+                content = "".join(children[1::])
+                r = f"<!{parameters}{content}!>"  # replicate negative tag construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.negtag: {r}")
+            return r
 
-        def wildcard(self, tree):
-            content = f"__{tree[0]}__"  # replicate wildcard construct
-            self.detectedWildcards.append(content)
-            if self.__phase == "wildcards" and self.__ppp.ifwildcards == self.__ppp.IFWILDCARDS_CHOICES["remove"]:
-                return ""
-            return content
-
-        def choices(self, tree):
-            content = "{" + "|".join(tree) + "}"  # replicate wildcard choices construct
-            self.detectedWildcards.append(content)
-            if self.__phase == "wildcards" and self.__ppp.ifwildcards == self.__ppp.IFWILDCARDS_CHOICES["remove"]:
-                return ""
-            return content
-
-        def choice(self, tree):
-            return f"{tree[0]}"  # replicate choice
-
-        def plain(self, tree):
+        def commandstn(self, children):
             if self.__phase == "cleanup":
-                return self.__ppp.cleanup_text(tree[0].value)  # clean up plain text
-            return tree[0].value
+                r = ""  # remove send to negative command construct (there shouldn't be any at this point)
+            else:
+                parameters = " " + children[1] if children[1] is not None else ""
+                content = "".join(children[2::])
+                r = f"<ppp:stn{parameters}>{content}<ppp:/stn>"  # replicate send to negative command construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.commandstn: {r}")
+            return r
+
+        def commandstni(self, children):
+            if self.__phase == "cleanup":
+                r = ""  # remove send to negative command construct (there shouldn't be any at this point)
+            else:
+                parameters = " " + children[1] if children[1] is not None else ""
+                r = f"<ppp:stn{parameters}>"  # replicate send to negative command construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.commandstni: {r}")
+            return r
+
+        def commandset(self, children):
+            if self.__phase == "removecontent":
+                r = ""
+            else:
+                r = f"<ppp:set {children[1]}>{children[2]}<ppp:/set>"  # replicate set construct
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.commandset: {r}")
+            return r
+        
+        def commandecho(self, children):
+            if self.__phase == "removecontent":
+                r = self.__ppp.variables.get(children[1], "")
+            else:
+                r = f"<ppp:echo>{children[1]}<ppp:/echo>"
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.commandecho: {r}")
+            return r
+
+        def commandif(self, children):
+            if self.__phase == "removecontent":
+                selectedcontent = ""
+                for n in children:
+                    if len(n) >= 3 and isinstance(n[1], list):
+                        # has a condition
+                        condition = n[1]
+                        cond_var = condition[0].value
+                        cond_comp = condition[2].value
+                        cond_value = condition[4].value
+                        # there could be a whitespace node here
+                        content = n[-1]
+                        if self.__ppp.eval_condition(cond_var, cond_comp, cond_value):
+                            selectedcontent = content
+                            break
+                    else:
+                        # its an else
+                        selectedcontent = n[-1]
+                        break
+                r = selectedcontent
+            else:
+                r = f"{''.join(children)}<ppp:/if>"
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.commandif: {r}")
+            return r
+
+        def commandif_if(self, children):
+            if self.__phase == "removecontent":
+                return children
+            return f"<ppp:if {children[1]}>{children[2]}"  # replicate if construct
+
+        def commandif_elif(self, children):
+            if self.__phase == "removecontent":
+                return children
+            return f"<ppp:elif {children[1]}>{children[2]}"  # replicate elif construct
+
+        def commandif_else(self, children):
+            if self.__phase == "removecontent":
+                return children
+            return f"<ppp:else>{children[1]}"  # replicate else construct
+
+        def condition(self, children):
+            if self.__phase == "removecontent":
+                return children
+            return "".join(children)  # replicate condition rule
+
+        def wildcard(self, children):
+            r = f"__{children[0]}__"  # replicate wildcard construct
+            self.detectedWildcards.append(r)
+            if self.__phase == "wildcards" and self.__ppp.ifwildcards == self.__ppp.IFWILDCARDS_CHOICES["remove"]:
+                r = ""
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.wildcard: {r}")
+            return r
+
+        def choices(self, children):
+            r = "{" + "|".join(children) + "}"  # replicate wildcard choices construct
+            self.detectedWildcards.append(r)
+            if self.__phase == "wildcards" and self.__ppp.ifwildcards == self.__ppp.IFWILDCARDS_CHOICES["remove"]:
+                r = ""
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.choices: {r}")
+            return r
+
+        def choice(self, children):
+            r = children[0]  # replicate choice
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.choice: {r}")
+            return r
+
+        def plain(self, children):
+            r = children[0].value
+            if self.__phase == "cleanup":
+                r = self.__ppp.cleanup_text(r)  # clean up plain text
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.plain: {r}")
+            return r
 
         def __default__(self, data, children, meta):
             joined = "".join(children)  # join all children
-            if self.__phase == "cleanup":
+            if self.__phase == "cleanup" and not re.match(r"[([<{]", joined):
                 # take care of cleaning the joints only if there are no constructs that can be affected
-                if not re.match(r"[([<{]", joined):
-                    joined = self.__ppp.cleanup_text(joined)
+                joined = self.__ppp.cleanup_text(joined)
+            if self.__ppp.debug:
+                self.__ppp.logger.info(f"{self.__phase} TransformerTree.default: {joined}")
             return joined
+
+    def __removecontent(self, prompt, negative_prompt):
+        """
+        Removes content in the prompt and negative prompt.
+
+        Args:
+            prompt (str): The original prompt.
+            negative_prompt (str): The negative prompt.
+
+        Returns:
+            tuple: A tuple containing the processed prompt and negative prompt.
+        """
+
+        self.variables = {}
+        self.variables["_sd"] = (
+            "sd1"
+            if self.processing.sd_model.is_sd1
+            else "sd2" if self.processing.sd_model.is_sd2 else "sdxl" if self.processing.sd_model.is_sdxl else ""
+        )
+
+        transformtree = self.TransformerTree(self, phase="removecontent")
+        try:
+            if self.debug:
+                self.logger.info("Removing content in the prompt")
+            prompt_tree = self.__parser_complete.parse(prompt)
+            vartree = self.VARTree(self, prompt)
+            vartree.visit(prompt_tree)
+            prompt = transformtree.transform(prompt_tree)
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning("parsing failed on prompt!: %s", e)
+        try:
+            if self.debug:
+                self.logger.info("Removing content in the negative prompt")
+            negativeprompt_tree = self.__parser_complete.parse(negative_prompt)
+            vartree = self.VARTree(self, negative_prompt)
+            vartree.visit(negativeprompt_tree)
+            negative_prompt = transformtree.transform(negativeprompt_tree)
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning("parsing failed on negative prompt!: %s", e)
+
+        if self.debug:
+            self.logger.info(f"prompt after content removal: {self.formatOutput(prompt)}")
+            self.logger.info(f"negative_prompt after content removal: {self.formatOutput(negative_prompt)}")
+        return prompt, negative_prompt
 
     def __cleanup(self, prompt, negative_prompt):
         """
@@ -668,20 +1061,22 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             tuple: A tuple containing the cleaned up prompt and negative prompt.
         """
-        if self.debug:
-            self.logger.info("Doing cleanup")
 
         transformtree = self.TransformerTree(self, phase="cleanup")
         try:
+            if self.debug:
+                self.logger.info("Cleaning the prompt")
             prompt_tree = self.__parser_complete.parse(prompt)
             prompt = self.trim_text(transformtree.transform(prompt_tree))
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.warning("Cleanup parsing failed on prompt!: %s", e)
+            self.logger.warning("Parsing failed on prompt!: %s", e)
         try:
+            if self.debug:
+                self.logger.info("Cleaning the negative prompt")
             negativeprompt_tree = self.__parser_complete.parse(negative_prompt)
             negative_prompt = self.trim_text(transformtree.transform(negativeprompt_tree))
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.warning("Cleanup parsing failed on negative prompt!: %s", e)
+            self.logger.warning("Parsing failed on negative prompt!: %s", e)
 
         if self.debug:
             self.logger.info(f"prompt after cleanup: {self.formatOutput(prompt)}")
@@ -747,10 +1142,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = re.sub(r"(\s*" + escapedSeparator + r"\s*[([])\s*" + escapedSeparator + r"\s*", r"\1", text)
             # remove before colon or ending parenthesis or bracket
             text = re.sub(r"\s*" + escapedSeparator + r"\s*([:)\]]\s*" + escapedSeparator + r"\s*)", r"\1", text)
+        if self.cup_extraseparators2:
             # remove at start of prompt or line
             text = re.sub(r"^(?:\s*" + escapedSeparator + r"\s*)", "", text, flags=re.MULTILINE)
             # remove at end of prompt or line
             text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*)$", "", text, flags=re.MULTILINE)
+        if self.cup_extraseparators:
             #
             # regular comma separator
             #
@@ -758,10 +1155,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = re.sub(r"(\s*,\s*[([])\s*,\s*", r"\1", text)
             # remove duplicate separators before colon or ending parenthesis or bracket
             text = re.sub(r"\s*,\s*([:)\]]\s*,\s*)", r"\1", text)
+        if self.cup_extraseparators2:
             # remove at start of prompt or line
             text = re.sub(r"^\s*,\s*", "", text, flags=re.MULTILINE)
             # remove at end of prompt or line
             text = re.sub(r"\s*,\s*$", "", text, flags=re.MULTILINE)
+        if self.cup_breaks_eol:
+            # replace spaces before break with EOL
+            text = re.sub(r"[, ]+BREAK\b", "\nBREAK", text)
         if self.cup_breaks:
             # remove spaces between start of line and BREAK
             text = re.sub(r"^[ ]+BREAK\b", "BREAK", text, flags=re.MULTILINE)
@@ -793,9 +1194,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # remove spaces after >
             text = re.sub(r"(?<!!)>\s+\B", ">", text)
         if self.cup_extraspaces:
-            # remove extra spaces after starting parenthesis or bracket
+            # remove extra whitespace after starting parenthesis or bracket
             text = re.sub(r"([,\.;\s]+[([])\s+", r"\1", text)
-            # remove extra spaces before ending parenthesis or bracket
+            # remove extra whitespace before ending parenthesis or bracket
             text = re.sub(r"\s+([)\]][,\.;\s]+)", r"\1", text)
             # collapse spaces
             # text = re.sub(r"[ ]{2,}", " ", text)
@@ -815,22 +1216,23 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             tuple: A tuple containing the processed prompt and negative_prompt strings.
         """
 
-        if self.debug:
-            self.logger.info("Doing wildcard processing")
-
         p_transformtree = self.TransformerTree(self, phase="wildcards")
         try:
+            if self.debug:
+                self.logger.info("Wildcard processing in the prompt")
             p_tree = self.__parser_complete.parse(prompt)
             prompt = p_transformtree.transform(p_tree)
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.warning("Wildcards parsing failed in prompt!: %s", e)
+            self.logger.warning("Parsing failed in prompt!: %s", e)
 
         np_transformtree = self.TransformerTree(self, phase="wildcards")
         try:
+            if self.debug:
+                self.logger.info("Wildcard processing in the negative prompt")
             np_tree = self.__parser_complete.parse(negative_prompt)
             negative_prompt = np_transformtree.transform(np_tree)
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.warning("Wildcards parsing failed in negative prompt!: %s", e)
+            self.logger.warning("Parsing failed in negative prompt!: %s", e)
 
         foundP = False
         foundNP = False
@@ -845,7 +1247,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.ifwildcards == self.IFWILDCARDS_CHOICES["warn"]:
                 prompt = self.WILDCARD_WARNING + prompt
             elif self.ifwildcards == self.IFWILDCARDS_CHOICES["stop"]:
-                self.logger.error("Found unprocessed wildcards! stopping the generation.")
+                self.logger.error("Found unprocessed wildcards! Stopping the generation.")
                 if foundP:
                     prompt = self.WILDCARD_STOP + prompt
                 if foundNP:
@@ -869,6 +1271,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             tuple: A tuple containing the processed prompt and negative prompt.
         """
         try:
+            self.variables = {}
             prompt = original_prompt
             negative_prompt = original_negative_prompt
             self.debug = getattr(self.opts, "ppp_gen_debug", False)
@@ -881,6 +1284,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     np_tree = self.__parser_complete.parse(negative_prompt)
                     self.logger.info(f"Tree from negative prompt:\n{np_tree.pretty()}")
 
+                prompt, negative_prompt = self.__removecontent(prompt, negative_prompt)
+
                 if self.ifwildcards != self.IFWILDCARDS_CHOICES["ignore"]:
                     prompt, negative_prompt = self.__findwildcards(prompt, negative_prompt)
 
@@ -892,11 +1297,31 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.cup_extraspaces
                     or self.cup_emptyconstructs
                     or self.cup_extraseparators
+                    or self.cup_extraseparators2
                     or self.cup_breaks
+                    or self.cup_breaks_eol
                     or self.cup_ands
+                    or self.cup_ands_eol
                     or self.cup_extranetworktags
                 ):
                     prompt, negative_prompt = self.__cleanup(prompt, negative_prompt)
+
+                # Check for constructs not processed due to parsing problems
+                if (
+                    prompt.find("<ppp:") >= 0
+                    or negative_prompt.find("<ppp:") >= 0
+                    or prompt.find("<!") >= 0
+                    or negative_prompt.find("<!") >= 0
+                ):
+                    self.logger.error(
+                        "Found unprocessed constructs in prompt or negative prompt! Stopping the generation."
+                    )
+                    self.logger.info(f"prompt: {self.formatOutput(prompt)}")
+                    self.logger.info(f"negative_prompt: {self.formatOutput(negative_prompt)}")
+                    prompt = self.UNPROCESSED_STOP + prompt
+                    if hasattr(self.script, "ppp_interrupt"):
+                        self.script.ppp_interrupt()
+
             return prompt, negative_prompt
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.exception(e)

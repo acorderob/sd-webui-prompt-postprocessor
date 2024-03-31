@@ -85,7 +85,7 @@ class PromptPostProcessorScript(scripts.Script):
         self.ppp_debug = getattr(opts, "ppp_gen_debug", False) if opts is not None else False
         if self.ppp_debug:
             self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'} mode)")
-        ppp = PromptPostProcessor(self, opts, is_i2i)
+        ppp = PromptPostProcessor(self, p, shared.state, opts, is_i2i)
         # processes regular prompts
         if (
             hasattr(p, "all_prompts")
@@ -145,10 +145,26 @@ class PromptPostProcessorScript(scripts.Script):
             ),
         )
 
+        # content removal settings
+        shared.opts.add_option(
+            key="ppp_rem_sep", info=shared.OptionInfo("<br/><h2>Content removal settings</h2>", "", gr.HTML, section=section)
+        )
+        shared.opts.add_option(
+            key="ppp_rem_removeextranetworktags",
+            info=shared.OptionInfo(
+                False,
+                label="Remove extra network tags",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_rem_if", info=shared.OptionInfo("<p style=\"font-style:italic\">* Parsing of the 'if' commands cannot be disabled</p>", "", gr.HTML, section=section)
+        )
+
         # send to negative settings
         shared.opts.add_option(
             key="ppp_stn_sep",
-            info=shared.OptionInfo("<h2>Send to Negative settings</h2>", "", gr.HTML, section=section),
+            info=shared.OptionInfo("<br/><h2>Send to Negative settings</h2>", "", gr.HTML, section=section),
         )
         shared.opts.add_option(
             key="ppp_stn_doi2i",
@@ -170,7 +186,7 @@ class PromptPostProcessorScript(scripts.Script):
             key="ppp_stn_ignorerepeats",
             info=shared.OptionInfo(
                 True,
-                label="Ignore tags with repeated content",
+                label="Ignore repeated content",
                 section=section,
             ),
         )
@@ -184,7 +200,7 @@ class PromptPostProcessorScript(scripts.Script):
         )
         # clean-up settings
         shared.opts.add_option(
-            key="ppp_cup_sep", info=shared.OptionInfo("<h2>Clean-up settings</h2>", "", gr.HTML, section=section)
+            key="ppp_cup_sep", info=shared.OptionInfo("<br/><h2>Clean-up settings</h2>", "", gr.HTML, section=section)
         )
         shared.opts.add_option(
             key="ppp_cup_doi2i",
@@ -211,6 +227,14 @@ class PromptPostProcessorScript(scripts.Script):
             ),
         )
         shared.opts.add_option(
+            key="ppp_cup_extraseparators2",
+            info=shared.OptionInfo(
+                True,
+                label="Remove additional extra separators",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
             key="ppp_cup_breaks",
             info=shared.OptionInfo(
                 True,
@@ -219,10 +243,26 @@ class PromptPostProcessorScript(scripts.Script):
             ),
         )
         shared.opts.add_option(
+            key="ppp_cup_breaks_eol",
+            info=shared.OptionInfo(
+                False,
+                label="Use EOL instead of Space before BREAKs",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
             key="ppp_cup_ands",
             info=shared.OptionInfo(
                 True,
                 label="Clean up around ANDs",
+                section=section,
+            ),
+        )
+        shared.opts.add_option(
+            key="ppp_cup_ands_eol",
+            info=shared.OptionInfo(
+                False,
+                label="Use EOL instead of Space before ANDs",
                 section=section,
             ),
         )
