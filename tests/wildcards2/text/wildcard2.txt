@@ -1,0 +1,6 @@
+# wildcard2
+r2-3$$-
+4::choice1
+3:: choice2 
+2::choice3
+5 if _is_sd1::choice4

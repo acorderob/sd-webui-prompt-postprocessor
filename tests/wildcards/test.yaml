@@ -1,0 +1,25 @@
+yaml:
+  wildcard1:
+    - choice1
+    - choice2
+    - choice3
+
+  wildcard2:
+    - ~r2-3$$-
+    - 4::choice1
+    - "3:: choice2 "
+    - 2::choice3
+    - 5 if _is_sd1::choice4
+
+  wildcard3:
+    - __2$$,$$yaml/wildcard2__
+
+  wildcard4: inline text
+
+  wildcard5: inline ${var:default}
+
+  wildcard6:
+    - { weight: 2, text: choice1 }
+    - { weight: 3, content: choice2 }
+    - { text: choice3 }
+    - { weight: 4, if: "_is_ssd", text: choice4 }

@@ -1,27 +1,18 @@
+from collections import namedtuple
 import logging
 import unittest
 import sys
 import os
 
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+from ppp_wildcards import PPPWildcards
+
+sys.path.append(os.path.join(sys.path[0], ".."))
 
 from ppp import PromptPostProcessor
-from ppp_logging import PromptPostProcessorLogFactory
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
 
 
-class DictToObj:  # pylint: disable=too-few-public-methods
-    """
-    Converts a dictionary to an object with attribute access.
-    from https://joelmccune.com/python-dictionary-as-object/
-    """
-
-    def __init__(self, in_dict: dict):
-        assert isinstance(in_dict, dict)
-        for key, val in in_dict.items():
-            if isinstance(val, (list, tuple)):
-                setattr(self, key, [DictToObj(x) if isinstance(x, dict) else x for x in val])
-            else:
-                setattr(self, key, DictToObj(val) if isinstance(val, dict) else val)
+PromptPair = namedtuple("PromptPair", ["prompt", "negative_prompt"], defaults=["", ""])
 
 
 class TestPromptPostProcessor(unittest.TestCase):
@@ -34,333 +25,666 @@ class TestPromptPostProcessor(unittest.TestCase):
         Set up the test case by initializing the necessary objects and configurations.
         """
         lf = PromptPostProcessorLogFactory()
-        self.ppp_logger = lf.log
-        self.ppp_logger.setLevel(logging.DEBUG)
-        self.__defopts = DictToObj(
-            {
-                "ppp_gen_debug": True,
-                "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["ignore"],
-                "ppp_stn_doi2i": False,
-                "ppp_stn_separator": ", ",
-                "ppp_stn_ignore_repeats": True,
-                "ppp_stn_join_attention": True,
-                "ppp_cup_doi2i": False,
-                "ppp_cup_emptyconstructs": True,
-                "ppp_cup_extraseparators": True,
-                "ppp_cup_extraseparators2": True,
-                "ppp_cup_extraspaces": True,
-                "ppp_cup_breaks": True,
-                "ppp_cup_breaks_eol": False,
-                "ppp_cup_ands": True,
-                "ppp_cup_ands_eol": False,
-                "ppp_cup_extranetworktags": True,
-                "ppp_rem_removeextranetworktags": False,
-            }
+        self.__ppp_logger = lf.log
+        self.__ppp_logger.setLevel(logging.DEBUG)
+        self.__defopts = {
+            "debug_level": DEBUG_LEVEL.full.value,
+            "pony_substrings": PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
+            "process_wildcards": True,
+            "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
+            "choice_separator": ", ",
+            "keep_choices_order": False,
+            "stn_separator": ", ",
+            "stn_ignore_repeats": True,
+            "stn_join_attention": True,
+            "cleanup_empty_constructs": True,
+            "cleanup_extra_separators": True,
+            "cleanup_extra_separators2": True,
+            "cleanup_extra_spaces": True,
+            "cleanup_breaks": True,
+            "cleanup_breaks_eol": False,
+            "cleanup_ands": True,
+            "cleanup_ands_eol": False,
+            "cleanup_extranetwork_tags": True,
+            "remove_extranetwork_tags": False,
+        }
+        self.__def_model_info = {
+            "is_sd1": False,
+            "is_sd2": False,
+            "is_sdxl": True,
+            "is_ssd": False,
+            "is_sd3": False,
+            "is_flux": False,
+            "models_path": "./webui/models",
+            "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
+        }
+        self.__interrupted = False
+        self.__wildcards_obj = PPPWildcards(lf.log)
+        self.__wildcards_obj.refresh_wildcards(
+            DEBUG_LEVEL.full,
+            [
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards2")),
+            ],
         )
-        self.__nocupopts = DictToObj(
-            {
-                "ppp_gen_debug": True,
-                "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["ignore"],
-                "ppp_stn_doi2i": False,
-                "ppp_stn_separator": ", ",
-                "ppp_stn_ignore_repeats": True,
-                "ppp_stn_join_attention": True,
-                "ppp_cup_doi2i": False,
-                "ppp_cup_emptyconstructs": False,
-                "ppp_cup_extraseparators": False,
-                "ppp_cup_extraseparators2": False,
-                "ppp_cup_extraspaces": False,
-                "ppp_cup_breaks": False,
-                "ppp_cup_breaks_eol": False,
-                "ppp_cup_ands": False,
-                "ppp_cup_ands_eol": False,
-                "ppp_cup_extranetworktags": False,
-                "ppp_rem_removeextranetworktags": False,
-            }
+        grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
+        with open(grammar_filename, "r", encoding="utf-8") as file:
+            self.__grammar_content = file.read()
+        self.__defppp = PromptPostProcessor(
+            self.__ppp_logger,
+            self.__interrupt,
+            self.__def_model_info,
+            self.__defopts,
+            self.__grammar_content,
+            self.__wildcards_obj,
         )
-        self.__defprocessing = DictToObj({"sd_model": DictToObj({"is_sd1": False, "is_sd2": False, "is_sdxl": True})})
-        self.__defstate = None
-        self.defppp = PromptPostProcessor(self, self.__defprocessing, self.__defstate, self.__defopts)
-        self.nocupppp = PromptPostProcessor(self, self.__defprocessing, self.__defstate, self.__nocupopts)
+        self.__nocupppp = PromptPostProcessor(
+            self.__ppp_logger,
+            self.__interrupt,
+            self.__def_model_info,
+            {
+                **self.__defopts,
+                "cleanup_empty_constructs": False,
+                "cleanup_extra_separators": False,
+                "cleanup_extra_separators2": False,
+                "cleanup_extra_spaces": False,
+                "cleanup_breaks": False,
+                "cleanup_breaks_eol": False,
+                "cleanup_ands": False,
+                "cleanup_ands_eol": False,
+                "cleanup_extranetwork_tags": False,
+            },
+            self.__grammar_content,
+            self.__wildcards_obj,
+        )
 
-    def process(
+    def __interrupt(self):
+        self.__interrupted = True
+
+    def __process(
         self,
-        prompt,
-        negative_prompt,
-        expected_prompt,
-        expected_negative_prompt,
+        input_prompts: PromptPair,
+        expected_output_prompts: PromptPair | list[PromptPair],
+        seed: int = 1,
         ppp=None,
+        interrupted=False,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
 
         Args:
-            prompt (str): The input prompt.
-            negative_prompt (str): The input negative prompt.
-            expected_prompt (str): The expected output prompt.
-            expected_negative_prompt (str): The expected output negative prompt.
+            input_prompts (PromptPair): The input prompts.
+            expected_output_prompts (PromptPair | list[PromptPair]): The expected prompts.
+            seed (int, optional): The seed value. Defaults to 1.
             ppp (object, optional): The post-processor object. Defaults to None.
+            interrupted (bool, optional): The interrupted flag. Defaults to False.
 
         Returns:
             None
         """
-        the_obj = self.defppp if ppp is None else ppp
-        result_prompt, result_negative_prompt = the_obj.process_prompt(prompt, negative_prompt)
-        self.assertEqual(result_prompt, expected_prompt, f"Prompt should be '{expected_prompt}'")
-        self.assertEqual(
-            result_negative_prompt,
-            expected_negative_prompt,
-            f"Negative Prompt should be '{expected_negative_prompt}'",
-        )
+        the_obj = ppp or self.__defppp
+        out = expected_output_prompts if isinstance(expected_output_prompts, list) else [expected_output_prompts]
+        for eo in out:
+            result_prompt, result_negative_prompt = the_obj.process_prompt(
+                input_prompts.prompt,
+                input_prompts.negative_prompt,
+                seed,
+            )
+            self.assertEqual(self.__interrupted, interrupted, "Interrupted flag is incorrect")
+            if not self.__interrupted:
+                self.assertEqual(result_prompt, eo.prompt, "Incorrect prompt")
+                self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
+            seed += 1
 
     # Send To Negative tests
 
-    def test_nt_simple_oldformat(self):  # negtags with different parameters and separations
-        self.process(
-            "flowers<!red!>, <!!s!green!>, <!!e!blue!><!!p0!yellow!>, <!!p1!purple!><!!p2!black!>",
-            "<!!i0!!>normal quality<!!i1!!>, worse quality<!!i2!!>",
-            "flowers",
-            "red, green, yellow, normal quality, purple, worse quality, black, blue",
+    def test_stn_simple(self):  # negtags with different parameters and separations
+        self.__process(
+            PromptPair(
+                "flowers<ppp:stn>red<ppp:/stn>, <ppp:stn s>green<ppp:/stn>, <ppp:stn e>blue<ppp:/stn><ppp:stn p0>yellow<ppp:/stn>, <ppp:stn p1>purple<ppp:/stn><ppp:stn p2>black<ppp:/stn>",
+                "<ppp:stn i0>normal quality<ppp:stn i1>, worse quality<ppp:stn i2>",
+            ),
+            PromptPair("flowers", "red, green, yellow, normal quality, purple, worse quality, black, blue"),
         )
 
-    def test_nt_simple(self):  # negtags with different parameters and separations
-        self.process(
-            "flowers<ppp:stn>red<ppp:/stn>, <ppp:stn s>green<ppp:/stn>, <ppp:stn e>blue<ppp:/stn><ppp:stn p0>yellow<ppp:/stn>, <ppp:stn p1>purple<ppp:/stn><ppp:stn p2>black<ppp:/stn>",
-            "<ppp:stn i0>normal quality<ppp:stn i1>, worse quality<ppp:stn i2>",
-            "flowers",
-            "red, green, yellow, normal quality, purple, worse quality, black, blue",
-        )
-
-    def test_nt_complex(self):  # complex negtags
-        self.process(
-            "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
-            "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
-            "flowers",
-            "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
-        )
-
-    def test_nt_complex_nocleanup(self):  # complex negtags with no cleanup
-        self.process(
-            "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
-            "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
-            " (()), flowers , ,  ",
-            "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
-            self.nocupppp,
-        )
-
-    def test_nt_inside_attention(self):  # negtag inside attention
-        self.process(
-            "[<ppp:stn>neg1<ppp:/stn>] this is a ((test<ppp:stn e>neg2<ppp:/stn>) (test:2.0): 1.5 ) (red<ppp:stn>[square]<ppp:/stn>:1.5)",
-            "normal quality",
-            "this is a ((test) (test:2.0):1.5) (red:1.5)",
-            "[neg1], ([square]:1.5), normal quality, (neg2:1.65)",
-        )
-
-    def test_nt_inside_alternation(self):  # negtag inside alternation
-        self.process(
-            "this is a (([complex<ppp:stn>neg1<ppp:/stn>|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
-            "normal quality",
-            "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
-            "([neg1||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
-        )
-
-    def test_nt_inside_alternation_recursive(self):  # negtag inside alternation (recursive alternation)
-        self.process(
-            "this is a (([complex<ppp:stn>neg1<ppp:/stn>[one|two<ppp:stn>neg12<ppp:/stn>||three|four(<ppp:stn>neg14<ppp:/stn>)]|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
-            "normal quality",
-            "this is a (([complex[one|two||three|four]|simple|regular] test)(test:2.0):1.5)",
-            "([neg1||]:1.65), ([[|neg12|||]||]:1.65), ([[||||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
-        )
-
-    def test_nt_inside_scheduling(self):  # negtag inside scheduling
-        self.process(
-            "this is [abc<ppp:stn>neg1<ppp:/stn>:def<ppp:stn e>neg2<ppp:/stn>: 5 ]",
-            "normal quality",
-            "this is [abc:def:5]",
-            "[neg1::5], normal quality, [neg2:5]",
-        )
-
-    def test_nt_complex_features(self):  # complex negtags with AND, BREAK and other features
-        self.process(
-            "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loraword <lora:xxx:1> AND AND hypernetword <hypernet:yyy>:0.3",
-            "normal quality, <ppp:stn i0>",
-            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]:0.5 AND loraword <lora:xxx:1> AND hypernetword <hypernet:yyy>:0.3",
-            "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
-        )
-
-    def test_nt_complex_features_newformat(self):  # complex negtags with AND, BREAK and other features (new format)
-        self.process(
-            "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loraword <lora:xxx:1> AND AND hypernetword <hypernet:yyy>:0.3",
-            "normal quality, <ppp:stn i0>",
-            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]:0.5 AND loraword <lora:xxx:1> AND hypernetword <hypernet:yyy>:0.3",
-            "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
-        )
-
-    # Wildcard tests
-
-    def test_wc_ignore(self):  # wildcards with ignore option
-        self.process(
-            "__bad_wildcard__",
-            "{option1|option2}",
-            "__bad_wildcard__",
-            "{option1|option2}",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj(
-                    {
-                        **self.__defopts.__dict__,
-                        "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["ignore"],
-                    }
-                ),
+    def test_stn_complex(self):  # complex negtags
+        self.__process(
+            PromptPair(
+                "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
+                "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
+            ),
+            PromptPair(
+                "flowers",
+                "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
             ),
         )
 
-    def test_wc_remove(self):  # wildcards with remove option
-        self.process(
-            "[<ppp:stn>neg5<ppp:/stn>] this is: __bad_wildcard__ a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5] <lora:xxx:1>",
-            "normal quality, <ppp:stn i0> {option1|option2}",
-            "this is: a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]<lora:xxx:1>",
-            "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj(
-                    {
-                        **self.__defopts.__dict__,
-                        "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["remove"],
-                    }
-                ),
+    def test_stn_complex_nocleanup(self):  # complex negtags with no cleanup
+        self.__process(
+            PromptPair(
+                "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
+                "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
+            ),
+            PromptPair(
+                " (()), flowers , ,  ",
+                "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
+            ),
+            ppp=self.__nocupppp,
+        )
+
+    def test_stn_inside_attention(self):  # negtag inside attention
+        self.__process(
+            PromptPair(
+                "[<ppp:stn>neg1<ppp:/stn>] this is a ((test<ppp:stn e>neg2<ppp:/stn>) (test:2.0): 1.5 ) (red<ppp:stn>[square]<ppp:/stn>:1.5)",
+                "normal quality",
+            ),
+            PromptPair(
+                "this is a ((test) (test:2.0):1.5) (red:1.5)", "[neg1], ([square]:1.5), normal quality, (neg2:1.65)"
             ),
         )
 
-    def test_wc_warn(self):  # wildcards with warn option
-        self.process(
-            "__bad_wildcard__",
-            "{option1|option2}",
-            PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__",
-            "{option1|option2}",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj(
-                    {
-                        **self.__defopts.__dict__,
-                        "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["warn"],
-                    }
-                ),
+    def test_stn_inside_alternation(self):  # negtag inside alternation
+        self.__process(
+            PromptPair(
+                "this is a (([complex<ppp:stn>neg1<ppp:/stn>|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
+                "normal quality",
+            ),
+            PromptPair(
+                "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
+                "([neg1||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
             ),
         )
 
-    def test_wc_stop(self):  # wildcards with stop option
-        self.process(
-            "__bad_wildcard__",
-            "{option1|option2}",
-            PromptPostProcessor.WILDCARD_STOP + "__bad_wildcard__",
-            PromptPostProcessor.WILDCARD_STOP + "{option1|option2}",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj(
-                    {
-                        **self.__defopts.__dict__,
-                        "ppp_gen_ifwildcards": PromptPostProcessor.IFWILDCARDS_CHOICES["stop"],
-                    }
-                ),
+    def test_stn_inside_alternation_recursive(self):  # negtag inside alternation (recursive alternation)
+        self.__process(
+            PromptPair(
+                "this is a (([complex<ppp:stn>neg1<ppp:/stn>[one|two<ppp:stn>neg12<ppp:/stn>||three|four(<ppp:stn>neg14<ppp:/stn>)]|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
+                "normal quality",
+            ),
+            PromptPair(
+                "this is a (([complex[one|two||three|four]|simple|regular] test)(test:2.0):1.5)",
+                "([neg1||]:1.65), ([[|neg12|||]||]:1.65), ([[||||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
+            ),
+        )
+
+    def test_stn_inside_scheduling(self):  # negtag inside scheduling
+        self.__process(
+            PromptPair("this is [abc<ppp:stn>neg1<ppp:/stn>:def<ppp:stn e>neg2<ppp:/stn>: 5 ]", "normal quality"),
+            [PromptPair("this is [abc:def:5]", "[neg1::5], normal quality, [neg2:5]")],
+        )
+
+    def test_stn_complex_features(self):  # complex negtags with AND, BREAK and other features
+        self.__process(
+            PromptPair(
+                "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
+                "normal quality, <ppp:stn i0>",
+            ),
+            PromptPair(
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
+            ),
+        )
+
+    def test_stn_complex_features_newformat(self):  # complex negtags with AND, BREAK and other features (new format)
+        self.__process(
+            PromptPair(
+                "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
+                "normal quality, <ppp:stn i0>",
+            ),
+            PromptPair(
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             ),
         )
 
     # Cleanup tests
 
     def test_cl_simple(self):  # simple cleanup
-        self.process(
-            "  this is a ((test ), ,  () [] ( , test ,:2.0):1.5) (red:1.5)  ",
-            "  normal quality  ",
-            "this is a ((test), (test,:2.0):1.5) (red:1.5)",
-            "normal quality",
+        self.__process(
+            PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5) (red:1.5)  ", "  normal quality  "),
+            PromptPair("this is a ((test), (test,:2.0):1.5) (red:1.5)", "normal quality"),
         )
 
     def test_cl_complex(self):  # complex cleanup
-        self.process(
-            "  this is BREAKABLE a ((test), ,AND AND() [] <lora:test> ANDERSON (test:2.0):1.5) :o BREAK \n BREAK (red:1.5)  ",
-            "  [:hands, feet, :0.15]normal quality  ",
-            "this is BREAKABLE a ((test) AND <lora:test> ANDERSON (test:2.0):1.5) :o BREAK (red:1.5)",
-            "[:hands, feet, :0.15]normal quality",
+        self.__process(
+            PromptPair(
+                "  this is BREAKABLE a ((test)), ,AND AND(() [] <lora:test> ANDERSON (test:2.0):1.5) :o BREAK \n BREAK (red:1.5)  ",
+                "  [:hands, feet, :0.15]normal quality  ",
+            ),
+            PromptPair(
+                "this is BREAKABLE a ((test)) AND(<lora:test> ANDERSON (test:2.0):1.5) :o BREAK (red:1.5)",
+                "[:hands, feet, :0.15]normal quality",
+            ),
         )
 
     def test_cl_removenetworktags(self):  # remove network tags
-        self.process(
-            "this is a <lora:test> test",
-            "",
-            "this is a test",
-            "",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj({**self.__defopts.__dict__, "ppp_rem_removeextranetworktags": True}),
+        self.__process(
+            PromptPair("this is a <lora:test> test", ""),
+            PromptPair("this is a test", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {**self.__defopts, "remove_extranetwork_tags": True},
             ),
         )
 
     def test_cl_dontremoveseparatorsoneol(self):  # dont remove separators on eol
-        self.process(
-            "this is a test,\nsecond line",
-            "",
-            "this is a test,\nsecond line",
-            "",
-            PromptPostProcessor(
-                self,
-                self.__defprocessing,
-                self.__defstate,
-                DictToObj({**self.__defopts.__dict__, "ppp_cup_extraseparators2": False}),
+        self.__process(
+            PromptPair("this is a test,\nsecond line", ""),
+            PromptPair("this is a test,\nsecond line", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {**self.__defopts, "cleanup_extra_separators2": False},
             ),
         )
 
     # Command tests
 
     def test_cmd_stn_complex_features(self):  # complex stn command with AND, BREAK and other features
-        self.process(
-            "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loraword <lora:xxx:1> AND AND hypernetword <hypernet:yyy>:0.3",
-            "normal quality, <ppp:stn i0>",
-            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK with [abc:def:5]:0.5 AND loraword <lora:xxx:1> AND hypernetword <hypernet:yyy>:0.3",
-            "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
+        self.__process(
+            PromptPair(
+                "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
+                "normal quality, <ppp:stn i0>",
+            ),
+            PromptPair(
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
+            ),
         )
 
     def test_cmd_if_complex_features(self):  # complex if command
-        self.process(
-            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK, BREAK <ppp:if _sd eq 'sd1'>with [abc<ppp:stn>neg4<ppp:/stn>:def:5]<ppp:/if>:0.5 AND <ppp:if _sd eq 'sd1'>loraword <lora:xxx:1><ppp:elif _sd eq 'sdxl'>hypernetword <hypernet:yyy><ppp:else>nothing<ppp:/if>:0.3",
-            "normal quality",
-            "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK :0.5 AND hypernetword <hypernet:yyy>:0.3",
-            "normal quality",
+        self.__process(
+            PromptPair(
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5) \nBREAK, BREAK <ppp:if _is_sd1>with [abc<ppp:stn>neg4<ppp:/stn>:def:5]<ppp:/if>:0.5 AND <ppp:if _is_sd1>loratrigger <lora:xxx:1><ppp:elif _is_sdxl>hypernettrigger <hypernet:yyy><ppp:else>nothing<ppp:/if>:0.3",
+                "normal quality",
+            ),
+            PromptPair(
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK :0.5 AND hypernettrigger <hypernet:yyy>:0.3",
+                "normal quality",
+            ),
         )
 
     def test_cmd_if_nested(self):  # nested if command
-        self.process(
-            "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _sd eq 'sdxl'>SDXL<ppp:else>SD2<ppp:/if><ppp:/if>",
-            "",
-            "this is SDXL",
-            "",
+        self.__process(
+            PromptPair(
+                "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _is_pony>PONY<ppp:else>SD2<ppp:/if><ppp:/if>", ""
+            ),
+            PromptPair("this is PONY", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                {
+                    **self.__def_model_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
+                },
+                self.__defopts,
+            ),
         )
 
     def test_cmd_set_if(self):  # set and if commands
-        self.process(
-            "<ppp:set v>value<ppp:/set>this test is <ppp:if v eq 'value'>OK<ppp:else>not OK<ppp:/if>",
-            "",
-            "this test is OK",
-            "",
+        self.__process(
+            PromptPair("<ppp:set v>value<ppp:/set>this test is <ppp:if v>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_eval_if(self):  # set and if commands
+        self.__process(
+            PromptPair("<ppp:set v evaluate>value<ppp:/set>this test is <ppp:if v>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if_echo_nested(self):  # nested set, if and echo commands
-        self.process(
-            "<ppp:set v1>1<ppp:/set><ppp:if v1 gt 0><ppp:set v2>OK<ppp:/set><ppp:/if><ppp:if v2 eq 'OK'><ppp:echo v2><ppp:else>not OK<ppp:/if>",
-            "",
-            "OK",
-            "",
+        self.__process(
+            PromptPair(
+                "<ppp:set v1>1<ppp:/set><ppp:if v1 gt 0><ppp:set v2>OK<ppp:/set><ppp:/if><ppp:if v2 eq 'OK'><ppp:echo v2><ppp:else>not OK<ppp:/if> <ppp:echo v2>NOK<ppp:/echo> <ppp:echo v3>OK<ppp:/echo>",
+                "",
+            ),
+            PromptPair("OK OK OK", ""),
         )
+
+    def test_cmd_set_if2(self):  # set and more complex if commands
+        self.__process(
+            PromptPair(
+                "First: <ppp:set v>value1<ppp:/set>this test is <ppp:if v in ('value1','value2')>OK<ppp:else>not OK<ppp:/if>\nSecond: <ppp:set v2>value3<ppp:/set>this test is <ppp:if not v2 in ('value1','value2')>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("First: this test is OK\nSecond: this test is OK", ""),
+        )
+
+    def test_cmd_set_add_if(self):  # set, add and if commands
+        self.__process(
+            PromptPair(
+                "<ppp:set v>value<ppp:/set><ppp:set v add>2<ppp:/set>this test is <ppp:if v eq 'value2'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_add_DP_if(self):  # set, add (DP format) and if commands
+        self.__process(
+            PromptPair(
+                "${v=value}${v+=2}this test is <ppp:if v eq 'value2'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_immediateeval(self):  # set (DP format) with mixed evaluation
+        self.__process(
+            PromptPair(
+                "${var=!__yaml/wildcard1__}the choices are: ${var}, ${var}, ${var2:default}, ${var3=__yaml/wildcard1__}${var3}, ${var3}",
+                "",
+            ),
+            PromptPair("the choices are: choice2, choice2, default, choice3, choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_cmd_set_mixeval(self):  # set and add (DP format) with mixed evaluation
+        self.__process(
+            PromptPair(
+                "${var=__yaml/wildcard1__}the choices are: ${var}, ${var}, ${var+=, __yaml/wildcard2__}${var}, ${var}, ${var+=!, __yaml/wildcard3__}${var}, ${var}",
+                "",
+            ),
+            PromptPair(
+                "the choices are: choice2, choice3, choice1, choice1- choice2 -choice3, choice2,  choice2 -choice1-choice3, choice2, choice3-choice1- choice2 , choice1, choice2 , choice2, choice3-choice1- choice2 , choice1, choice2 ",
+                "",
+            ),
+            ppp=self.__nocupppp,
+        )
+
+    # Choices tests
+
+    def test_ch_choices(self):  # simple choices with weights
+        self.__process(
+            PromptPair("the choices are: {3::choice1|2::choice2|choice3}", ""),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_unsupportedsampler(self):  # unsupported sampler
+        self.__process(
+            PromptPair("the choices are: {@choice1|choice2|choice3}", ""),
+            PromptPair("", ""),
+            ppp=self.__nocupppp,
+            interrupted=True,
+        )
+
+    def test_ch_choices_withcomments(self):  # choices with comments and multiline
+        self.__process(
+            PromptPair(
+                "the choices are: {\n3::choice1 # this is option 1\n|2::choice2\n# this was option 2\n|choice3 # this is option 3\n}",
+                "",
+            ),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_choices_multiple(self):  # choices with multiple selection
+        self.__process(
+            PromptPair("the choices are: {~2$$, $$3::choice1|2:: choice2 |choice3}", ""),
+            PromptPair("the choices are:  choice2 , choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_choices_if_multiple(self):  # choices with if and multiple selection
+        self.__process(
+            PromptPair("the choices are: {2$$, $$3::choice1|2 if _is_sd1::choice2|choice3}", ""),
+            PromptPair("the choices are: choice1, choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_choices_set_if_multiple(self):  # choices with if user variable and multiple selection
+        self.__process(
+            PromptPair("${var=test}the choices are: {2$$, $$3::choice1|2 if not var eq 'test'::choice2|choice3}", ""),
+            PromptPair("the choices are: choice1, choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_choices_set_if_nested(self):  # nested choices with if user variable and multiple selection
+        self.__process(
+            PromptPair(
+                "${var=test}the choices are: {2$$, $$3::choice1${var2=test2} {if var2 eq 'test2'::choice11|choice12}|2 if not var eq 'test'::choice2|choice3}",
+                "",
+            ),
+            PromptPair("the choices are: choice1 choice11, choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    # Wildcards tests
+
+    def test_wc_ignore(self):  # wildcards with ignore option
+        self.__process(
+            PromptPair("__bad_wildcard__", "{option1|option2}"),
+            PromptPair("__bad_wildcard__", "{option1|option2}"),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {
+                    **self.__defopts,
+                    "process_wildcards": False,
+                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
+                },
+            ),
+        )
+
+    def test_wc_remove(self):  # wildcards with remove option
+        self.__process(
+            PromptPair(
+                "[<ppp:stn>neg5<ppp:/stn>] this is: __bad_wildcard__ a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5] <lora:xxx:1>",
+                "normal quality, <ppp:stn i0> {option1|option2}",
+            ),
+            PromptPair(
+                "this is: a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]<lora:xxx:1>",
+                "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
+            ),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {
+                    **self.__defopts,
+                    "process_wildcards": False,
+                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.remove.value,
+                },
+            ),
+        )
+
+    def test_wc_warn(self):  # wildcards with warn option
+        self.__process(
+            PromptPair("__bad_wildcard__", "{option1|option2}"),
+            PromptPair(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", "{option1|option2}"),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {
+                    **self.__defopts,
+                    "process_wildcards": False,
+                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value,
+                },
+            ),
+        )
+
+    def test_wc_stop(self):  # wildcards with stop option
+        self.__process(
+            PromptPair("__bad_wildcard__", "{option1|option2}"),
+            PromptPair(
+                PromptPostProcessor.WILDCARD_STOP + "__bad_wildcard__",
+                PromptPostProcessor.WILDCARD_STOP + "{option1|option2}",
+            ),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_model_info,
+                {
+                    **self.__defopts,
+                    "process_wildcards": False,
+                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value,
+                },
+            ),
+            interrupted=True,
+        )
+
+    def test_wc_wildcard1a_text(self):  # simple text wildcard
+        self.__process(
+            PromptPair("the choices are: __text/wildcard1__", ""),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard1a_json(self):  # simple json wildcard
+        self.__process(
+            PromptPair("the choices are: __json/wildcard1__", ""),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard1a_yaml(self):  # simple yaml wildcard
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard1__", ""),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard1b_text(self):  # simple text wildcard with multiple choices
+        self.__process(
+            PromptPair("the choices are: __2-$$text/wildcard1__", ""),
+            PromptPair("the choices are: choice3, choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard1b_json(self):  # simple json wildcard with multiple choices
+        self.__process(
+            PromptPair("the choices are: __2-$$json/wildcard1__", ""),
+            PromptPair("the choices are: choice3, choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard1b_yaml(self):  # simple yaml wildcard with multiple choices
+        self.__process(
+            PromptPair("the choices are: __2-$$yaml/wildcard1__", ""),
+            PromptPair("the choices are: choice3, choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard2_text(self):  # simple text wildcard with default options
+        self.__process(
+            PromptPair("the choices are: __text/wildcard2__", ""),
+            PromptPair("the choices are: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard2_json(self):  # simple json wildcard with default options
+        self.__process(
+            PromptPair("the choices are: __json/wildcard2__", ""),
+            PromptPair("the choices are: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard2_yaml(self):  # simple yaml wildcard with default options
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard2__", ""),
+            PromptPair("the choices are: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_nested_wildcard_text(self):  # nested text wildcard with repeating multiple choices
+        self.__process(
+            PromptPair("the choices are: __r3$$-$$text/wildcard3__", ""),
+            PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_nested_wildcard_json(self):  # nested json wildcard with repeating multiple choices
+        self.__process(
+            PromptPair("the choices are: __r3$$-$$json/wildcard3__", ""),
+            PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_nested_wildcard_yaml(self):  # nested yaml wildcard with repeating multiple choices
+        self.__process(
+            PromptPair("the choices are: __r3$$-$$yaml/wildcard3__", ""),
+            PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard4_yaml(self):  # simple yaml wildcard with one option
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard4__", ""),
+            PromptPair("the choices are: inline text", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard6_yaml(self):  # simple yaml wildcard with object formatted choices
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard6__", ""),
+            PromptPair("the choices are: choice2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_choice_wildcard_mix(self):  # choices with wildcard mix
+        self.__process(
+            PromptPair("the choices are: {__~2$$yaml/wildcard2__|choice0}", ""),
+            [
+                PromptPair("the choices are: choice0", ""),
+                PromptPair("the choices are: choice1, choice3", ""),
+                PromptPair("the choices are: choice1, choice3", ""),
+            ],
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_unsupportedsampler(self):  # unsupported sampler
+        self.__process(
+            PromptPair("the choices are: __@yaml/wildcard2__", ""),
+            PromptPair("", ""),
+            ppp=self.__nocupppp,
+            interrupted=True,
+        )
+
+    def test_wc_wildcard_globbing(self):  # wildcard with globbing
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard[12]__, __yaml/wildcard*__", ""),
+            PromptPair("the choices are: choice3-choice2, choice3-choice1- choice2 ", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcardwithvar(self):  # wildcard with inline variable
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcard5(var=test)__, __yaml/wildcard5__", ""),
+            PromptPair("the choices are: inline test, inline default", ""),
+            ppp=self.__nocupppp,
+        )
+
+    # def test_mix(self):
+    #     self.__process(
+    #         PromptPair(
+    #             "__text/wildcard1__ (__text/wildcard2__) (__text/wildcard3__:1.5) [__text/wildcard1__] [__text/wildcard2__:__text/wildcard3__:0.5] [__text/wildcard1__|__text/wildcard2__] # <lora:__text/wildcard3__:1> {opt1_1|opt1_2} ({opt2_1|opt2_2}) ({opt3_1|opt3_2}:1.5) [{opt4_1|opt4_2}] [{opt5_1|opt5_2}:{opt6_1|opt6_2}:0.5] [{opt7_1|opt7_2}|{opt8_1|opt8_2}] # <lora:{opt9_1|opt9_2}:1> {opt1_1|__text/wildcard1__} ({opt2_1|__text/wildcard2__}) ({opt3_1|__text/wildcard3__}:1.5) [{opt4_1|__text/wildcard1__}] [{opt5_1|__text/wildcard2__}# :{opt6_1|__text/wildcard3__}:0.5] [{opt7_1|__text/wildcard1__}|{opt8_1|__text/wildcard2__}] {<lora:opt9_1:1>|<lora:__text/wildcard3__:1>}",
+    #             "",
+    #         ),
+    #         PromptPair(
+    #             "choice2 ( choice2 -choice1) (choice1, choice2 :1.5) [choice1] [choice1-choice1:choice3, choice2 :0.5] [choice2| choice2 - choice2 ] <lora: choice2 ,choice1:1> opt1_1 # (opt2_2) (opt3_1:1.5) [opt4_2] [opt5_1:opt6_2:0.5] [opt7_1|opt8_1] <lora:opt9_2:1> choice3 (opt2_1) (choice1,choice3:1.5) [choice1] [choice3-choice3:opt6_1:0.5] [opt7_1|# opt8_1] <lora:choice1, choice2 :1>",
+    #             "",
+    #         ),
+    #         ppp=self.__nocupppp,
+    #     )
+
+    # def test_real(self):
+    #     self.__wildcards_obj.refresh_wildcards(
+    #         DEBUG_LEVEL.full,
+    #         ["D:\\AI\\SD\\_configuraciones\\acb-wildcards\\wildcards"],
+    #     )
+    #     self.__process(
+    #         PromptPair(
+    #             "${separator=()}, __quality/high__ __misc/sep__, photograph of a __character__",
+    #             "__negatives/ng_generic__",
+    #         ),
+    #         PromptPair("", ""),
+    #     )
 
 
 if __name__ == "__main__":

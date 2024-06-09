@@ -1,0 +1,98 @@
+%import common (LETTER, DIGIT, INT, CNAME, SIGNED_NUMBER, NUMBER)
+
+_WHITESPACE: /\s+/
+STRING:      /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
+BOOLEAN:     /true|false/i
+
+// plain text and weights
+?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
+?plain_choice:           /((?!__|\bAND\b|\${|\$\$)[^\\()\[\]:<>${|}~@]|\\.)+/s // add the specific internal choice ones
+?plain_alternate:        /((?!__|\bAND\b|\${)[^\\()\[\]:<>${|]|\\.)+/s // add the specific internal alternate ones
+?plain_var:              /((?!__|\bAND\b|\${)[^\\()\[\]:<>${}]|\\.)+/s  // add the specific internal var ones
+?specialchars:           /[_{()\[\]:<>]|\$(?![{$])/ // include only the starting ones
+?specialchars_negtag:    /[_{()\[\]:<>!|}]|\$(?![{$])/ // add the internal negtag ones
+?specialchars_alternate: /[_{()\[\]:<>|]|\$(?![{$])/ // add the internal alternate ones
+?specialchars_choice:    /[_{()\[\]:<>|}]|\$(?![{$])/ // add the internal choice ones
+?specialchars_var:       /[_{()\[\]:<>}]|\$(?![{$])/ // add the internal var ones
+?numpar: _WHITESPACE? SIGNED_NUMBER _WHITESPACE?
+
+start: promptcomp | content
+
+// prompt composition with AND
+promptcomp.4: promptcomppart ([":" numpar] (/\bAND\b/ promptcomppart [":" numpar])+)+
+promptcomppart: content
+
+// simple prompts
+?content.2: (old_content | new_content | plain | specialchars)*
+?content_choice.2: (old_content | new_content | plain_choice | specialchars_choice)*
+?content_var.2: (old_content | new_content | plain_var | specialchars_var)*
+?content_negtag.2: (old_content | new_content_negtag | plain | specialchars_negtag)*
+?content_alternate.2: (old_content | new_content | plain_alternate | specialchars_alternate)*
+?old_content.2: (emphasized | deemphasized | scheduled | alternate | extranetworktag)+
+?new_content.3: (variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices)+
+?new_content_negtag.3: (variableset | variableuse | commandset | commandecho | commandif | wildcard | choices)+
+
+// attention modifiers
+emphasized: "(" content [":" numpar] ")"
+deemphasized: "[" content "]"
+
+// prompt scheduling and alternation
+alternate: "[" alternateoption ("|" alternateoption)+ "]"
+alternateoption: content_alternate
+scheduled: "[" [content ":"] content ":" numpar "]"
+
+// extra network tags
+extranetworktag: "<" /(?!ppp:)[^>]+/ ">"
+
+// command: stn (send to negative)
+commandstn: "<ppp:stn" [_WHITESPACE /s|e|p\d/] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
+commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ">"
+
+// command: if
+commandif.2: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
+commandif_if: "<ppp:if" _WHITESPACE condition _WHITESPACE? ">" ifvalue
+commandif_elif: "<ppp:elif" _WHITESPACE condition _WHITESPACE? ">" ifvalue
+commandif_else: "<ppp:else" _WHITESPACE? ">" ifvalue
+ifvalue: content
+
+// conditions
+condition: conditionsimplevalue | conditionlistvalue | conditionnocomparison
+conditionnocomparison: (/not/ _WHITESPACE)? IDENTIFIER
+conditionsimplevalue: (/not/ _WHITESPACE)? IDENTIFIER _WHITESPACE (/not/ _WHITESPACE)? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
+conditionlistvalue: (/not/ _WHITESPACE)? IDENTIFIER _WHITESPACE (/not/ _WHITESPACE)? /contains|in/ _WHITESPACE listvalue
+IDENTIFIER: CNAME
+SIMPLEVALUE: STRING | INT | BOOLEAN
+listvalue: "(" _WHITESPACE? SIMPLEVALUE (_WHITESPACE? "," _WHITESPACE? SIMPLEVALUE)* _WHITESPACE? ")"
+
+// command: set
+commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ _WHITESPACE? /evaluate/ ] [ _WHITESPACE? /add/ ] _WHITESPACE? ">" content "<ppp:/set>"
+
+// command: echo
+commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ">" [ content "<ppp:/echo>" ]
+
+// variable set
+variableset.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [/\+/] "=" [/!/] varvalue "}"
+
+// variable use
+variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [":" varvalue] "}"
+varvalue: content_var
+
+// wildcards
+wildcard.2: "__" [choicesoptions_sampler | (choicesoptions _WHITESPACE? "$$")] /(?:(?!__|\$\$|\()\S)+/ [ wildcard_var ] "__"
+wildcard_var: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
+
+// choices
+choices.2: "{" [choicesoptions_sampler | (choicesoptions _WHITESPACE? "$$")] choice ("|" choice)* "}"
+
+choicesoptions: [choicesoptions_sampler] [_WHITESPACE? choicesoptions_rep] (([_WHITESPACE? choicesoptions_from] "-" [_WHITESPACE? choicesoptions_to]) | [_WHITESPACE? choicesoptions_num] ) [_WHITESPACE? choicesoptions_sep]
+choicesoptions_sampler: /[~@]/ // ~ for random, @ for cyclical
+choicesoptions_rep: /r/
+choicesoptions_num: INT
+choicesoptions_from: INT
+choicesoptions_to: INT
+choicesoptions_sep: "$$" plain
+
+choice: [[_WHITESPACE? choiceweight] [_WHITESPACE? choiceif] _WHITESPACE? "::"] choicevalue
+choiceweight: NUMBER
+choiceif: "if" _WHITESPACE condition
+choicevalue: content_choice

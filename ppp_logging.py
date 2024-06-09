@@ -1,6 +1,13 @@
+from enum import Enum
 import logging
 import sys
 import copy
+
+
+class DEBUG_LEVEL(Enum):
+    none = "none"
+    minimal = "minimal"
+    full = "full"
 
 
 class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
@@ -42,7 +49,7 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record = copy.copy(record)
             levelname = colored_record.levelname
             seq = self.COLORS.get(levelname, self.COLORS["RESET"])
-            colored_record.levelname = f"{seq}{levelname}{self.COLORS['RESET']}"
+            colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
     def __init__(self):
@@ -61,9 +68,9 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
         ppplog.propagate = False
         if not ppplog.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(self.ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+            handler.setFormatter(self.ColoredFormatter("%(asctime)s %(levelname)s %(message)s")) # Used in A1111 / Forge / reForge / ComfyUI, but not in SD.Next
             ppplog.addHandler(handler)
-        ppplog.setLevel(logging.INFO)
+        ppplog.setLevel(logging.DEBUG)
         self.log = PromptPostProcessorLogCustomAdapter(ppplog)
 
 
@@ -76,12 +83,10 @@ class PromptPostProcessorLogCustomAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
         """
         Process the log message and keyword arguments.
-
         Args:
             msg (str): The log message.
             kwargs (dict): The keyword arguments.
-
         Returns:
             tuple: A tuple containing the processed log message and keyword arguments.
         """
-        return f"[PromptPostProcessor] {msg}", kwargs
+        return f"[PPP] {msg}", kwargs
