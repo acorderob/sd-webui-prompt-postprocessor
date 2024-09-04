@@ -45,13 +45,6 @@ class PromptPostProcessorComfyUINode:
                         "forceInput": True,
                     },
                 ),
-                "seed": (
-                    "INT",
-                    {
-                        "default": None,
-                        "forceInput": False,
-                    },
-                ),
                 "pos_prompt": (
                     "STRING",
                     {
@@ -70,6 +63,13 @@ class PromptPostProcessorComfyUINode:
                 ),
             },
             "optional": {
+                "seed": (
+                    "INT",
+                    {
+                        "default": -1,
+                        "forceInput": False,
+                    },
+                ),
                 "debug_level": (
                     [e.value for e in DEBUG_LEVEL],
                     {

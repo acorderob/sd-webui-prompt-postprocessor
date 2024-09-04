@@ -23,7 +23,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
 
     NAME = "Prompt Post-Processor"
-    VERSION = (2, 5, 0)
+    VERSION = (2, 5, 1)
 
     class IFWILDCARDS_CHOICES(Enum):
         ignore = "ignore"
@@ -74,7 +74,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.wil_process_wildcards = options.get("process_wildcards", True)
         self.wil_keep_choices_order = options.get("keep_choices_order", False)
         self.wil_choice_separator = options.get("choice_separator", self.DEFAULT_CHOICE_SEPARATOR)
-        self.wil_ifwildcards = self.IFWILDCARDS_CHOICES(options.get("if_wildcards", self.IFWILDCARDS_CHOICES.ignore.value))
+        self.wil_ifwildcards = self.IFWILDCARDS_CHOICES(
+            options.get("if_wildcards", self.IFWILDCARDS_CHOICES.ignore.value)
+        )
         # Send to negative options
         self.stn_ignore_repeats = options.get("stn_ignore_repeats", True)
         self.stn_join_attention = options.get("stn_join_attention", True)
@@ -405,6 +407,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             tuple: A tuple containing the processed prompt and negative prompt.
         """
         try:
+            if seed == -1:
+                seed = np.random.randint(0, 2**32)
             self.rng = np.random.default_rng(seed & 0xFFFFFFFF)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
