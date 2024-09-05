@@ -23,7 +23,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
 
     NAME = "Prompt Post-Processor"
-    VERSION = (2, 5, 1)
+    VERSION = (2, 5, 2)
 
     class IFWILDCARDS_CHOICES(Enum):
         ignore = "ignore"

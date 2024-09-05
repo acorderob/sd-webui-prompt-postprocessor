@@ -150,7 +150,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
             "pony_substrings": getattr(opts, "ppp_gen_ponysubstrings", PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS),
-            "process_wildcards": getattr(opts, "ppp_wil_process_wildcards", True),
+            "process_wildcards": getattr(opts, "ppp_wil_processwildcards", True),
             "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
             "keep_choices_order": getattr(opts, "ppp_wil_keep_choices_order", False),
