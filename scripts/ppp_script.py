@@ -101,44 +101,53 @@ class PromptPostProcessorA1111Script(scripts.Script):
             return
         if self.ppp_debug_level != DEBUG_LEVEL.none:
             self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})")
-        model_info = {
+        app = (
+            "forge"
+            if hasattr(p.sd_model, "model_config")
+            else "sdnext" if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd") else "a1111"
+        )
+        env_info = {
+            "app": app,
             "models_path": models_path,
-            "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),  # path is absolute
+            "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
+            "model_class": "",
             "is_sd1": False,  # Stable Diffusion 1
             "is_sd2": False,  # Stable Diffusion 2
             "is_sdxl": False,  # Stable Diffusion XL
             "is_ssd": False,  # Segmind Stable Diffusion 1B
             "is_sd3": False,  # Stable Diffusion 3
             "is_flux": False,  # Flux
+            "is_auraflow": False,  # AuraFlow
         }
-        app = (
-            "forge"
-            if hasattr(p.sd_model, "model_config")
-            else "sdnext" if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd") else "a1111"
-        )
         if app == "sdnext":
-            # cannot differenciate SD1 and SD2, we set True to both
+            # cannot differentiate SD1 and SD2, we set True to both
             # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
-            model_info["is_sd1"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
-            model_info["is_sd2"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
-            model_info["is_sdxl"] = p.sd_model.__class__.__name__ == "StableDiffusionXLPipeline"
-            model_info["is_ssd"] = False  # ?
-            model_info["is_sd3"] = p.sd_model.__class__.__name__ == "StableDiffusion3Pipeline"
-            model_info["is_flux"] = False
+            env_info["model_class"] = p.sd_model.__class__.__name__
+            env_info["is_sd1"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
+            env_info["is_sd2"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
+            env_info["is_sdxl"] = p.sd_model.__class__.__name__ == "StableDiffusionXLPipeline"
+            env_info["is_ssd"] = False  # ?
+            env_info["is_sd3"] = p.sd_model.__class__.__name__ == "StableDiffusion3Pipeline"
+            env_info["is_flux"] = p.sd_model.__class__.__name__ == "FluxPipeline"
+            env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
         elif app == "forge":
-            model_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            model_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            model_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            model_info["is_ssd"] = False  # ?
-            model_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-            model_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
+            env_info["model_class"] = p.sd_model.model_config.__class__.__name__
+            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
+            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
+            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
+            env_info["is_ssd"] = False  # ?
+            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
+            env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
+            env_info["is_auraflow"] = False # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
         else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
-            model_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            model_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            model_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            model_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
-            model_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-            model_info["is_flux"] = False
+            env_info["model_class"] = p.sd_model.__class__.__name__
+            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
+            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
+            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
+            env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
+            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
+            env_info["is_flux"] = False
+            env_info["is_auraflow"] = False
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
@@ -156,7 +165,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "keep_choices_order": getattr(opts, "ppp_wil_keep_choices_order", False),
             "stn_separator": getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),
             "stn_ignore_repeats": getattr(opts, "ppp_stn_ignorerepeats", True),
-            "stn_join_attention": getattr(opts, "ppp_stn_joinattention", True),
             "cleanup_extra_spaces": getattr(opts, "ppp_cup_extraspaces", True),
             "cleanup_empty_constructs": getattr(opts, "ppp_cup_emptyconstructs", True),
             "cleanup_extra_separators": getattr(opts, "ppp_cup_extraseparators", True),
@@ -166,13 +174,14 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "cleanup_ands": getattr(opts, "ppp_cup_ands", True),
             "cleanup_ands_eol": getattr(opts, "ppp_cup_ands_eol", False),
             "cleanup_extranetwork_tags": getattr(opts, "ppp_cup_extranetworktags", False),
+            "cleanup_merge_attention": getattr(opts, "ppp_cup_mergeattention", True),
             "remove_extranetwork_tags": getattr(opts, "ppp_rem_removeextranetworktags", False),
         }
         self.wildcards_obj.refresh_wildcards(
             self.ppp_debug_level, wildcards_folders if options["process_wildcards"] else None
         )
         ppp = PromptPostProcessor(
-            self.ppp_logger, self.ppp_interrupt, model_info, options, self.grammar_content, self.wildcards_obj
+            self.ppp_logger, self.ppp_interrupt, env_info, options, self.grammar_content, self.wildcards_obj
         )
         prompts_list = []
 
@@ -418,14 +427,6 @@ def on_ui_settings():
             section=section,
         ),
     )
-    shared.opts.add_option(
-        key="ppp_stn_joinattention",
-        info=shared.OptionInfo(
-            True,
-            label="Join attention modifiers (weights) when possible",
-            section=section,
-        ),
-    )
     # clean-up settings
     shared.opts.add_option(
         key="ppp_cup_sep",
@@ -500,6 +501,14 @@ def on_ui_settings():
         info=shared.OptionInfo(
             True,
             label="Remove extra spaces",
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_cup_mergeattention",
+        info=shared.OptionInfo(
+            True,
+            label="Merge attention modifiers (weights) when possible",
             section=section,
         ),
     )

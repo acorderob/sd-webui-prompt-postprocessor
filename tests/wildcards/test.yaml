@@ -6,10 +6,16 @@ yaml:
 
   wildcard2:
     - ~r2-3$$-
-    - 4::choice1
+    - "'label1,label2'4::choice1"
     - "3:: choice2 "
-    - 2::choice3
+    - "'label1,label3'2::choice3"
     - 5 if _is_sd1::choice4
+
+  wildcard2bis:
+    - __1$$yaml/wildcard2'^yaml/wildcard2bis'__bis
+
+  wildcard2bisbis:
+    - __1$$yaml/wildcard2bis'#^yaml/wildcard2bisbis'__bis
 
   wildcard3:
     - __2$$,$$yaml/wildcard2__
@@ -23,3 +29,8 @@ yaml:
     - { weight: 3, content: choice2 }
     - { text: choice3 }
     - { weight: 4, if: "_is_ssd", text: choice4 }
+
+  wildcard7:
+    - <lora:test1:1>
+    - <lora:test2:1>
+    - <lora:test3:1>

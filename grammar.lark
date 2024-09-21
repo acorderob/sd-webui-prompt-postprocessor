@@ -1,8 +1,10 @@
 %import common (LETTER, DIGIT, INT, CNAME, SIGNED_NUMBER, NUMBER)
 
-_WHITESPACE: /\s+/
-STRING:      /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
-BOOLEAN:     /true|false/i
+_WHITESPACE:   /\s+/
+STRING:        /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
+BOOLEAN:       /true|false/i
+INDEX:         INT | IDENTIFIER
+WILDCARD_NAME: /(?:(?!__|\$\$|[('"])\S)+/
 
 // plain text and weights
 ?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
@@ -19,33 +21,33 @@ BOOLEAN:     /true|false/i
 start: promptcomp | content
 
 // prompt composition with AND
-promptcomp.4: promptcomppart ([":" numpar] (/\bAND\b/ promptcomppart [":" numpar])+)+
+promptcomp.4: promptcomppart ( [ ":" numpar ] ( /\bAND\b/ promptcomppart [ ":" numpar ] )+ )+
 promptcomppart: content
 
 // simple prompts
-?content.2: (old_content | new_content | plain | specialchars)*
-?content_choice.2: (old_content | new_content | plain_choice | specialchars_choice)*
-?content_var.2: (old_content | new_content | plain_var | specialchars_var)*
-?content_negtag.2: (old_content | new_content_negtag | plain | specialchars_negtag)*
-?content_alternate.2: (old_content | new_content | plain_alternate | specialchars_alternate)*
-?old_content.2: (emphasized | deemphasized | scheduled | alternate | extranetworktag)+
-?new_content.3: (variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices)+
-?new_content_negtag.3: (variableset | variableuse | commandset | commandecho | commandif | wildcard | choices)+
+?content.2: ( old_content | new_content | plain | specialchars )*
+?inside_content.2: ( new_content | plain | specialchars )*
+?content_choice.2: ( old_content | new_content | plain_choice | specialchars_choice )*
+?content_var.2: ( old_content | new_content | plain_var | specialchars_var )*
+?content_negtag.2: ( old_content | new_content_negtag | plain | specialchars_negtag )*
+?content_alternate.2: ( old_content | new_content | plain_alternate | specialchars_alternate )*
+?old_content.2: ( attention | scheduled | alternate | extranetworktag )+
+?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices )+
+?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard | choices )+
 
 // attention modifiers
-emphasized: "(" content [":" numpar] ")"
-deemphasized: "[" content "]"
+attention: ( "(" content [ ":" numpar ] ")" ) | ( "[" content "]" )
 
 // prompt scheduling and alternation
-alternate: "[" alternateoption ("|" alternateoption)+ "]"
+alternate: "[" alternateoption ( "|" alternateoption )+ "]"
 alternateoption: content_alternate
-scheduled: "[" [content ":"] content ":" numpar "]"
+scheduled: "[" [ content ":" ] content ":" numpar "]"
 
 // extra network tags
-extranetworktag: "<" /(?!ppp:)[^>]+/ ">"
+extranetworktag: "<" /(?!ppp:)\w+:/ inside_content ">"
 
 // command: stn (send to negative)
-commandstn: "<ppp:stn" [_WHITESPACE /s|e|p\d/] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
+commandstn: "<ppp:stn" [ _WHITESPACE /s|e|p\d/ ] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
 commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ">"
 
 // command: if
@@ -57,12 +59,12 @@ ifvalue: content
 
 // conditions
 condition: conditionsimplevalue | conditionlistvalue | conditionnocomparison
-conditionnocomparison: (/not/ _WHITESPACE)? IDENTIFIER
-conditionsimplevalue: (/not/ _WHITESPACE)? IDENTIFIER _WHITESPACE (/not/ _WHITESPACE)? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
-conditionlistvalue: (/not/ _WHITESPACE)? IDENTIFIER _WHITESPACE (/not/ _WHITESPACE)? /contains|in/ _WHITESPACE listvalue
+conditionnocomparison: ( /not/ _WHITESPACE )? IDENTIFIER
+conditionsimplevalue: ( /not/ _WHITESPACE )? IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
+conditionlistvalue: ( /not/ _WHITESPACE )? IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
 IDENTIFIER: CNAME
-SIMPLEVALUE: STRING | INT | BOOLEAN
-listvalue: "(" _WHITESPACE? SIMPLEVALUE (_WHITESPACE? "," _WHITESPACE? SIMPLEVALUE)* _WHITESPACE? ")"
+SIMPLEVALUE: STRING | NUMBER | BOOLEAN
+listvalue: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLEVALUE )* _WHITESPACE? ")"
 
 // command: set
 commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ _WHITESPACE? /evaluate/ ] [ _WHITESPACE? /add/ ] _WHITESPACE? ">" content "<ppp:/set>"
@@ -71,20 +73,23 @@ commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ _WHITESPACE? /evaluate/ ] [ _WHI
 commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ">" [ content "<ppp:/echo>" ]
 
 // variable set
-variableset.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [/\+/] "=" [/!/] varvalue "}"
+variableset.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ /\+/ ] "=" [ /!/ ] varvalue "}"
 
 // variable use
-variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [":" varvalue] "}"
+variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ ":" varvalue ] "}"
 varvalue: content_var
 
 // wildcards
-wildcard.2: "__" [choicesoptions_sampler | (choicesoptions _WHITESPACE? "$$")] /(?:(?!__|\$\$|\()\S)+/ [ wildcard_var ] "__"
-wildcard_var: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
+wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] WILDCARD_NAME [ wc_filter ] [ wildcardvar ] "__"
+wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ WILDCARD_NAME ) ) /["']/
+wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
+wc_filter_and: INDEX ( _WHITESPACE? "+" _WHITESPACE? INDEX )*
+wildcardvar: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
 
 // choices
-choices.2: "{" [choicesoptions_sampler | (choicesoptions _WHITESPACE? "$$")] choice ("|" choice)* "}"
+choices.2: "{" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] choice ( "|" choice )* "}"
 
-choicesoptions: [choicesoptions_sampler] [_WHITESPACE? choicesoptions_rep] (([_WHITESPACE? choicesoptions_from] "-" [_WHITESPACE? choicesoptions_to]) | [_WHITESPACE? choicesoptions_num] ) [_WHITESPACE? choicesoptions_sep]
+choicesoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_rep ] ( ( [ _WHITESPACE? choicesoptions_from ] "-" [ _WHITESPACE? choicesoptions_to ] ) | [ _WHITESPACE? choicesoptions_num ] ) [ _WHITESPACE? choicesoptions_sep ]
 choicesoptions_sampler: /[~@]/ // ~ for random, @ for cyclical
 choicesoptions_rep: /r/
 choicesoptions_num: INT
@@ -92,7 +97,9 @@ choicesoptions_from: INT
 choicesoptions_to: INT
 choicesoptions_sep: "$$" plain
 
-choice: [[_WHITESPACE? choiceweight] [_WHITESPACE? choiceif] _WHITESPACE? "::"] choicevalue
+choice: [ [ _WHITESPACE? choicelabels ] [ _WHITESPACE? choiceweight ] [ _WHITESPACE? choiceif ] _WHITESPACE? "::" ] choicevalue
+choicelabels: /["']/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /["']/
 choiceweight: NUMBER
 choiceif: "if" _WHITESPACE condition
 choicevalue: content_choice
+

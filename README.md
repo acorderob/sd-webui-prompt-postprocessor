@@ -1,6 +1,6 @@
-# Prompt Postprocessor for Stable Diffusion WebUI and ComfyUI
+# Prompt PostProcessor for Stable Diffusion WebUI and ComfyUI
 
-The Prompt Postprocessor, formerly known as "sd-webui-sendtonegative", is an extension designed to process the prompt, possibly after other extensions have modified it. This extension is compatible with:
+The Prompt PostProcessor (PPP), formerly known as "sd-webui-sendtonegative", is an extension designed to process the prompt, possibly after other extensions have modified it. This extension is compatible with:
 
 * [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 * [SD.Next](https://github.com/vladmandic/automatic).
@@ -19,6 +19,8 @@ Currently this extension has these functions:
 
 Note: when used in an A1111 compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension). Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out. When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
+If the extension runs before others, like Dynamic Prompts, and the "Process wildcards" is enabled, the wildcards will be processed by PPP and those extensions will not get them. If you disable processing the wildcards, and intend another extension to process them, you should keep the "What to do with remaining wildcards?" option as "ignore".
+
 Notes:
 
 1. Other than its own commands, it only recognizes regular A1111 prompt formats. So:
@@ -31,7 +33,9 @@ Notes:
     * **Composable Diffusion**: `prompt1:weight1 AND prompt2:weight2`
 
     In SD.Next that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
-2. It recognizes wildcards in the *\_\_wildcard\_\_* and *{choice|choice}* formats (and anything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
+
+    Does not recognize tokenizer separators like "TE2:" and "TE3:", so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
+2. It recognizes wildcards in the *\_\_wildcard\_\_* and *{choice|choice}* formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
 3. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 
 ## Installation
@@ -90,8 +94,9 @@ The construct parameters can be written with the following options (all are opti
 
 The choice options are as follows:
 
-* "**n**": weight of the choice (default 1)
-* "**if condition**": filters out the choice if the condition is false (this is an extension to the Dynamic Prompts syntax). Same conditions as in the `if` command.
+* "**'identifiers'**": comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
+* "**n**": weight of the choice (optional, default 1).
+* "**if condition**": filters out the choice if the condition is false (optional; this is an extension to the Dynamic Prompts syntax). Same conditions as in the `if` command.
 * "**::**": end of choice options
 
 Whitespace is allowed between parameters.
@@ -109,32 +114,51 @@ These are examples of formats you can use to insert a choice construct:
 Notes:
 
 * The Dynamic Prompts format `{2$$__flavours__}` does not work as expected. It will only output one value. You can write is as `{r2$$__flavours__}` to get two values, but they may repeat since the evaluation of the wildcard is independent of the choices selection.
-* Whitespace in the choices is not ignored like in Dynamic Prompts, but will be cleaned up if the appropiate settings are checked.
+* Whitespace in the choices is not ignored like in Dynamic Prompts, but will be cleaned up if the appropriate settings are checked.
 
 ### Wildcards
 
 The generic format is:
 
 ```text
-__parameters$$path/to/wildcard(var=value)__
+__parameters$$wildcard'filter'(var=value)__
 ```
 
-The parameters and the setting of a variable are optional. The parameters follow the same format as for the choices. The variable value only applies during the evaluation of the selected choices and is discarded afterward (the variable keeps its original value if there was one).
+The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-In the wildcard definition (which supports the text, json and yaml formats), if the first choice follows the format of these parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct. If using the object format for a choice you can use a new "if" property for the condition in addition to the standard "weight" and "text"/"content".
+The wildcard identifier can contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them.
 
-Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
+The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index) or choice label. You can also compound them with "+". That is, the comma separated items act as an OR and the "+" inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify "^wildcard" as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with "#" and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use "#" and "^" when you want to pass a filter to inner wildcards (see the test files).
+
+The variable value only applies during the evaluation of the selected choices and is discarded afterward (the variable keeps its original value if there was one).
 
 These are examples of formats you can use to insert a wildcard:
 
 ```text
-__path/wildcard__            # select 1 choice
-__3$$path/wildcard__         # select 3 choices
-__2-3$$path/wildcard__       # select 2 to 3 choices
-__r2-3$$path/wildcard__      # select 2 to 3 choices allowing repetition
-__2-3$$ / $$path/wildcard__  # select 2 to 3 choices with separator " / "
-__path/wildcard(var=value)__ # select 1 choice using the specified variable value in the evaluation.
+__path/wildcard__                  # select 1 choice
+__path/wildcard'0'__               # select the first choice
+__path/wildcard'label'__           # select the choices with label "label"
+__path/wildcard'0,label1,label2'__ # select the first choice and those with labels "label1" or "label2"
+__path/wildcard'0,label1+label2'__ # select the first choice and those with both labels "label1" and "label2"
+__3$$path/wildcard__               # select 3 choices
+__2-3$$path/wildcard__             # select 2 to 3 choices
+__r2-3$$path/wildcard__            # select 2 to 3 choices allowing repetition
+__2-3$$ / $$path/wildcard__        # select 2 to 3 choices with separator " / "
+__path/wildcard(var=value)__       # select 1 choice using the specified variable value in the evaluation.
 ```
+
+#### Wildcard definitions
+
+A wildcard definition can be:
+
+* A txt file. The wildcard name will be the relative path of the file, without the extension. Each line will be a choice. Lines starting with "#" or empty are ignored.
+* An array or string inside a json or yaml file. The wildcard name includes the relative folder path of the file (without the name or extension) but also the path of the object inside the file.
+
+In a choice, the content after a "#" is ignored.
+
+If the first choice follows the format of wildcard parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of **Dynamic Prompts** (only in structured files). If using the object format for a choice you can use a new "if" property for the condition in addition to the standard "weight" and "text"/"content".
+
+Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
 #### Detection of remaining wildcards
 
@@ -161,7 +185,7 @@ The Dynamic Prompts format also works:
 
 ```text
 ${var=value}
-${var=!value}   # immmediate evaluation
+${var=!value}   # immediate evaluation
 ```
 
 If also supports the addition as an extension of the Dynamic Prompts format:
@@ -217,9 +241,10 @@ For a list of values the allowed operations are `contains`, `in` and the value o
 
 The variable can be one set with the `set` or `add` commands or you can use internal variables like these (names starting with an underscore are reserved):
 
-* `_sd` : the loaded model version (`"sd1"`, `"sd2"`, `"sdxl"`)
-* `_sdname` : the loaded model filename (without path)
-* `_sdfullname`: the loaded model filename (with path)
+* `_model` : the loaded model identifier (`"sd1"`, `"sd2"`, `"sdxl"`, `"sd3"`, `"flux"`, `"auraflow"`). `_sd` also works but is deprecated.
+* `_modelname` : the loaded model filename (without path). `_sdname` also works but is deprecated.
+* `_modelfullname`: the loaded model filename (with path). `_sdfullname` also works but is deprecated.
+* `_modelclass`: the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables.
 * `_is_sd`: true if the loaded model version is any version of SD
 * `_is_sd1`: true if the loaded model version is SD 1.x
 * `_is_sd2`: true if the loaded model version is SD 2.x
@@ -230,6 +255,7 @@ The variable can be one set with the `set` or `add` commands or you can use inte
 * `_is_sdxl_no_pony`: true if the loaded model version is SDXL and not a Pony model.
 * `_is_sd3`: true if the loaded model version is SD 3.x
 * `_is_flux`: true if the loaded model is Flux
+* `_is_auraflow`: true if the loaded model is AuraFlow
 
 Any `elif`s (there can be multiple) and the `else` are optional.
 
@@ -296,8 +322,8 @@ The content of the negative commands is not processed and is copied as-is to the
 They will be translated to the negative prompt. For example:
 
 * `(red<ppp:stn>square<ppp:/stn>:1.5)` will end up as `(square:1.5)` in the negative prompt
-* `(red[<ppp:stn>square<ppp:/stn>]:1.5)` will end up as `(square:1.35)` in the negative prompt (weight=1.5*0.9)
-* However `(red<ppp:stn>[square]<ppp:/stn>:1.5)` will end up as `([square]:1.5)` in the negative prompt. The content of the negative tag is copied as is, and not joined with the surrounding modifier.
+* `(red[<ppp:stn>square<ppp:/stn>]:1.5)` will end up as `(square:1.35)` in the negative prompt (weight=1.5*0.9) if the merge attention option is enabled or `([square]:1.5)` otherwise.
+* However `(red<ppp:stn>[square]<ppp:/stn>:1.5)` will end up as `([square]:1.5)` in the negative prompt. The content of the negative tag is copied as is, and is not merged with the surrounding modifier because the insertions happen after the attention merging.
 
 #### Prompt editing constructs (alternation and scheduling)
 
@@ -332,7 +358,6 @@ This should still work as intended, and the only negative point i see is the unn
 
 * **Separator used when adding to the negative prompt**: you can specify the separator used when adding to the negative prompt (by default it's ", ").
 * **Ignore repeated content**: it ignores repeated content to avoid repetitions in the negative prompt.
-* **Join attention modifiers (weights) when possible**: it joins attention modifiers when possible (joins into one, multipliying their values).
 
 ### Clean up settings
 
@@ -344,6 +369,7 @@ This should still work as intended, and the only negative point i see is the unn
 * **Clean up around ANDs**: removes consecutive ANDs and unnecessary commas and space around them.
 * **Use EOL instead of Space before ANDs**: add a newline before ANDs.
 * **Clean up around extra network tags**: removes spaces around them.
+* **Merge attention modifiers (weights) when possible**: it merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested modifiers.
 * **Remove extra spaces**: removes other unnecessary spaces.
 
 ### Content removal settings

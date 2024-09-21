@@ -1,9 +1,20 @@
+import fnmatch
 import os
 import json
 from typing import Optional
 import yaml
 
 from ppp_logging import DEBUG_LEVEL
+
+
+class PPPWildcard:
+
+    def __init__(self, fullpath: str, key: str, choices: list[str]):
+        self.key: str = key
+        self.file: str = fullpath
+        self.choices: list[str] = choices
+        self.choices_obj: list[object] = None
+        self.options_obj: object = None
 
 
 class PPPWildcards:
@@ -14,7 +25,7 @@ class PPPWildcards:
         self.logger = logger
         self.debug_level = DEBUG_LEVEL.none
         self.wildcards_folders = []
-        self.wildcards = {}
+        self.wildcards: dict[str, PPPWildcard] = {}
         self.wildcard_files = {}
 
     def refresh_wildcards(self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]]):
@@ -27,7 +38,7 @@ class PPPWildcards:
             # if self.debug_level != DEBUG_LEVEL.none:
             #     self.logger.info("Initializing wildcards...")
             # t1 = time.time()
-            for fullpath in self.wildcard_files.keys():
+            for fullpath in list(self.wildcard_files.keys()):
                 path = os.path.dirname(fullpath)
                 if not os.path.exists(fullpath) or not any(
                     os.path.commonpath([path, folder]) == folder for folder in self.wildcards_folders
@@ -42,6 +53,10 @@ class PPPWildcards:
             self.wildcards_folders = []
             self.wildcards = {}
             self.wildcard_files = {}
+
+    def get_wildcards(self, key: str) -> list[PPPWildcard]:
+        keys = sorted(fnmatch.filter(self.wildcards.keys(), key))
+        return [self.wildcards[k] for k in keys]
 
     def __get_keys_in_dict(self, dictionary: dict, prefix="") -> list[str]:
         """
@@ -81,20 +96,21 @@ class PPPWildcards:
                 return None
         return current_dict
 
-    def __remove_wildcards_from_file(self, full_path: str):
+    def __remove_wildcards_from_file(self, full_path: str, debug=True):
         """
         Clear all wildcards in a file.
 
         Args:
             full_path (str): The path to the file.
+            debug (bool): Whether to print debug messages or not.
         """
         last_modified_cached = self.wildcard_files.get(full_path, None)
-        if last_modified_cached is not None and self.debug_level != DEBUG_LEVEL.none:
+        if debug and last_modified_cached is not None and self.debug_level != DEBUG_LEVEL.none:
             self.logger.debug(f"Removing wildcards from file: {full_path}")
         if full_path in self.wildcard_files.keys():
             del self.wildcard_files[full_path]
         for key in list(self.wildcards.keys()):
-            if self.wildcards[key]["file"] == full_path:
+            if self.wildcards[key].file == full_path:
                 del self.wildcards[key]
 
     def __get_wildcards_in_file(self, base, full_path: str):
@@ -113,7 +129,7 @@ class PPPWildcards:
         name, extension = os.path.splitext(filename)
         if extension not in (".txt", ".json", ".yaml", ".yml"):
             return
-        self.__remove_wildcards_from_file(full_path)
+        self.__remove_wildcards_from_file(full_path, False)
         if last_modified_cached is not None and self.debug_level != DEBUG_LEVEL.none:
             self.logger.debug(f"Updating wildcards from file: {full_path}")
         relfolders = os.path.relpath(os.path.dirname(full_path), base)
@@ -122,12 +138,12 @@ class PPPWildcards:
         elif relfolders != "":
             relfolders += "/"
         if extension == ".txt":
-            self.__get_wildcards_in_text_file(full_path, name, relfolders)
+            self.__get_wildcards_in_text_file(full_path, relfolders, name)
         elif extension in (".json", ".yaml", ".yml"):
-            self.__get_wildcards_in_structured_file(full_path, extension, relfolders)
+            self.__get_wildcards_in_structured_file(full_path, relfolders, extension)
         self.wildcard_files[full_path] = last_modified
 
-    def __get_wildcards_in_structured_file(self, full_path, extension, relfolders):
+    def __get_wildcards_in_structured_file(self, full_path, relfolders, extension):
         with open(full_path, "r", encoding="utf-8") as file:
             if extension == ".json":
                 content = json.loads(file.read())
@@ -136,9 +152,9 @@ class PPPWildcards:
         keys = self.__get_keys_in_dict(content)
         for key in keys:
             fullkey = f"{relfolders}{key}"
-            if self.wildcards.get(fullkey) is not None:
+            if self.wildcards.get(fullkey, None) is not None:
                 self.logger.warning(
-                    f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey]['file']}'!"
+                    f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
                 )
             else:
                 obj = self.__get_nested(content, key)
@@ -170,23 +186,23 @@ class PPPWildcards:
                 if obj is None:
                     self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
                 else:
-                    self.wildcards[fullkey] = {"file": full_path, "choices": choices}
+                    self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 
-    def __get_wildcards_in_text_file(self, full_path, name, relfolders):
+    def __get_wildcards_in_text_file(self, full_path, relfolders, name):
         with open(full_path, "r", encoding="utf-8") as file:
             text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
         fullkey = f"{relfolders}{name}"
-        if self.wildcards.get(fullkey) is not None:
+        if self.wildcards.get(fullkey, None) is not None:
             self.logger.warning(
-                f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey]['file']}'!"
+                f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
             )
         else:
             if len(text_content) == 0:
                 self.logger.warning(f"Invalid wildcard in file '{full_path}'!")
             else:
-                self.wildcards[fullkey] = {"file": full_path, "choices": text_content}
+                self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, text_content)
 
     def __get_wildcards_in_directory(self, base: str, directory: str):
         """

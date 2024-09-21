@@ -36,7 +36,6 @@ class TestPromptPostProcessor(unittest.TestCase):
             "keep_choices_order": False,
             "stn_separator": ", ",
             "stn_ignore_repeats": True,
-            "stn_join_attention": True,
             "cleanup_empty_constructs": True,
             "cleanup_extra_separators": True,
             "cleanup_extra_separators2": True,
@@ -46,15 +45,19 @@ class TestPromptPostProcessor(unittest.TestCase):
             "cleanup_ands": True,
             "cleanup_ands_eol": False,
             "cleanup_extranetwork_tags": True,
+            "cleanup_merge_attention": True,
             "remove_extranetwork_tags": False,
         }
-        self.__def_model_info = {
+        self.__def_env_info = {
+            "app": "tests",
             "is_sd1": False,
             "is_sd2": False,
             "is_sdxl": True,
             "is_ssd": False,
             "is_sd3": False,
             "is_flux": False,
+            "is_auraflow": False,
+            "model_class": "DiffusionEngine",
             "models_path": "./webui/models",
             "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
         }
@@ -73,7 +76,7 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__defppp = PromptPostProcessor(
             self.__ppp_logger,
             self.__interrupt,
-            self.__def_model_info,
+            self.__def_env_info,
             self.__defopts,
             self.__grammar_content,
             self.__wildcards_obj,
@@ -81,7 +84,7 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__nocupppp = PromptPostProcessor(
             self.__ppp_logger,
             self.__interrupt,
-            self.__def_model_info,
+            self.__def_env_info,
             {
                 **self.__defopts,
                 "cleanup_empty_constructs": False,
@@ -93,6 +96,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "cleanup_ands": False,
                 "cleanup_ands_eol": False,
                 "cleanup_extranetwork_tags": False,
+                "cleanup_merge_attention": False,
             },
             self.__grammar_content,
             self.__wildcards_obj,
@@ -167,7 +171,7 @@ class TestPromptPostProcessor(unittest.TestCase):
             ),
             PromptPair(
                 " (()), flowers , ,  ",
-                "red, (pink:1.21), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
+                "red, ((pink)), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
             ),
             ppp=self.__nocupppp,
         )
@@ -179,7 +183,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality",
             ),
             PromptPair(
-                "this is a ((test) (test:2.0):1.5) (red:1.5)", "[neg1], ([square]:1.5), normal quality, (neg2:1.65)"
+                "this is a ((test) (test:2):1.5) (red:1.5)", "[neg1], ([square]:1.5), normal quality, (neg2:1.65)"
             ),
         )
 
@@ -190,7 +194,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality",
             ),
             PromptPair(
-                "this is a (([complex|simple|regular] test)(test:2.0):1.5)",
+                "this is a (([complex|simple|regular] test)(test:2):1.5)",
                 "([neg1||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
             ),
         )
@@ -202,7 +206,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality",
             ),
             PromptPair(
-                "this is a (([complex[one|two||three|four]|simple|regular] test)(test:2.0):1.5)",
+                "this is a (([complex[one|two||three|four]|simple|regular] test)(test:2):1.5)",
                 "([neg1||]:1.65), ([[|neg12|||]||]:1.65), ([[||||(neg14)]||]:1.65), ([|neg2|]:1.65), ([||neg3]:1.65), normal quality",
             ),
         )
@@ -220,7 +224,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality, <ppp:stn i0>",
             ),
             PromptPair(
-                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
                 "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             ),
         )
@@ -232,8 +236,21 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality, <ppp:stn i0>",
             ),
             PromptPair(
-                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
                 "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
+            ),
+        )
+
+    def test_stn_inside_alternation_recursive_2(self):  # negtag inside alternation (recursive alternation)
+        self.__process(
+            PromptPair(
+                "[pos1<ppp:stn>neg1<ppp:/stn>[pos11|pos12<ppp:stn>neg12<ppp:/stn>||pos14|pos15<ppp:stn>neg15<ppp:/stn>]|pos2<ppp:stn>neg2<ppp:/stn>|pos3<ppp:stn>neg3<ppp:/stn>]",
+                "",
+            ),
+            PromptPair(
+                "[pos1[pos11|pos12||pos14|pos15]|pos2|pos3]",
+                "[neg1||], [[|neg12|||]||], [[||||neg15]||], [|neg2|], [||neg3]",
+                # "[neg1[|neg12|||neg15]|neg2|neg3]", # expected output if the constructs were unified
             ),
         )
 
@@ -242,7 +259,7 @@ class TestPromptPostProcessor(unittest.TestCase):
     def test_cl_simple(self):  # simple cleanup
         self.__process(
             PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5) (red:1.5)  ", "  normal quality  "),
-            PromptPair("this is a ((test), (test,:2.0):1.5) (red:1.5)", "normal quality"),
+            PromptPair("this is a ((test), (test,:2):1.5) (red:1.5)", "normal quality"),
         )
 
     def test_cl_complex(self):  # complex cleanup
@@ -252,32 +269,48 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "  [:hands, feet, :0.15]normal quality  ",
             ),
             PromptPair(
-                "this is BREAKABLE a ((test)) AND(<lora:test> ANDERSON (test:2.0):1.5) :o BREAK (red:1.5)",
+                "this is BREAKABLE a (test:1.21) AND(<lora:test> ANDERSON (test:2):1.5) :o BREAK (red:1.5)",
                 "[:hands, feet, :0.15]normal quality",
             ),
         )
 
     def test_cl_removenetworktags(self):  # remove network tags
         self.__process(
-            PromptPair("this is a <lora:test> test", ""),
+            PromptPair("this is a <lora:test:1> test__yaml/wildcard7__", ""),
             PromptPair("this is a test", ""),
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {**self.__defopts, "remove_extranetwork_tags": True},
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
         )
 
-    def test_cl_dontremoveseparatorsoneol(self):  # dont remove separators on eol
+    def test_cl_dontremoveseparatorsoneol(self):  # don't remove separators on eol
         self.__process(
             PromptPair("this is a test,\nsecond line", ""),
             PromptPair("this is a test,\nsecond line", ""),
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {**self.__defopts, "cleanup_extra_separators2": False},
+                self.__grammar_content,
+                self.__wildcards_obj,
+            ),
+        )
+
+    def test_cl_mergeattention(self):  # merge attention
+        self.__process(
+            PromptPair(
+                "this is (a test:1.5) of (attention (merging:1.2)) where ((this)) ((is joined:1.2)) and ([this too]:1.3)",
+                "",
+            ),
+            PromptPair(
+                "this is (a test:1.5) of (attention (merging:1.2)) where (this:1.21) (is joined:1.32) and (this too:1.17)",
+                "",
             ),
         )
 
@@ -290,7 +323,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality, <ppp:stn i0>",
             ),
             PromptPair(
-                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
                 "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             ),
         )
@@ -302,7 +335,7 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality",
             ),
             PromptPair(
-                "this \\(is\\): a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK :0.5 AND hypernettrigger <hypernet:yyy>:0.3",
+                "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK :0.5 AND hypernettrigger <hypernet:yyy>:0.3",
                 "normal quality",
             ),
         )
@@ -317,10 +350,12 @@ class TestPromptPostProcessor(unittest.TestCase):
                 self.__ppp_logger,
                 self.__interrupt,
                 {
-                    **self.__def_model_info,
+                    **self.__def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
                 },
                 self.__defopts,
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
         )
 
@@ -453,6 +488,27 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__nocupppp,
         )
 
+    def test_ch_choicesinsidelora(self):  # simple choices inside a lora
+        self.__process(
+            PromptPair("<lora:test1:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
+            PromptPair("<lora:test1:1><lora:test2:0.7>", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_ch_removelorawithchoices(self):  # remove lora with choices inside
+        self.__process(
+            PromptPair("<lora:test1:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_env_info,
+                {**self.__defopts, "remove_extranetwork_tags": True},
+                self.__grammar_content,
+                self.__wildcards_obj,
+            ),
+        )
+
     # Wildcards tests
 
     def test_wc_ignore(self):  # wildcards with ignore option
@@ -462,12 +518,14 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {
                     **self.__defopts,
                     "process_wildcards": False,
                     "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
                 },
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
         )
 
@@ -478,18 +536,20 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "normal quality, <ppp:stn i0> {option1|option2}",
             ),
             PromptPair(
-                "this is: a (([complex|simple|regular] test)(test:2.0):1.5)\nBREAK with [abc:def:5]<lora:xxx:1>",
+                "this is: a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]<lora:xxx:1>",
                 "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             ),
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {
                     **self.__defopts,
                     "process_wildcards": False,
                     "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.remove.value,
                 },
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
         )
 
@@ -500,12 +560,14 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {
                     **self.__defopts,
                     "process_wildcards": False,
                     "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value,
                 },
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
         )
 
@@ -519,12 +581,14 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
                 self.__interrupt,
-                self.__def_model_info,
+                self.__def_env_info,
                 {
                     **self.__defopts,
                     "process_wildcards": False,
                     "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value,
                 },
+                self.__grammar_content,
+                self.__wildcards_obj,
             ),
             interrupted=True,
         )
@@ -592,6 +656,62 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__nocupppp,
         )
 
+    def test_wc_wildcard_filter_index(self):  # wildcard with positional index filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'2'__", ""),
+            PromptPair("the choice is: choice3-choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_label(self):  # wildcard with label filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'label1'__", ""),
+            PromptPair("the choice is: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_label2(self):  # wildcard with label filter in multiple choices
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'label2'__", ""),
+            PromptPair("the choice is: choice1-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_label3(self):  # wildcard with multiple label filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'label1,label2'__", ""),
+            PromptPair("the choice is: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_indexlabel(self):  # wildcard with mixed index and label filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'2,label2'__", ""),
+            PromptPair("the choice is: choice3-choice1", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_compound(self):  # wildcard with compound filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2'label1+label3'__", ""),
+            PromptPair("the choice is: choice3-choice3", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_compound2(self):  # wildcard with inherited compound filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2bis'#label1+label3'__", ""),
+            PromptPair("the choice is: choice3bis", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_filter_compound3(self):  # wildcard with doubly inherited compound filter
+        self.__process(
+            PromptPair("the choice is: __yaml/wildcard2bisbis'#label1+label3'__", ""),
+            PromptPair("the choice is: choice3bisbis", ""),
+            ppp=self.__nocupppp,
+        )
+
     def test_wc_nested_wildcard_text(self):  # nested text wildcard with repeating multiple choices
         self.__process(
             PromptPair("the choices are: __r3$$-$$text/wildcard3__", ""),
@@ -648,8 +768,8 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     def test_wc_wildcard_globbing(self):  # wildcard with globbing
         self.__process(
-            PromptPair("the choices are: __yaml/wildcard[12]__, __yaml/wildcard*__", ""),
-            PromptPair("the choices are: choice3-choice2, choice3-choice1- choice2 ", ""),
+            PromptPair("the choices are: __yaml/wildcard[12]__, __yaml/wildcard?__", ""),
+            PromptPair("the choices are: choice3-choice2, <lora:test2:1>- choice2 -choice3", ""),
             ppp=self.__nocupppp,
         )
 

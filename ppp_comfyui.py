@@ -50,6 +50,7 @@ class PromptPostProcessorComfyUINode:
                     {
                         "multiline": True,
                         "default": "",
+                        "dynamicPrompts": False,
                         "forceInput": True,
                     },
                 ),
@@ -58,6 +59,7 @@ class PromptPostProcessorComfyUINode:
                     {
                         "multiline": True,
                         "default": "",
+                        "dynamicPrompts": False,
                         "forceInput": True,
                     },
                 ),
@@ -136,15 +138,6 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": True,
                         "tooltip": "Ignore repeated content added to the negative prompt",
-                        "label_on": "Yes",
-                        "label_off": "No",
-                    },
-                ),
-                "stn_join_attention": (
-                    "BOOLEAN",
-                    {
-                        "default": True,
-                        "tooltip": "Merge attention in the content added to the negative prompt",
                         "label_on": "Yes",
                         "label_off": "No",
                     },
@@ -230,6 +223,15 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "cleanup_merge_attention": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "Merge nested attention constructs",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "remove_extranetwork_tags": (
                     "BOOLEAN",
                     {
@@ -272,7 +274,6 @@ class PromptPostProcessorComfyUINode:
         wc_keep_choices_order,
         stn_separator,
         stn_ignore_repeats,
-        stn_join_attention,
         cleanup_extra_spaces,
         cleanup_empty_constructs,
         cleanup_extra_separators,
@@ -282,6 +283,7 @@ class PromptPostProcessorComfyUINode:
         cleanup_ands,
         cleanup_ands_eol,
         cleanup_extranetwork_tags,
+        cleanup_merge_attention,
         remove_extranetwork_tags,
     ):
         new_run = {
@@ -298,7 +300,6 @@ class PromptPostProcessorComfyUINode:
             "keep_choices_order": wc_keep_choices_order,
             "stn_separator": stn_separator,
             "stn_ignore_repeats": stn_ignore_repeats,
-            "stn_join_attention": stn_join_attention,
             "cleanup_extra_spaces": cleanup_extra_spaces,
             "cleanup_empty_constructs": cleanup_empty_constructs,
             "cleanup_extra_separators": cleanup_extra_separators,
@@ -308,6 +309,7 @@ class PromptPostProcessorComfyUINode:
             "cleanup_ands": cleanup_ands,
             "cleanup_ands_eol": cleanup_ands_eol,
             "cleanup_extranetwork_tags": cleanup_extranetwork_tags,
+            "cleanup_merge_attention": cleanup_merge_attention,
             "remove_extranetwork_tags": remove_extranetwork_tags,
         }
         return new_run.__hash__
@@ -329,7 +331,6 @@ class PromptPostProcessorComfyUINode:
         wc_keep_choices_order,
         stn_separator,
         stn_ignore_repeats,
-        stn_join_attention,
         cleanup_extra_spaces,
         cleanup_empty_constructs,
         cleanup_extra_separators,
@@ -339,11 +340,14 @@ class PromptPostProcessorComfyUINode:
         cleanup_ands,
         cleanup_ands_eol,
         cleanup_extranetwork_tags,
+        cleanup_merge_attention,
         remove_extranetwork_tags,
     ):
-        model_info = {
+        env_info = {
+            "app": "comfyui",
             "models_path": folder_paths.models_dir,
-            "model_filename": modelname, # path is relative to checkpoints folder
+            "model_filename": modelname,  # path is relative to checkpoints folder
+            "model_class": model.model.model_config.__class__.__name__,
             "is_sd1": model.model.model_config.__class__.__name__ in ("SD15", "SD15_instructpix2pix"),
             "is_sd2": model.model.model_config.__class__.__name__ in ("SD20", "SD21UnclipL", "SD21UnclipH"),
             "is_sdxl": model.model.model_config.__class__.__name__
@@ -358,6 +362,7 @@ class PromptPostProcessorComfyUINode:
             "is_ssd": model.model.model_config.__class__.__name__ in ("SSD1B"),
             "is_sd3": model.model.model_config.__class__.__name__ in ("SD3"),
             "is_flux": model.model.model_config.__class__.__name__ in ("Flux"),
+            "is_auraflow": model.model.model_config.__class__.__name__ in ("AuraFlow"),
         }
         # SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler,
         # Stable_Cascade_C, Stable_Cascade_B, StableAudio
@@ -380,7 +385,6 @@ class PromptPostProcessorComfyUINode:
             "keep_choices_order": wc_keep_choices_order,
             "stn_separator": stn_separator,
             "stn_ignore_repeats": stn_ignore_repeats,
-            "stn_join_attention": stn_join_attention,
             "cleanup_extra_spaces": cleanup_extra_spaces,
             "cleanup_empty_constructs": cleanup_empty_constructs,
             "cleanup_extra_separators": cleanup_extra_separators,
@@ -390,11 +394,12 @@ class PromptPostProcessorComfyUINode:
             "cleanup_ands": cleanup_ands,
             "cleanup_ands_eol": cleanup_ands_eol,
             "cleanup_extranetwork_tags": cleanup_extranetwork_tags,
+            "cleanup_merge_attention": cleanup_merge_attention,
             "remove_extranetwork_tags": remove_extranetwork_tags,
         }
         self.wildcards_obj.refresh_wildcards(debug_level, wildcards_folders if options["process_wildcards"] else None)
         ppp = PromptPostProcessor(
-            self.logger, self.interrupt, model_info, options, self.grammar_content, self.wildcards_obj
+            self.logger, self.interrupt, env_info, options, self.grammar_content, self.wildcards_obj
         )
         pos_prompt, neg_prompt = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
         return (
