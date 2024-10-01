@@ -1,0 +1,15 @@
+[project]
+name = "sd-webui-prompt-postprocessor"
+description = "The Prompt PostProcessor (PPP), formerly known as 'sd-webui-sendtonegative', is an extension designed to process the prompt, possibly after other extensions have modified it."
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = ["lark"]
+
+[project.urls]
+Repository = "https://github.com/acorderob/sd-webui-prompt-postprocessor"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "sd-webui-prompt-postprocessor"
+Icon = ""
