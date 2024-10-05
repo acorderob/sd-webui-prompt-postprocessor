@@ -336,6 +336,14 @@ This should still work as intended, and the only negative point i see is the unn
 
 ## Configuration
 
+### ComfyUI specific inputs
+
+* **model**: Connect here the MODEL or a string with the model class name used by ComfyUI. Needed for the model kind system variables.
+* **modelname**: Name of the model. Needed for the model name system variables and detection of pony (this also requieres for the model to be SDXL).
+* **seed**: Connect here the seed used. By default it is -1 (random).
+* **pos_prompt**: Connect here the prompt text, or fill it as a widget.
+* **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
+
 ### General settings
 
 * **Debug level**: what to write to the console. Note: in SD.Next debug messages only show if you launch it with the --debug argument.
