@@ -22,8 +22,28 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     The PromptPostProcessor class is responsible for processing and manipulating prompt strings.
     """
 
+    @staticmethod
+    def get_version_from_pyproject() -> tuple:
+        """
+        Reads the version from the pyproject.toml file.
+
+        Returns:
+            tuple: A tuple containing the version numbers.
+        """
+        version_str = "0.0.0"
+        try:
+            pyproject_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pyproject.toml")
+            with open(pyproject_path, "r", encoding="utf-8") as file:
+                for line in file:
+                    if line.startswith("version = "):
+                        version_str = line.split("=")[1].strip().strip('"')
+                        break
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logging.getLogger().exception(e)
+        return tuple(map(int, version_str.split(".")))
+
     NAME = "Prompt Post-Processor"
-    VERSION = (2, 7, 0)
+    VERSION = get_version_from_pyproject()
 
     class IFWILDCARDS_CHOICES(Enum):
         ignore = "ignore"
@@ -134,6 +154,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             str: The formatted output text.
         """
         return text.encode("unicode_escape").decode("utf-8")
+
+    def isComfyUI(self) -> bool:
+        """
+        Checks if the current environment is ComfyUI.
+
+        Returns:
+            bool: True if the environment is ComfyUI, False otherwise.
+        """
+        return self.env_info.get("app", "") == "comfyui"
 
     def __init_sysvars(self):
         self.system_variables = {}
@@ -417,7 +446,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         try:
             if seed == -1:
-                seed = np.random.randint(0, 2**32)
+                seed = np.random.randint(0, 2**32, dtype=np.int64)
             self.rng = np.random.default_rng(seed & 0xFFFFFFFF)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
@@ -488,8 +517,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__ppp = ppp
             self.AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
             self.NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
-            self.__shell: list[self.AccumulatedShell] = []
-            self.__negtags: list[self.NegTag] = []
+            self.__shell: list[self.AccumulatedShell] = [] # type: ignore
+            self.__negtags: list[self.NegTag] = [] # type: ignore
             self.__already_processed: list[str] = []
             self.__is_negative = False
             self.__wildcard_filters = {}
@@ -572,19 +601,29 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 else default
             )
 
-        def __get_user_variable_value(self, name: str, default="", evaluate=True) -> str:
-            if evaluate:
-                v = self.__ppp.user_variables.get(name, default)
+        def __get_user_variable_value(self, name: str, evaluate=True, visit=False) -> str:
+            """
+            Get the value of a user variable.
+
+            Args:
+                name (str): The name of the user variable.
+                evaluate (bool): Whether to evaluate the variable.
+                visit (bool): Whether to also visit the variable (add to result).
+
+            Returns:
+                str: The value of the user variable.
+            """
+            v = self.__ppp.user_variables.get(name, None)
+            if v is not None:
+                visited = False
                 if isinstance(v, lark.Tree):
-                    v = self.__visit(v, True)
-            else:
-                v = (
-                    self.__ppp.user_variables[name]
-                    if isinstance(self.__ppp.user_variables[name], str)
-                    else self.__get_original_node_content(
-                        self.__ppp.user_variables[name], default or "not evaluated yet"
-                    )
-                )
+                    if evaluate:
+                        v = self.__visit(v, not visit)
+                        visited = visit
+                    else:
+                        v = self.__get_original_node_content(v, "not evaluated yet")
+                if visit and not visited:
+                    self.result += v
             return v
 
         def __set_user_variable_value(self, name: str, value: str):
@@ -616,7 +655,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 bool: The result of the condition evaluation.
             """
-            var_value = self.__ppp.system_variables.get(cond_var, self.__get_user_variable_value(cond_var, None))
+            var_value = self.__ppp.system_variables.get(cond_var, self.__get_user_variable_value(cond_var))
             if var_value is None:
                 var_value = ""
                 self.__ppp.logger.warning(f"Unknown variable {cond_var}")
@@ -717,6 +756,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a prompt composition construct in the tree.
             """
+            if self.__ppp.isComfyUI():
+                self.__ppp.logger.warning("Prompt composition is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             self.__visit(tree.children[0])
@@ -744,6 +785,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a scheduling construct in the tree and add it to the accumulated shell.
             """
+            if self.__ppp.isComfyUI():
+                self.__ppp.logger.warning("Prompt scheduling is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             before = tree.children[0]
@@ -778,6 +821,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process an alternation construct in the tree and add it to the accumulated shell.
             """
+            if self.__ppp.isComfyUI():
+                self.__ppp.logger.warning("Prompt alternation is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
@@ -832,7 +877,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 weight = math.floor(weight * 100) / 100  # we round to 2 decimals
                 weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
             self.__shell.append(self.AccumulatedShell("at", weight))
-            if weight == 0.9:
+            if weight == 0.9 and not self.__ppp.isComfyUI():
                 starttag = "["
                 self.result += starttag
                 self.__visit(current_tree)
@@ -947,7 +992,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 info += " = "
             self.__set_user_variable_value(variable, newvalue)
-            currentvalue = self.__get_user_variable_value(variable, None, False)
+            currentvalue = self.__get_user_variable_value(variable, False)
             if currentvalue is None:
                 info += "not evaluated yet"
             else:
@@ -973,16 +1018,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             t1 = time.time()
             start_result = self.result
-            value = self.__get_user_variable_value(variable, None)
             if default is not None:
                 default_value = self.__visit(default, True)  # for log
+            value = self.__get_user_variable_value(variable, True, True)
             if value is None:
                 if default is not None:
-                    value = self.__visit(default, False, True)
+                    self.result += self.__visit(default, False, True)
                 else:
-                    value = ""
                     self.__ppp.logger.warning(f"Unknown variable {variable}")
-            self.result += value
             t2 = time.time()
             info = variable
             if default is not None:
@@ -1237,6 +1280,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         f"Using a globbing wildcard '{wildcard_key}' with positional index filters is not recommended!"
                     )
                 var_object = tree.children[3]
+                variablebackup = None
                 if var_object is not None:
                     variablename = var_object.children[0]  # should be a token
                     variablevalue = self.__visit(var_object.children[1], False, True)

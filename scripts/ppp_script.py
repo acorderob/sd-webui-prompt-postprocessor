@@ -4,6 +4,7 @@ if __name__ == "__main__":
 import sys
 import os
 import time
+import numpy as np
 
 sys.path.append(os.path.join(sys.path[0], ".."))
 
@@ -35,6 +36,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
         ppp_interrupt(): Interrupts the generation.
         __on_ui_settings(): Callback function for UI settings.
     """
+
+    VERSION = PromptPostProcessor.VERSION
 
     def __init__(self):
         """
@@ -79,7 +82,48 @@ class PromptPostProcessorA1111Script(scripts.Script):
         """
         return scripts.AlwaysVisible
 
-    def process(self, p: StableDiffusionProcessing, *args, **kwargs):  # pylint: disable=unused-argument
+    def ui(self, is_img2img):
+        with gr.Accordion(PromptPostProcessor.NAME, open=False):
+            force_equal_seeds = gr.Checkbox(
+                label="Force equal seeds",
+                info="Force all image seeds and variation seeds to be equal to the first one, disabling the default autoincrease.",
+                default=False,
+                # show_label=True,
+                elem_id="ppp_force_equal_seeds",
+            )
+            gr.HTML(
+                """<br><div>Unlink the seed to use the specified one for the prompts instead of the image seed. 
+                This seed will only change for each image in the batch if the value is -1 or 'variable seed' is checked.</div>
+                <div>Seeds are only used for the wildcards and choice constructs.</div>"""
+            )
+            unlink_seed = gr.Checkbox(
+                label="Unlink seed",
+                default=False,
+                # show_label=True,
+                elem_id="ppp_unlink_seed",
+            )
+            seed = gr.Number(
+                label="Seed",
+                default=-1,
+                precision=0,
+                # minimum=-1,
+                # maximum=2**32 - 1,
+                # step=1,
+                # show_label=True,
+                min_width=100,
+                elem_id="ppp_seed",
+            )
+            variable_seed = gr.Checkbox(
+                label="Variable seed",
+                default=False,
+                # show_label=True,
+                elem_id="ppp_variable_seed",
+            )
+        return [force_equal_seeds, unlink_seed, seed, variable_seed]
+
+    def process(
+        self, p: StableDiffusionProcessing, input_force_equal_seeds, input_unlink_seed, input_seed, input_variable_seed
+    ):  # pylint: disable=arguments-differ
         """
         Processes the prompts and applies post-processing operations.
 
@@ -138,7 +182,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_ssd"] = False  # ?
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
             env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
-            env_info["is_auraflow"] = False # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
+            env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
         else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -185,19 +229,38 @@ class PromptPostProcessorA1111Script(scripts.Script):
         )
         prompts_list = []
 
-        seeds = getattr(p, "all_seeds", [])
-        subseeds = getattr(p, "all_subseeds", [])
-        subseed_strength = getattr(p, "subseed_strength", 0.0)
-        if subseed_strength > 0:
-            calculated_seeds = [
-                int(subseed * subseed_strength + seed * (1 - subseed_strength))
-                for seed, subseed in zip(seeds, subseeds)
-            ]
+        if input_force_equal_seeds:
+            if self.ppp_debug_level != DEBUG_LEVEL.none:
+                self.ppp_logger.info("Forcing equal seeds")
+            seeds = getattr(p, "all_seeds", [])
+            subseeds = getattr(p, "all_subseeds", [])
+            p.all_seeds = [seeds[0] for _ in seeds]
+            p.all_subseeds = [subseeds[0] for _ in subseeds]
+
+        if input_unlink_seed:
+            if self.ppp_debug_level != DEBUG_LEVEL.none:
+                self.ppp_logger.info("Using unlinked seed")
+            num_seeds = len(getattr(p, "all_seeds", []))
+            if input_seed == -1:
+                calculated_seeds = np.random.randint(0, 2**32, size=num_seeds, dtype=np.int64)
+            elif input_variable_seed:
+                calculated_seeds = [input_seed + i for i in range(num_seeds)]
+            else:
+                calculated_seeds = [input_seed for _ in range(num_seeds)]
         else:
-            calculated_seeds = seeds
-        if len(set(calculated_seeds)) < len(calculated_seeds):
-            self.ppp_logger.info("Adjusting seeds because some are equal.")
-            calculated_seeds = [seed + i for i, seed in enumerate(calculated_seeds)]
+            seeds = getattr(p, "all_seeds", [])
+            subseeds = getattr(p, "all_subseeds", [])
+            subseed_strength = getattr(p, "subseed_strength", 0.0)
+            if subseed_strength > 0:
+                calculated_seeds = [
+                    int(subseed * subseed_strength + seed * (1 - subseed_strength))
+                    for seed, subseed in zip(seeds, subseeds)
+                ]
+                # if len(set(calculated_seeds)) < len(calculated_seeds):
+                #     self.ppp_logger.info("Adjusting seeds because some are equal.")
+                #     calculated_seeds = [seed + i for i, seed in enumerate(calculated_seeds)]
+            else:
+                calculated_seeds = seeds
 
         # adds regular prompts
         rpr = getattr(p, "all_prompts", None)
@@ -223,10 +286,10 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info(f"processing prompts[{i+1}] ({prompttype})")
             if self.lru_cache.get((seed, prompt, negative_prompt)) is None:
-                pp, np = ppp.process_prompt(prompt, negative_prompt, seed)
-                self.lru_cache.put((seed, prompt, negative_prompt), (pp, np))
+                posp, negp = ppp.process_prompt(prompt, negative_prompt, seed)
+                self.lru_cache.put((seed, prompt, negative_prompt), (posp, negp))
                 # adds also the result so i2i doesn't process it unnecessarily
-                self.lru_cache.put((seed, pp, np), (pp, np))
+                self.lru_cache.put((seed, posp, negp), (posp, negp))
             elif self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("result already in cache")
 
@@ -336,7 +399,7 @@ def on_ui_settings():
     # wildcard settings
     shared.opts.add_option(
         key="ppp_wil_sep",
-        info=new_html_title('<br><h2>Wildcard settings</h2>'),
+        info=new_html_title("<br><h2>Wildcard settings</h2>"),
     )
     shared.opts.add_option(
         key="ppp_wil_processwildcards",
@@ -395,7 +458,7 @@ def on_ui_settings():
     # content removal settings
     shared.opts.add_option(
         key="ppp_rem_sep",
-        info=new_html_title('<br><h2>Content removal settings</h2>'),
+        info=new_html_title("<br><h2>Content removal settings</h2>"),
     )
     shared.opts.add_option(
         key="ppp_rem_removeextranetworktags",
@@ -409,7 +472,7 @@ def on_ui_settings():
     # send to negative settings
     shared.opts.add_option(
         key="ppp_stn_sep",
-        info=new_html_title('<br><h2>Send to Negative settings</h2>'),
+        info=new_html_title("<br><h2>Send to Negative settings</h2>"),
     )
     shared.opts.add_option(
         key="ppp_stn_separator",
@@ -430,7 +493,7 @@ def on_ui_settings():
     # clean-up settings
     shared.opts.add_option(
         key="ppp_cup_sep",
-        info=new_html_title('<br><h2>Clean-up settings</h2>'),
+        info=new_html_title("<br><h2>Clean-up settings</h2>"),
     )
     shared.opts.add_option(
         key="ppp_cup_emptyconstructs",

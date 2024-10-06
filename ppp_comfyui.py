@@ -222,7 +222,7 @@ class PromptPostProcessorComfyUINode:
                 "cleanup_breaks": (
                     "BOOLEAN",
                     {
-                        "default": True,
+                        "default": False,
                         "tooltip": "Cleanup around BREAKs",
                         "label_on": "Yes",
                         "label_off": "No",
@@ -244,7 +244,7 @@ class PromptPostProcessorComfyUINode:
                 "cleanup_ands": (
                     "BOOLEAN",
                     {
-                        "default": True,
+                        "default": False,
                         "tooltip": "Cleanup around ANDs",
                         "label_on": "Yes",
                         "label_off": "No",

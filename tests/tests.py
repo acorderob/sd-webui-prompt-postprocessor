@@ -140,6 +140,11 @@ class TestPromptPostProcessor(unittest.TestCase):
                 self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
             seed += 1
 
+    # Other tests
+
+    def test_version(self):  # reading ppp version
+        self.assertNotEqual(PromptPostProcessor.VERSION, (0, 0, 0), "Incorrect version")
+
     # Send To Negative tests
 
     def test_stn_simple(self):  # negtags with different parameters and separations
@@ -575,8 +580,8 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__process(
             PromptPair("__bad_wildcard__", "{option1|option2}"),
             PromptPair(
-                PromptPostProcessor.WILDCARD_STOP + "__bad_wildcard__",
-                PromptPostProcessor.WILDCARD_STOP + "{option1|option2}",
+                PromptPostProcessor.WILDCARD_STOP.format("__bad_wildcard__") + "__bad_wildcard__",
+                "{option1|option2}",
             ),
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
@@ -591,6 +596,24 @@ class TestPromptPostProcessor(unittest.TestCase):
                 self.__wildcards_obj,
             ),
             interrupted=True,
+        )
+
+    def test_wcinvar_warn(self):  # wildcards in var with warn option
+        self.__process(
+            PromptPair("${v=__bad_wildcard__}${v}", ""),
+            PromptPair(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                self.__def_env_info,
+                {
+                    **self.__defopts,
+                    "process_wildcards": False,
+                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value,
+                },
+                self.__grammar_content,
+                self.__wildcards_obj,
+            ),
         )
 
     def test_wc_wildcard1a_text(self):  # simple text wildcard

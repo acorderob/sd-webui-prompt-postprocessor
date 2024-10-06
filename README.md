@@ -35,6 +35,8 @@ Notes:
     In SD.Next that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
 
     Does not recognize tokenizer separators like "TE2:" and "TE3:", so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
+
+    ComfyUI only supports the attention change using parenthesis, so the ones with the braces will be converted. The extra networks constructs are not natively supported but some custom nodes do. The other constructs are not supported and will print a warning in the console.
 2. It recognizes wildcards in the *\_\_wildcard\_\_* and *{choice|choice}* formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
 3. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 
@@ -336,6 +338,13 @@ This should still work as intended, and the only negative point i see is the unn
 
 ## Configuration
 
+### A1111 (and compatible UIs) UI options
+
+* **Force equal seeds**: Changes the image seeds and variation seeds to be equal to the first of the batch. This allows using the same values for all the images in a batch.
+* **Unlink seed**: Uses the specified seed for the prompt generation instead of the one from the image.
+* **Seed**: The seed to use for the prompt generation. If -1 a random one will be used for each image in the batch. This seed is only used for wildcards and choices.
+* **Variable seed**: If the seed is not -1 you can use this to increase it for the other images in the batch.
+
 ### ComfyUI specific inputs
 
 * **model**: Connect here the MODEL or a string with the model class name used by ComfyUI. Needed for the model kind system variables.
@@ -379,6 +388,8 @@ This should still work as intended, and the only negative point i see is the unn
 * **Clean up around extra network tags**: removes spaces around them.
 * **Merge attention modifiers (weights) when possible**: it merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested modifiers.
 * **Remove extra spaces**: removes other unnecessary spaces.
+
+Please note that ComfyUI does not support the BREAK and AND constructs, but the related settings are kept in that UI.
 
 ### Content removal settings
 
