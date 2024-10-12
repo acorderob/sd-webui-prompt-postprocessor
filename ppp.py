@@ -14,7 +14,7 @@ import lark.parsers
 import numpy as np
 
 from ppp_logging import DEBUG_LEVEL
-from ppp_wildcards import PPPWildcards
+from ppp_wildcards import PPPWildcard, PPPWildcards
 
 
 class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
@@ -135,6 +135,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             grammar_content,
             propagate_positions=True,
             start="choicesoptions",
+        )
+        self.parser_condition = lark.Lark(
+            grammar_content,
+            propagate_positions=True,
+            start="condition",
+        )
+        self.parser_choicevalue = lark.Lark(
+            grammar_content,
+            propagate_positions=True,
+            start="choicevalue",
         )
         self.__init_sysvars()
         self.user_variables = {}
@@ -517,8 +527,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__ppp = ppp
             self.AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
             self.NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
-            self.__shell: list[self.AccumulatedShell] = [] # type: ignore
-            self.__negtags: list[self.NegTag] = [] # type: ignore
+            self.__shell: list[self.AccumulatedShell] = []  # type: ignore
+            self.__negtags: list[self.NegTag] = []  # type: ignore
             self.__already_processed: list[str] = []
             self.__is_negative = False
             self.__wildcard_filters = {}
@@ -756,8 +766,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a prompt composition construct in the tree.
             """
-            if self.__ppp.isComfyUI():
-                self.__ppp.logger.warning("Prompt composition is not supported in ComfyUI.")
+            # if self.__ppp.isComfyUI():
+            #     self.__ppp.logger.warning("Prompt composition is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             self.__visit(tree.children[0])
@@ -785,8 +795,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a scheduling construct in the tree and add it to the accumulated shell.
             """
-            if self.__ppp.isComfyUI():
-                self.__ppp.logger.warning("Prompt scheduling is not supported in ComfyUI.")
+            # if self.__ppp.isComfyUI():
+            #     self.__ppp.logger.warning("Prompt scheduling is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             before = tree.children[0]
@@ -821,8 +831,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process an alternation construct in the tree and add it to the accumulated shell.
             """
-            if self.__ppp.isComfyUI():
-                self.__ppp.logger.warning("Prompt alternation is not supported in ComfyUI.")
+            # if self.__ppp.isComfyUI():
+            #     self.__ppp.logger.warning("Prompt alternation is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.time()
             # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
@@ -1082,8 +1092,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         def __get_choices(
             self,
-            options: lark.Tree | None,
-            choice_values: list[lark.Tree],
+            options: dict | None,
+            choice_values: list[dict],
             filter_specifier: Optional[list[list[str]]] = None,
             wildcard_key: str = None,
         ) -> str:
@@ -1091,40 +1101,25 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Select choices based on the options.
 
             Args:
-                options (Tree): The tree object representing the options construct.
-                choice_values (list[Tree]): A list of choice tree objects.
+                options (dict): The object representing the options construct.
+                choice_values (list[dict]): A list of choice objects.
                 filter_specifier (list[list[str]]): The filter specifier.
                 wildcard_key (str): The wildcard key if it is a wildcard.
 
             Returns:
                 str: The selected choice.
             """
-            sampler: str = "~"
-            repeating: bool = False
-            from_value: int = 1
-            to_value: int = 1
-            separator: str = self.__ppp.wil_choice_separator
-            if options is not None:
-                if len(options.children) == 1:
-                    sampler = options.children[0] if options.children[0] is not None else "~"
-                else:
-                    sampler = options.children[0].children[0] if options.children[0] is not None else "~"
-                    repeating = options.children[1].children[0] == "r" if options.children[1] is not None else False
-                    if len(options.children) == 4:
-                        ifrom = 2
-                        ito = 2
-                        isep = 3
-                    else:  # 6
-                        ifrom = 2
-                        ito = 3
-                        isep = 4
-                    from_value = int(options.children[ifrom].children[0]) if options.children[ifrom] is not None else 1
-                    to_value = int(options.children[ito].children[0]) if options.children[ito] is not None else 1
-                    separator = (
-                        self.__visit(options.children[isep], False, True)
-                        if options.children[isep] is not None
-                        else self.__ppp.wil_choice_separator
-                    )
+            if options is None:
+                options = {}
+            sampler: str = options.get("sampler", "~")
+            repeating: bool = options.get("repeating", False)
+            if "count" in options:
+                from_value = options["count"]
+                to_value = from_value
+            else:
+                from_value: int = options.get("from", 1)
+                to_value: int = options.get("to", 1)
+            separator: str = options.get("separator", self.__ppp.wil_choice_separator)
             if sampler != "~":
                 msg = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
                 self.__ppp.logger.warning(f"Unsupported sampler '{sampler}' in {msg} options!")
@@ -1133,12 +1128,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if filter_specifier is not None:
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
-                    c_label_obj = c.children[0]
-                    choice_labels = (
-                        [x.value.lower() for x in c_label_obj.children[1:-1]]  # should be a token
-                        if c_label_obj is not None
-                        else []
-                    )
                     passes = False
                     for o in filter_specifier:
                         tmp_pass = True
@@ -1147,7 +1136,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 if int(a) != i:
                                     tmp_pass = False
                                     break
-                            elif a.lower() not in choice_labels:
+                            elif a.lower() not in c.get("labels", []):
                                 tmp_pass = False
                                 break
                         if tmp_pass:
@@ -1187,47 +1176,214 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
                 )
             if num_choices > 0:
-                available_choices: list[lark.Tree] = []
+                available_choices: list[dict] = []
                 weights = []
                 included_choices = 0
                 excluded_choices = 0
                 excluded_weights_sum = 0
                 for i, c in enumerate(filtered_choice_values):
-                    c.choice_index = i  # we index them to later sort the results
-                    w = float(c.children[1].children[0]) if c.children[1] is not None else 1.0
-                    if w > 0 and (c.children[2] is None or self.__evaluate_if(c.children[2].children[0])):
+                    c["choice_index"] = i  # we index them to later sort the results
+                    weight = float(c.get("weight", 1.0))
+                    theif = c.get("if", None)
+                    if weight > 0 and (theif is None or self.__evaluate_if(theif)):
                         available_choices.append(c)
-                        weights.append(w)
+                        weights.append(weight)
                         included_choices += 1
                     else:
                         weights.append(-1)
                         excluded_choices += 1
-                        excluded_weights_sum += w
+                        excluded_weights_sum += weight
                 if excluded_choices > 0:  # we need to redistribute the excluded weights
-                    weights = [w + excluded_weights_sum / included_choices for w in weights if w >= 0]
+                    weights = [weight + excluded_weights_sum / included_choices for weight in weights if weight >= 0]
                 weights = np.array(weights)
                 weights /= weights.sum()  # normalize weights
-                selected_choices: list[lark.Tree] = list(
+                selected_choices: list[dict] = list(
                     self.__ppp.rng.choice(available_choices, size=num_choices, p=weights, replace=repeating)
                 )
                 if self.__ppp.wil_keep_choices_order:
-                    selected_choices = sorted(selected_choices, key=lambda x: x.choice_index)
+                    selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
                 selected_choices_text = []
+                prefix: str = (
+                    self.__visit(options.get("prefix", None), False, True)
+                    if options.get("prefix", None) is not None
+                    else ""
+                )
                 for i, c in enumerate(selected_choices):
                     t1 = time.time()
-                    choice_content_obj = c.children[3]
-                    choice_content = self.__visit(choice_content_obj, False, True)
+                    choice_content_obj = c.get("content", c.get("text", None))
+                    if isinstance(choice_content_obj, str):
+                        choice_content = choice_content_obj
+                    else:
+                        choice_content = self.__visit(choice_content_obj, False, True)
                     t2 = time.time()
                     if self.__ppp.debug_level == DEBUG_LEVEL.full:
                         self.__ppp.logger.debug(
                             f"Adding choice {i+1} ({t2-t1:.3f} seconds):\n"
-                            + textwrap.indent(re.sub(r"\n$", "", c.pretty()), "    ")
+                            + textwrap.indent(re.sub(r"\n$", "", choice_content), "    ")
                         )
                     selected_choices_text.append(choice_content)
+                suffix: str = (
+                    self.__visit(options.get("suffix", None), False, True)
+                    if options.get("suffix", None) is not None
+                    else ""
+                )
                 # remove comments
                 results = [re.sub(r"\s*#[^\n]*(?:\n|$)", "", r, flags=re.DOTALL) for r in selected_choices_text]
-                return separator.join(results)
+                return prefix + separator.join(results) + suffix
             return ""
+
+        def __convert_choices_options(self, options: Optional[lark.Tree]) -> dict:
+            if options is None:
+                return None
+            the_options = {}
+            if len(options.children) == 1:
+                the_options["sampler"] = options.children[0] if options.children[0] is not None else "~"
+            else:
+                the_options["sampler"] = options.children[0].children[0] if options.children[0] is not None else "~"
+                the_options["repeating"] = (
+                    options.children[1].children[0] == "r" if options.children[1] is not None else False
+                )
+                if len(options.children) == 4:
+                    ifrom = 2
+                    ito = 2
+                    isep = 3
+                else:  # 6
+                    ifrom = 2
+                    ito = 3
+                    isep = 4
+                the_options["from"] = (
+                    int(options.children[ifrom].children[0]) if options.children[ifrom] is not None else 1
+                )
+                the_options["to"] = int(options.children[ito].children[0]) if options.children[ito] is not None else 1
+                the_options["separator"] = (
+                    self.__visit(options.children[isep], False, True)
+                    if options.children[isep] is not None
+                    else self.__ppp.wil_choice_separator
+                )
+            return the_options
+
+        def __convert_choice(self, choice: lark.Tree) -> dict:
+            the_choice = {}
+            c_label_obj = choice.children[0]
+            the_choice["labels"] = (
+                [x.value.lower() for x in c_label_obj.children[1:-1]]  # should be a token
+                if c_label_obj is not None
+                else []
+            )
+            the_choice["weight"] = float(choice.children[1].children[0]) if choice.children[1] is not None else 1.0
+            the_choice["if"] = choice.children[2].children[0] if choice.children[2] is not None else None
+            the_choice["content"] = choice.children[3]
+            return the_choice
+
+        def __check_wildcard_initialization(self, wildcard: PPPWildcard):
+            choice_values = wildcard.choices
+            options = wildcard.options
+            if choice_values is None:
+                t1 = time.time()
+                choice_values = []
+                n = 0
+                # we check the first choice to see if it is actually options
+                if isinstance(wildcard.unprocessed_choices[0], dict):
+                    if all(
+                        k in ["sampler", "repeating", "count", "from", "to", "prefix", "suffix", "separator"]
+                        for k in wildcard.unprocessed_choices[0].keys()
+                    ):
+                        options = wildcard.unprocessed_choices[0]
+                        prefix = options.get("prefix", None)
+                        if prefix is not None and isinstance(prefix, str):
+                            try:
+                                options["prefix"] = self.__ppp.parse_prompt(
+                                    "choicevalue", prefix, self.__ppp.parser_choicevalue, True
+                                )
+                            except lark.exceptions.UnexpectedInput as e:
+                                self.__ppp.logger.warning(
+                                    f"Error parsing choice prefix '{prefix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                )
+                                del options["prefix"]
+                        suffix = options.get("suffix", None)
+                        if suffix is not None and isinstance(suffix, str):
+                            try:
+                                options["suffix"] = self.__ppp.parse_prompt(
+                                    "choicevalue", suffix, self.__ppp.parser_choicevalue, True
+                                )
+                            except lark.exceptions.UnexpectedInput as e:
+                                self.__ppp.logger.warning(
+                                    f"Error parsing choice suffix '{suffix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                )
+                                del options["suffix"]
+                        n = 1
+                else:
+                    try:
+                        options = self.__convert_choices_options(
+                            self.__ppp.parse_prompt(
+                                "as choices options",
+                                wildcard.unprocessed_choices[0],
+                                self.__ppp.parser_choicesoptions,
+                                True,
+                            )
+                        )
+                        n = 1
+                    except lark.exceptions.UnexpectedInput:
+                        options = None
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug("Does not have options")
+                wildcard.options = options
+                # we process the choices
+                for cv in wildcard.unprocessed_choices[n:]:
+                    if isinstance(cv, dict):
+                        if all(k in ["labels", "weight", "if", "content", "text"] for k in cv.keys()):
+                            theif = cv.get("if", None)
+                            if theif is not None and isinstance(theif, str):
+                                try:
+                                    cv["if"] = self.__ppp.parse_prompt(
+                                        "condition", theif, self.__ppp.parser_condition, True
+                                    )
+                                except lark.exceptions.UnexpectedInput as e:
+                                    self.__ppp.logger.warning(
+                                        f"Error parsing condition '{theif}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                    )
+                                    cv["if"] = None
+                            content = cv.get("content", cv.get("text", None))
+                            cv["content"] = content
+                            if "text" in cv:
+                                del cv["text"]
+                            if content is not None and isinstance(content, str):
+                                try:
+                                    cv["content"] = self.__ppp.parse_prompt(
+                                        "choicevalue", content, self.__ppp.parser_choicevalue, True
+                                    )
+                                except lark.exceptions.UnexpectedInput as e:
+                                    self.__ppp.logger.warning(
+                                        f"Error parsing choice content '{content}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                    )
+                                    cv["content"] = None
+                            if cv["content"] is not None:
+                                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                                    self.__ppp.logger.debug(f"Processed choice {cv}")
+                                choice_values.append(cv)
+                            else:
+                                self.__ppp.logger.warning(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
+                        else:
+                            self.__ppp.logger.warning(f"Invalid choice '{cv}' in wildcard '{wildcard.key}'!")
+                    else:
+                        try:
+                            choice_values.append(
+                                self.__convert_choice(
+                                    self.__ppp.parse_prompt("choice", cv, self.__ppp.parser_choice, True)
+                                )
+                            )
+                        except lark.exceptions.UnexpectedInput as e:
+                            self.__ppp.logger.warning(
+                                f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                            )
+                wildcard.choices = choice_values
+                t2 = time.time()
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug(
+                        f"Processed choices for wildcard '{wildcard.key}' ({t2-t1:.3f} seconds)"
+                    )
+            return (options, choice_values)
+
 
         def wildcard(self, tree: lark.Tree):
             """
@@ -1235,7 +1391,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             t1 = time.time()
             start_result = self.result
-            options = tree.children[0]
+            applied_options = self.__convert_choices_options(tree.children[0])
             wildcard_key: str = tree.children[1].value  # should be a token
             wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
             if self.__ppp.wil_process_wildcards:
@@ -1248,7 +1404,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     t2 = time.time()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return
-                variablename = None
                 filter_specifier = None
                 filter_object = tree.children[2]
                 if filter_object is not None:
@@ -1280,6 +1435,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         f"Using a globbing wildcard '{wildcard_key}' with positional index filters is not recommended!"
                     )
                 var_object = tree.children[3]
+                variablename = None
                 variablebackup = None
                 if var_object is not None:
                     variablename = var_object.children[0]  # should be a token
@@ -1287,7 +1443,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     variablebackup = self.__ppp.user_variables.get(variablename, None)
                     self.__remove_user_variable(variablename)
                     self.__set_user_variable_value(variablename, variablevalue)
-                choice_values_obj_all = []
+                choice_values_all = []
                 for wildcard in selected_wildcards:
                     if wildcard is None:
                         self.detectedWildcards.append(wc)
@@ -1295,45 +1451,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         t2 = time.time()
                         self.__debug_end("wildcard", start_result, t2 - t1, wc)
                         return
-                    choice_values_obj = wildcard.choices_obj
-                    options_obj = wildcard.options_obj
-                    if choice_values_obj is None:
-                        t1 = time.time()
-                        choice_values_obj = []
-                        try:
-                            options_obj = self.__ppp.parse_prompt(
-                                "as choices options", wildcard.choices[0], self.__ppp.parser_choicesoptions, True
-                            )
-                            n = 1
-                        except lark.exceptions.UnexpectedInput:
-                            options_obj = None
-                            n = 0
-                            if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                                self.__ppp.logger.debug("Does not have options")
-                        wildcard.options_obj = options_obj
-                        for cv in wildcard.choices[n:]:
-                            try:
-                                choice_values_obj.append(
-                                    self.__ppp.parse_prompt("choice", cv, self.__ppp.parser_choice, True)
-                                )
-                            except lark.exceptions.UnexpectedInput as e:
-                                self.__ppp.logger.warning(
-                                    f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
-                                )
-                        wildcard.choices_obj = choice_values_obj
-                        t2 = time.time()
-                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug(
-                                f"Processed choices for wildcard '{wildcard.key}' ({t2-t1:.3f} seconds)"
-                            )
-                    if options_obj is not None:
-                        if options is None:
-                            options = options_obj
+                    (options, choice_values) = self.__check_wildcard_initialization(wildcard)
+                    if options is not None:
+                        if applied_options is None:
+                            applied_options = options
                         else:
                             if self.__ppp.debug_level == DEBUG_LEVEL.full:
                                 self.__ppp.logger.debug(f"Options for wildcard '{wildcard.key}' are ignored!")
-                    choice_values_obj_all += choice_values_obj
-                self.result += self.__get_choices(options, choice_values_obj_all, filter_specifier, wildcard_key)
+                    choice_values_all += choice_values
+                self.result += self.__get_choices(applied_options, choice_values_all, filter_specifier, wildcard_key)
                 if wildcard_key in self.__wildcard_filters:
                     del self.__wildcard_filters[wildcard_key]
                 if variablename is not None:
@@ -1352,8 +1478,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             t1 = time.time()
             start_result = self.result
-            options = tree.children[0]
-            choice_values = tree.children[1::]
+            options = self.__convert_choices_options(tree.children[0])
+            choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
             ch = self.__get_original_node_content(tree, "?{...}")
             if self.__ppp.wil_process_wildcards:
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:

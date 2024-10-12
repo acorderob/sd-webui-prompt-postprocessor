@@ -101,6 +101,18 @@ class TestPromptPostProcessor(unittest.TestCase):
             self.__grammar_content,
             self.__wildcards_obj,
         )
+        self.__comfyuippp = PromptPostProcessor(
+            self.__ppp_logger,
+            self.__interrupt,
+            {
+                **self.__def_env_info,
+                "app": "comfyui",
+                "model_class": "SDXL",
+            },
+            self.__defopts,
+            self.__grammar_content,
+            self.__wildcards_obj,
+        )
 
     def __interrupt(self):
         self.__interrupted = True
@@ -802,6 +814,23 @@ class TestPromptPostProcessor(unittest.TestCase):
             PromptPair("the choices are: inline test, inline default", ""),
             ppp=self.__nocupppp,
         )
+
+    def test_wc_wildcardPS_yaml(self):  # yaml wildcard with object formatted choices and options and prefix and suffix
+        self.__process(
+            PromptPair("the choices are: __yaml/wildcardPS__", ""),
+            PromptPair("the choices are: prefix-choice2/choice3-suffix", ""),
+            ppp=self.__nocupppp,
+        )
+
+    # ComfyUI tests
+
+    def test_comfyui_attention(self):  # attention conversion
+        self.__process(
+            PromptPair("(test1) (test2:1.5) [test3] [(test4)]", ""),
+            PromptPair("(test1) (test2:1.5) (test3:0.9) (test4:0.99)", ""),
+            ppp=self.__comfyuippp,
+        )
+
 
     # def test_mix(self):
     #     self.__process(

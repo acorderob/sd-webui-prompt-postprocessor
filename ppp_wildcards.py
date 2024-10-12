@@ -12,9 +12,9 @@ class PPPWildcard:
     def __init__(self, fullpath: str, key: str, choices: list[str]):
         self.key: str = key
         self.file: str = fullpath
-        self.choices: list[str] = choices
-        self.choices_obj: list[object] = None
-        self.options_obj: object = None
+        self.unprocessed_choices: list[str] = choices
+        self.choices: list[dict] = None
+        self.options: dict = None
 
 
 class PPPWildcards:
@@ -158,29 +158,17 @@ class PPPWildcards:
                 )
             else:
                 obj = self.__get_nested(content, key)
+                choices = []
                 if obj is not None:
-                    if isinstance(obj, str):
+                    if isinstance(obj, (str, dict)):
                         choices = [obj]
                     elif isinstance(obj, (int, float, bool)):
                         choices = [str(obj)]
                     elif isinstance(obj, list) and len(obj) > 0:
                         choices = []
                         for c in obj:
-                            if isinstance(c, str):
+                            if isinstance(c, (str, dict)):
                                 choices.append(c)
-                            elif isinstance(c, dict):  # we convert the dict to a string
-                                d = ""
-                                if "weight" in c.keys():
-                                    d += str(c["weight"])
-                                if "if" in c.keys():
-                                    d += f" if {c['if']}"
-                                if d != "":
-                                    d += "::"
-                                if "text" in c.keys():
-                                    d += c["text"]
-                                elif "content" in c.keys():
-                                    d += c["content"]
-                                choices.append(d)
                     else:
                         obj = None
                 if obj is None:

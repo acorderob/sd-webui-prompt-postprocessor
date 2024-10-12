@@ -8,7 +8,7 @@ yaml:
     - ~r2-3$$-
     - "'label1,label2'4::choice1"
     - "3:: choice2 "
-    - "'label1,label3'2::choice3"
+    - { labels: ["label1", "label3"], weight: 2, content: choice3 }
     - 5 if _is_sd1::choice4
 
   wildcard2bis:
@@ -28,9 +28,22 @@ yaml:
     - { weight: 2, text: choice1 }
     - { weight: 3, content: choice2 }
     - { text: choice3 }
-    - { weight: 4, if: "_is_ssd", text: choice4 }
+    - { weight: 4, if: _is_ssd, text: choice4 }
 
   wildcard7:
     - <lora:test1:1>
     - <lora:test2:1>
     - <lora:test3:1>
+
+  wildcardPS:
+    - {
+        sampler: "~",
+        repeating: false,
+        count: 2,
+        prefix: "prefix-",
+        suffix: "-suffix",
+        separator: "/",
+      }
+    - { weight: 3, text: choice1 }
+    - { weight: 2, text: choice2 }
+    - { weight: 1, text: choice3 }

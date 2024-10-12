@@ -36,7 +36,7 @@ Notes:
 
     Does not recognize tokenizer separators like "TE2:" and "TE3:", so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
 
-    ComfyUI only supports the attention change using parenthesis, so the ones with the braces will be converted. The extra networks constructs are not natively supported but some custom nodes do. The other constructs are not supported and will print a warning in the console.
+    ComfyUI only supports natively the attention using parenthesis, so the ones with the braces will be converted. The other constructs are not natively supported but some custom nodes implement them.
 2. It recognizes wildcards in the *\_\_wildcard\_\_* and *{choice|choice}* formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
 3. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 
@@ -158,7 +158,18 @@ A wildcard definition can be:
 
 In a choice, the content after a "#" is ignored.
 
-If the first choice follows the format of wildcard parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of **Dynamic Prompts** (only in structured files). If using the object format for a choice you can use a new "if" property for the condition in addition to the standard "weight" and "text"/"content".
+If the first choice follows the format of wildcard parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of **Dynamic Prompts** (only in structured files). If using the object format for a choice you can use a new "if" property for the condition, and the "labels" property (an array of strings) in addition to the standard "weight" and "text"/"content".
+
+Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
+
+```yaml
+{ sampler: "~", repeating: false, count: 2, prefix: "prefix-", suffix: "-suffix", separator: "/" }
+{ sampler: "~", repeating: false, from: 2, to: 3, prefix: "prefix-", suffix: "-suffix", separator: "/" }
+```
+
+The prefix and suffix are added to the result along with the selected choices and separators. They can contain other constructs, but the separator can't.
+
+It is recommended to use the object format for the wildcard parameters and for choices with complex options.
 
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
