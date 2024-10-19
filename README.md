@@ -128,7 +128,7 @@ __parameters$$wildcard'filter'(var=value)__
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-The wildcard identifier can contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them.
+The wildcard identifier can contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with Dynamic Prompts, the wildcard name has to be specified with its full path (unless you use globbing).
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index) or choice label. You can also compound them with "+". That is, the comma separated items act as an OR and the "+" inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify "^wildcard" as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with "#" and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use "#" and "^" when you want to pass a filter to inner wildcards (see the test files).
 
@@ -153,8 +153,10 @@ __path/wildcard(var=value)__       # select 1 choice using the specified variabl
 
 A wildcard definition can be:
 
-* A txt file. The wildcard name will be the relative path of the file, without the extension. Each line will be a choice. Lines starting with "#" or empty are ignored.
-* An array or string inside a json or yaml file. The wildcard name includes the relative folder path of the file (without the name or extension) but also the path of the object inside the file.
+* A txt file. The wildcard name will be the relative path of the file, without the extension. Each line will be a choice. Lines starting with "#" or empty are ignored. Doesn't support nesting.
+* An array or scalar value inside a json or yaml file. The wildcard name includes the relative folder path of the file, without the extension, but also the path of the value inside the file (if there is one). If the file contains a dictionary, the filename part is not used for the wildcard name. Supports nesting by having dictionaries inside dictionaries.
+
+The best format is a yaml file with a dictionary of wildcards inside. An editor supporting yaml syntax is recommended.
 
 In a choice, the content after a "#" is ignored.
 

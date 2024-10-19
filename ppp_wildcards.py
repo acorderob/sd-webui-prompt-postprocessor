@@ -2,6 +2,7 @@ import fnmatch
 import os
 import json
 from typing import Optional
+import logging
 import yaml
 
 from ppp_logging import DEBUG_LEVEL
@@ -22,7 +23,7 @@ class PPPWildcards:
     DEFAULT_WILDCARDS_FOLDER = "wildcards"
 
     def __init__(self, logger):
-        self.logger = logger
+        self.logger: logging.Logger = logger
         self.debug_level = DEBUG_LEVEL.none
         self.wildcards_folders = []
         self.wildcards: dict[str, PPPWildcard] = {}
@@ -126,62 +127,87 @@ class PPPWildcards:
         if last_modified_cached is not None and last_modified == self.wildcard_files[full_path]:
             return
         filename = os.path.basename(full_path)
-        name, extension = os.path.splitext(filename)
+        _, extension = os.path.splitext(filename)
         if extension not in (".txt", ".json", ".yaml", ".yml"):
             return
         self.__remove_wildcards_from_file(full_path, False)
         if last_modified_cached is not None and self.debug_level != DEBUG_LEVEL.none:
             self.logger.debug(f"Updating wildcards from file: {full_path}")
-        relfolders = os.path.relpath(os.path.dirname(full_path), base)
-        if relfolders == ".":
-            relfolders = ""
-        elif relfolders != "":
-            relfolders += "/"
         if extension == ".txt":
-            self.__get_wildcards_in_text_file(full_path, relfolders, name)
+            self.__get_wildcards_in_text_file(full_path, base)
         elif extension in (".json", ".yaml", ".yml"):
-            self.__get_wildcards_in_structured_file(full_path, relfolders, extension)
+            self.__get_wildcards_in_structured_file(full_path, base)
         self.wildcard_files[full_path] = last_modified
 
-    def __get_wildcards_in_structured_file(self, full_path, relfolders, extension):
+    def __get_choices(self, obj: object) -> list[dict]:
+        choices = None
+        if obj is not None:
+            if isinstance(obj, (str, dict)):
+                choices = [obj]
+            elif isinstance(obj, (int, float, bool)):
+                choices = [str(obj)]
+            elif isinstance(obj, list) and len(obj) > 0:
+                choices = []
+                for c in obj:
+                    if isinstance(c, (str, dict)):
+                        choices.append(c)
+                    elif isinstance(c, (int, float, bool)):
+                        choices.append(str(c))
+        return choices
+
+    def __get_wildcards_in_structured_file(self, full_path, base):
+        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
+        external_key_parts = external_key.split(os.sep)
+        _, extension = os.path.splitext(full_path)
         with open(full_path, "r", encoding="utf-8") as file:
             if extension == ".json":
                 content = json.loads(file.read())
             else:
                 content = yaml.safe_load(file)
-        keys = self.__get_keys_in_dict(content)
-        for key in keys:
-            fullkey = f"{relfolders}{key}"
-            if self.wildcards.get(fullkey, None) is not None:
-                self.logger.warning(
-                    f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
-                )
-            else:
-                obj = self.__get_nested(content, key)
-                choices = []
-                if obj is not None:
-                    if isinstance(obj, (str, dict)):
-                        choices = [obj]
-                    elif isinstance(obj, (int, float, bool)):
-                        choices = [str(obj)]
-                    elif isinstance(obj, list) and len(obj) > 0:
-                        choices = []
-                        for c in obj:
-                            if isinstance(c, (str, dict)):
-                                choices.append(c)
-                    else:
-                        obj = None
-                if obj is None:
-                    self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
+        if isinstance(content, dict):
+            external_key_parts = external_key_parts[:-1]
+            keys = self.__get_keys_in_dict(content)
+            for key in keys:
+                fullkey = "/".join(external_key_parts + [key])
+                if self.wildcards.get(fullkey, None) is not None:
+                    self.logger.warning(
+                        f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
+                    )
                 else:
-                    self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
+                    obj = self.__get_nested(content, key)
+                    choices = self.__get_choices(obj)
+                    if choices is None:
+                        self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
+                    else:
+                        self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
+            return
+        if isinstance(content, str):
+            content = [content]
+        elif isinstance(content, (int, float, bool)):
+            content = [str(content)]
+        if not isinstance(content, list):
+            self.logger.warning(f"Invalid wildcard in file '{full_path}'!")
+            return
+        fullkey = "/".join(external_key_parts)
+        if self.wildcards.get(fullkey, None) is not None:
+            self.logger.warning(
+                f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
+            )
+        else:
+            choices = self.__get_choices(content)
+            if choices is None:
+                self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
+            else:
+                self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 
-    def __get_wildcards_in_text_file(self, full_path, relfolders, name):
+    def __get_wildcards_in_text_file(self, full_path, base):
+        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
+        external_key_parts = external_key.split(os.sep)
         with open(full_path, "r", encoding="utf-8") as file:
             text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
-        fullkey = f"{relfolders}{name}"
+        fullkey = "/".join(external_key_parts)
         if self.wildcards.get(fullkey, None) is not None:
             self.logger.warning(
                 f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"

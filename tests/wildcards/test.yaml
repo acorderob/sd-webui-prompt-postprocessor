@@ -47,3 +47,8 @@ yaml:
     - { weight: 3, text: choice1 }
     - { weight: 2, text: choice2 }
     - { weight: 1, text: choice3 }
+
+  more_nested:
+    even_more_nested: # this would be __yaml/more_nested/even_more_nested__
+      - one
+      - two
