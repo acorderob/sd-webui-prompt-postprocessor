@@ -822,6 +822,13 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__nocupppp,
         )
 
+    def test_wc_anonymouswildcard_yaml(self):  # yaml anonymous wildcard
+        self.__process(
+            PromptPair("the choices are: __yaml/nesteddict__", ""),
+            PromptPair("the choices are: six", ""),
+            ppp=self.__nocupppp,
+        )
+
     # ComfyUI tests
 
     def test_comfyui_attention(self):  # attention conversion

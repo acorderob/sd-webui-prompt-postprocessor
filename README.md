@@ -162,6 +162,10 @@ In a choice, the content after a "#" is ignored.
 
 If the first choice follows the format of wildcard parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of **Dynamic Prompts** (only in structured files). If using the object format for a choice you can use a new "if" property for the condition, and the "labels" property (an array of strings) in addition to the standard "weight" and "text"/"content".
 
+```yaml
+{ labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
+```
+
 Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
 
 ```yaml
@@ -174,6 +178,8 @@ The prefix and suffix are added to the result along with the selected choices an
 It is recommended to use the object format for the wildcard parameters and for choices with complex options.
 
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
+
+A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples.
 
 #### Detection of remaining wildcards
 

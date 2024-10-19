@@ -139,7 +139,7 @@ class PPPWildcards:
             self.__get_wildcards_in_structured_file(full_path, base)
         self.wildcard_files[full_path] = last_modified
 
-    def __get_choices(self, obj: object) -> list[dict]:
+    def __get_choices(self, obj: object, full_path: str, key_parts: list[str]) -> list[dict]:
         choices = None
         if obj is not None:
             if isinstance(obj, (str, dict)):
@@ -148,34 +148,70 @@ class PPPWildcards:
                 choices = [str(obj)]
             elif isinstance(obj, list) and len(obj) > 0:
                 choices = []
-                for c in obj:
-                    if isinstance(c, (str, dict)):
-                        choices.append(c)
+                for i, c in enumerate(obj):
+                    invalid_choice = False
+                    if isinstance(c, str):
+                        choice = c
                     elif isinstance(c, (int, float, bool)):
-                        choices.append(str(c))
+                        choice = str(c)
+                    elif isinstance(c, list):
+                        # we create an anonymous wildcard
+                        choice = self.__create_anonymous_wildcard(full_path, key_parts, i, c)
+                    elif isinstance(c, dict):
+                        if all(
+                            k in ["sampler", "repeating", "count", "from", "to", "prefix", "suffix", "separator"]
+                            for k in c.keys()
+                        ) or all(k in ["labels", "weight", "if", "content", "text"] for k in c.keys()):
+                            # we assume it is a choice or wildcard parameters in object format
+                            choice = c
+                            choice_content = choice.get("content", choice.get("text", None))
+                            if choice_content is not None and isinstance(choice_content, list):
+                                # we create an anonymous wildcard
+                                choice["content"] = self.__create_anonymous_wildcard(
+                                    full_path, key_parts, i, choice_content
+                                )
+                                if "text" in choice:
+                                    del choice["text"]
+                        elif len(c) == 1:
+                            # we assume it is an anonymous wildcard with options
+                            firstkey = list(c.keys())[0]
+                            choice = self.__create_anonymous_wildcard(full_path, key_parts, i, c[firstkey], firstkey)
+                        else:
+                            invalid_choice = True
+                    else:
+                        invalid_choice = True
+                    if invalid_choice:
+                        self.logger.warning(
+                            f"Invalid choice {i+1} in wildcard '{'/'.join(key_parts)}' in file '{full_path}'!"
+                        )
+                    else:
+                        choices.append(choice)
         return choices
 
-    def __get_wildcards_in_structured_file(self, full_path, base):
-        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
-        external_key_parts = external_key.split(os.sep)
-        _, extension = os.path.splitext(full_path)
-        with open(full_path, "r", encoding="utf-8") as file:
-            if extension == ".json":
-                content = json.loads(file.read())
-            else:
-                content = yaml.safe_load(file)
+    def __create_anonymous_wildcard(self, full_path, key_parts, i, content, options=None):
+        new_parts = key_parts + [f"#ANON_{i}"]
+        self.__add_wildcard(content, full_path, new_parts)
+        value = f"__{'/'.join(new_parts)}__"
+        if options is not None:
+            value = f"{options}::{value}"
+        return value
+
+    def __add_wildcard(self, content: object, full_path: str, external_key_parts: list[str]):
+        key_parts = external_key_parts.copy()
         if isinstance(content, dict):
-            external_key_parts = external_key_parts[:-1]
+            key_parts.pop()
             keys = self.__get_keys_in_dict(content)
             for key in keys:
-                fullkey = "/".join(external_key_parts + [key])
+                tmp_key_parts = key_parts.copy()
+                tmp_key_parts.extend(key.split("/"))
+                fullkey = "/".join(tmp_key_parts)
                 if self.wildcards.get(fullkey, None) is not None:
                     self.logger.warning(
                         f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
                     )
                 else:
                     obj = self.__get_nested(content, key)
-                    choices = self.__get_choices(obj)
+                    choices = self.__get_choices(obj, full_path, tmp_key_parts)
                     if choices is None:
                         self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
                     else:
@@ -188,17 +224,28 @@ class PPPWildcards:
         if not isinstance(content, list):
             self.logger.warning(f"Invalid wildcard in file '{full_path}'!")
             return
-        fullkey = "/".join(external_key_parts)
+        fullkey = "/".join(key_parts)
         if self.wildcards.get(fullkey, None) is not None:
             self.logger.warning(
                 f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
             )
         else:
-            choices = self.__get_choices(content)
+            choices = self.__get_choices(content, full_path, key_parts)
             if choices is None:
                 self.logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
             else:
                 self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
+
+    def __get_wildcards_in_structured_file(self, full_path, base):
+        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
+        external_key_parts = external_key.split(os.sep)
+        _, extension = os.path.splitext(full_path)
+        with open(full_path, "r", encoding="utf-8") as file:
+            if extension == ".json":
+                content = json.loads(file.read())
+            else:
+                content = yaml.safe_load(file)
+        self.__add_wildcard(content, full_path, external_key_parts)
 
     def __get_wildcards_in_text_file(self, full_path, base):
         external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
@@ -207,16 +254,7 @@ class PPPWildcards:
             text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
-        fullkey = "/".join(external_key_parts)
-        if self.wildcards.get(fullkey, None) is not None:
-            self.logger.warning(
-                f"Duplicate wildcard '{fullkey}' in file '{full_path}' and '{self.wildcards[fullkey].file}'!"
-            )
-        else:
-            if len(text_content) == 0:
-                self.logger.warning(f"Invalid wildcard in file '{full_path}'!")
-            else:
-                self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, text_content)
+        self.__add_wildcard(text_content, full_path, external_key_parts)
 
     def __get_wildcards_in_directory(self, base: str, directory: str):
         """

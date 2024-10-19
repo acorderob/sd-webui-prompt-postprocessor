@@ -52,3 +52,14 @@ yaml:
     even_more_nested: # this would be __yaml/more_nested/even_more_nested__
       - one
       - two
+
+  nesteddict:
+    - one
+    - two
+    - # anonymous wildcard without options
+      - three
+      - four
+    - 3 if _is_sdxl: # anonymous wildcard with options
+        - five
+        - six
+    - { weight: 1, text: [seven, eight] } # anonymous wildcard used in a choice in object format
