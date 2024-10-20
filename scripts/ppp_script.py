@@ -37,8 +37,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
         __on_ui_settings(): Callback function for UI settings.
     """
 
-    VERSION = PromptPostProcessor.VERSION
-
     def __init__(self):
         """
         Initializes the PromptPostProcessor object.
@@ -60,6 +58,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
+        self.ppp_logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
 
     def title(self):
         """
@@ -285,24 +284,24 @@ class PromptPostProcessorA1111Script(scripts.Script):
         for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info(f"processing prompts[{i+1}] ({prompttype})")
-            if self.lru_cache.get((seed, prompt, negative_prompt)) is None:
+            if self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt)) is None:
                 posp, negp = ppp.process_prompt(prompt, negative_prompt, seed)
-                self.lru_cache.put((seed, prompt, negative_prompt), (posp, negp))
+                self.lru_cache.put((seed, hash(self.wildcards_obj), prompt, negative_prompt), (posp, negp))
                 # adds also the result so i2i doesn't process it unnecessarily
-                self.lru_cache.put((seed, posp, negp), (posp, negp))
+                self.lru_cache.put((seed, hash(self.wildcards_obj), posp, negp), (posp, negp))
             elif self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("result already in cache")
 
         # updates the prompts
         if rpr is not None and rnr is not None:
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rpr, rnr)):
-                found = self.lru_cache.get((seed, prompt, negative_prompt))
+                found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
                 if found is not None:
                     rpr[i] = found[0]
                     rnr[i] = found[1]
         if rph is not None and rnh is not None:
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rph, rnh)):
-                found = self.lru_cache.get((seed, prompt, negative_prompt))
+                found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
                 if found is not None:
                     rph[i] = found[0]
                     rnh[i] = found[1]

@@ -3,9 +3,9 @@
 The Prompt PostProcessor (PPP), formerly known as "sd-webui-sendtonegative", is an extension designed to process the prompt, possibly after other extensions have modified it. This extension is compatible with:
 
 * [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
-* [SD.Next](https://github.com/vladmandic/automatic).
 * [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
 * [reForge](https://github.com/Panchovix/stable-diffusion-webui-reForge)
+* [SD.Next](https://github.com/vladmandic/automatic).
 * ...and probably other forks
 * [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
 
@@ -48,6 +48,8 @@ On A1111 compatible webuis:
 2. Paste <https://github.com/acorderob/sd-webui-prompt-postprocessor> in the URL for extension's git repository text field
 3. Click the Install button
 4. Restart the webui
+
+On SD.Next I recommend you disable the native wildcard processing.
 
 On ComfyUI:
 
@@ -130,7 +132,7 @@ The parameters, the filter, and the setting of a variable are optional. The para
 
 The wildcard identifier can contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with Dynamic Prompts, the wildcard name has to be specified with its full path (unless you use globbing).
 
-The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index) or choice label. You can also compound them with "+". That is, the comma separated items act as an OR and the "+" inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify "^wildcard" as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with "#" and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use "#" and "^" when you want to pass a filter to inner wildcards (see the test files).
+The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index; zero-based) or choice label. You can also compound them with "+". That is, the comma separated items act as an OR and the "+" inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify "^wildcard" as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with "#" and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use "#" and "^" when you want to pass a filter to inner wildcards (see the test files).
 
 The variable value only applies during the evaluation of the selected choices and is discarded afterward (the variable keeps its original value if there was one).
 

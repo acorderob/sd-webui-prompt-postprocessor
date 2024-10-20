@@ -152,11 +152,6 @@ class TestPromptPostProcessor(unittest.TestCase):
                 self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
             seed += 1
 
-    # Other tests
-
-    def test_version(self):  # reading ppp version
-        self.assertNotEqual(PromptPostProcessor.VERSION, (0, 0, 0), "Incorrect version")
-
     # Send To Negative tests
 
     def test_stn_simple(self):  # negtags with different parameters and separations
@@ -824,7 +819,7 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     def test_wc_anonymouswildcard_yaml(self):  # yaml anonymous wildcard
         self.__process(
-            PromptPair("the choices are: __yaml/nesteddict__", ""),
+            PromptPair("the choices are: __yaml/anonwildcards__", ""),
             PromptPair("the choices are: six", ""),
             ppp=self.__nocupppp,
         )

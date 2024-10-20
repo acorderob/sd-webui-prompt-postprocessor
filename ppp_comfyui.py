@@ -16,8 +16,6 @@ if __name__ == "__main__":
 
 class PromptPostProcessorComfyUINode:
 
-    VERSION = PromptPostProcessor.VERSION
-
     logger = None
 
     def __init__(self):
@@ -27,6 +25,7 @@ class PromptPostProcessorComfyUINode:
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
+        self.logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
 
     class SmartType(str):
         def __ne__(self, other):
@@ -354,6 +353,8 @@ class PromptPostProcessorComfyUINode:
         cleanup_merge_attention,
         remove_extranetwork_tags,
     ):
+        if wc_process_wildcards:
+            return float("NaN") # since we can't detect changes in wildcards we assume they are always changed when enabled
         new_run = {  # everything except debug_level
             "model": model,
             "modelname": modelname,

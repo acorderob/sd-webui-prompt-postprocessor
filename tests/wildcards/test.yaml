@@ -53,13 +53,17 @@ yaml:
       - one
       - two
 
-  nesteddict:
+  anonwildcards:
     - one
     - two
-    - # anonymous wildcard without options
+    - # choice without options and anonymous wildcard
       - three
       - four
-    - 3 if _is_sdxl: # anonymous wildcard with options
-        - five
-        - six
+    - 3 if _is_sdxl: # choice with options and anonymous wildcard
+      - five
+      - six
     - { weight: 1, text: [seven, eight] } # anonymous wildcard used in a choice in object format
+    - # choice without options and anonymous wildcard with parameters
+      - { count: 2, prefix: "#" }
+      - nine
+      - ten

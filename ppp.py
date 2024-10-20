@@ -23,12 +23,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
 
     @staticmethod
-    def get_version_from_pyproject() -> tuple:
+    def get_version_from_pyproject() -> str:
         """
         Reads the version from the pyproject.toml file.
 
         Returns:
-            tuple: A tuple containing the version numbers.
+            str: The version string.
         """
         version_str = "0.0.0"
         try:
@@ -40,7 +40,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         break
         except Exception as e:  # pylint: disable=broad-exception-caught
             logging.getLogger().exception(e)
-        return tuple(map(int, version_str.split(".")))
+        return version_str
 
     NAME = "Prompt Post-Processor"
     VERSION = get_version_from_pyproject()
@@ -175,6 +175,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         return self.env_info.get("app", "") == "comfyui"
 
     def __init_sysvars(self):
+        """
+        Initializes the system variables.
+        """
         self.system_variables = {}
         sdchecks = {
             "sd1": self.env_info.get("is_sd1", False),
@@ -384,6 +387,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         return text
 
     def __processprompts(self, prompt, negative_prompt):
+        """
+        Process the prompt and negative prompt.
+
+        Args:
+            prompt (str): The prompt.
+            negative_prompt (str): The negative prompt.
+
+        Returns:
+            tuple: A tuple containing the processed prompt and negative prompt.
+        """
         self.user_variables = {}
 
         # Process prompt
@@ -444,7 +457,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         seed: int = 0,
     ):
         """
-        Process the prompt and negative prompt by moving content to the negative prompt, and cleaning up.
+        Initializes the random number generator and processes the prompt and negative prompt.
 
         Args:
             original_prompt (str): The original prompt.
@@ -486,6 +499,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             return original_prompt, original_negative_prompt
 
     def parse_prompt(self, prompt_description: str, prompt: str, parser: lark.Lark, raise_parsing_error: bool = False):
+        """
+        Parses a prompt using the specified parser.
+
+        Args:
+            prompt_description (str): The description of the prompt.
+            prompt (str): The prompt to be parsed.
+            parser (lark.Lark): The parser to be used.
+            raise_parsing_error (bool): Whether to raise a parsing error.
+
+        Returns:
+            Tree: The parsed prompt.
+        """
         t1 = time.time()
         try:
             if self.debug_level == DEBUG_LEVEL.full:
@@ -605,6 +630,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             return added_result
 
         def __get_original_node_content(self, node: lark.Tree | lark.Token, default=None) -> str:
+            """
+            Get the original content of a node.
+
+            Args:
+                node (Tree|Token): The node to get the content from.
+                default: The default value to return if the content is not found.
+
+            Returns:
+                str: The original content of the node.
+            """
             return (
                 node.meta.content
                 if hasattr(node, "meta") and node.meta is not None and not node.meta.empty
@@ -637,13 +672,35 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             return v
 
         def __set_user_variable_value(self, name: str, value: str):
+            """
+            Set the value of a user variable.
+
+            Args:
+                name (str): The name of the user variable.
+                value (str): The value to be set.
+            """
             self.__ppp.user_variables[name] = value
 
         def __remove_user_variable(self, name: str):
+            """
+            Remove a user variable.
+
+            Args:
+                name (str): The name of the user variable.
+            """
             if name in self.__ppp.user_variables:
                 del self.__ppp.user_variables[name]
 
         def __debug_end(self, construct: str, start_result: str, duration: float, info=None):
+            """
+            Log the end of a construct processing.
+
+            Args:
+                construct (str): The name of the construct.
+                start_result (str): The initial result.
+                duration (float): The duration of the processing.
+                info: Additional information to log.
+            """
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
                 info = f"({info}) " if info is not None and info != "" else ""
                 output = self.result[len(start_result) :]
@@ -1208,6 +1265,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if options.get("prefix", None) is not None
                     else ""
                 )
+                if prefix != "" and re.match(r"\w", prefix[-1]):
+                    prefix += " "
                 for i, c in enumerate(selected_choices):
                     t1 = time.time()
                     choice_content_obj = c.get("content", c.get("text", None))
@@ -1227,12 +1286,23 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if options.get("suffix", None) is not None
                     else ""
                 )
+                if suffix != "" and re.match(r"\w", suffix[0]):
+                    suffix = " " + suffix
                 # remove comments
                 results = [re.sub(r"\s*#[^\n]*(?:\n|$)", "", r, flags=re.DOTALL) for r in selected_choices_text]
                 return prefix + separator.join(results) + suffix
             return ""
 
         def __convert_choices_options(self, options: Optional[lark.Tree]) -> dict:
+            """
+            Convert the choices options to a dictionary.
+
+            Args:
+                options (Tree): The choices options tree.
+
+            Returns:
+                dict: The converted choices options.
+            """
             if options is None:
                 return None
             the_options = {}
@@ -1263,6 +1333,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             return the_options
 
         def __convert_choice(self, choice: lark.Tree) -> dict:
+            """
+            Convert the choice to a dictionary.
+
+            Args:
+                choice (Tree): The choice tree.
+
+            Returns:
+                dict: The converted choice.
+            """
             the_choice = {}
             c_label_obj = choice.children[0]
             the_choice["labels"] = (
@@ -1276,6 +1355,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             return the_choice
 
         def __check_wildcard_initialization(self, wildcard: PPPWildcard):
+            """
+            Initializes a wildcard if it hasn't been yet.
+
+            Args:
+                wildcard (PPPWildcard): The wildcard to check.
+            """
             choice_values = wildcard.choices
             options = wildcard.options
             if choice_values is None:
@@ -1284,10 +1369,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 n = 0
                 # we check the first choice to see if it is actually options
                 if isinstance(wildcard.unprocessed_choices[0], dict):
-                    if all(
-                        k in ["sampler", "repeating", "count", "from", "to", "prefix", "suffix", "separator"]
-                        for k in wildcard.unprocessed_choices[0].keys()
-                    ):
+                    if self.__ppp.wildcard_obj.is_dict_choices_options(wildcard.unprocessed_choices[0]):
                         options = wildcard.unprocessed_choices[0]
                         prefix = options.get("prefix", None)
                         if prefix is not None and isinstance(prefix, str):
@@ -1331,7 +1413,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 # we process the choices
                 for cv in wildcard.unprocessed_choices[n:]:
                     if isinstance(cv, dict):
-                        if all(k in ["labels", "weight", "if", "content", "text"] for k in cv.keys()):
+                        if self.__ppp.wildcard_obj.is_dict_choice_options(cv):
                             theif = cv.get("if", None)
                             if theif is not None and isinstance(theif, str):
                                 try:
@@ -1379,11 +1461,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 wildcard.choices = choice_values
                 t2 = time.time()
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                    self.__ppp.logger.debug(
-                        f"Processed choices for wildcard '{wildcard.key}' ({t2-t1:.3f} seconds)"
-                    )
+                    self.__ppp.logger.debug(f"Processed choices for wildcard '{wildcard.key}' ({t2-t1:.3f} seconds)")
             return (options, choice_values)
-
 
         def wildcard(self, tree: lark.Tree):
             """

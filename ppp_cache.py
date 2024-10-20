@@ -4,8 +4,8 @@ from typing import Tuple
 
 class PPPLRUCache:
 
-    ProcessInput = Tuple[int, str, str]
-    ProcessResult = Tuple[str, str]
+    ProcessInput = Tuple[int, int, str, str]  # (seed, wildcards_hash, positive_prompt, negative_prompt)
+    ProcessResult = Tuple[str, str]  # (positive_prompt, negative_prompt)
 
     def __init__(self, capacity: int):
         self.cache = OrderedDict()
