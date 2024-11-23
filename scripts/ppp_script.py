@@ -135,7 +135,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
         t1 = time.time()
         if getattr(opts, "prompt_attention", "") == "Compel parser":
             self.ppp_logger.warning("Compel parser is not supported!")
-        is_i2i = getattr(p, "init_images", [None])[0] is not None
+        init_images = getattr(p, "init_images", [None]) or [None]
+        is_i2i = bool(init_images[0])
         self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
         do_i2i = getattr(opts, "ppp_gen_doi2i", False)
         if is_i2i and not do_i2i:

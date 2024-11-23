@@ -1,1 +1,3 @@
 lark
+numpy
+pyyaml
