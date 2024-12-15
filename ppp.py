@@ -1,4 +1,3 @@
-from functools import reduce
 import logging
 import math
 import os
@@ -52,11 +51,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         stop = "stop"
 
     DEFAULT_STN_SEPARATOR = ", "
-    DEFAULT_PONY_SUBSTRINGS = ",".join(["pony", "pny", "pdxl"])
+    DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,ilxl"
     DEFAULT_CHOICE_SEPARATOR = ", "
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
+
+    SUPPORTED_MODELS = [
+        "sd1",
+        "sd2",
+        "sdxl",
+        "sd3",
+        "flux",
+        "auraflow",
+    ]
 
     def __init__(
         self,
@@ -87,9 +95,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         # General options
         self.debug_level = DEBUG_LEVEL(options.get("debug_level", DEBUG_LEVEL.none.value))
-        self.pony_substrings = list(
-            x.strip() for x in (str(options.get("pony_substrings", self.DEFAULT_PONY_SUBSTRINGS))).split(",")
-        )
+        variants_definitions_option = str(options.get("variants_definitions", self.DEFAULT_VARIANTS_DEFINITIONS))
+        self.variants_definitions = {}
+        if variants_definitions_option:
+            lines = variants_definitions_option.splitlines()
+            for line in lines:
+                if "=" in line:
+                    model_tag, elements = line.split("=", 1)
+                    model_name, model_type = re.match(r"(\w+)(?:\((\w+)\))?", model_tag).groups()
+                    if model_type is not None and model_type not in self.SUPPORTED_MODELS:
+                        self.logger.warning(
+                            f"Unsupported model type '{model_type}' in definition for variant '{model_name}'."
+                        )
+                    elif model_name in self.SUPPORTED_MODELS:
+                        self.logger.warning(
+                            f"Invalid model name in definition for variant '{model_name}'."
+                        )
+                    else:
+                        self.variants_definitions[model_name.strip()] = (
+                            model_type or "",
+                            [element.strip() for element in elements.split(",")],
+                        )
         # Wildcards options
         self.wil_process_wildcards = options.get("process_wildcards", True)
         self.wil_keep_choices_order = options.get("keep_choices_order", False)
@@ -179,36 +205,37 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Initializes the system variables.
         """
         self.system_variables = {}
-        sdchecks = {
-            "sd1": self.env_info.get("is_sd1", False),
-            "sd2": self.env_info.get("is_sd2", False),
-            "sdxl": self.env_info.get("is_sdxl", False),
-            "sd3": self.env_info.get("is_sd3", False),
-            "flux": self.env_info.get("is_flux", False),
-            "auraflow": self.env_info.get("is_auraflow", False),
-            "": True,
-        }
+        sdchecks = {x: self.env_info.get("is_" + x, False) for x in self.SUPPORTED_MODELS}
+        sdchecks.update({"": True})
         self.system_variables["_model"] = [k for k, v in sdchecks.items() if v][0]
         self.system_variables["_sd"] = self.system_variables["_model"]  # deprecated
         model_filename = self.env_info.get("model_filename", "")
-        is_pony = any(s in model_filename.lower() for s in self.pony_substrings)
-        is_ssd = self.env_info.get("is_ssd", False)
         self.system_variables["_sdfullname"] = model_filename  # deprecated
         self.system_variables["_modelfullname"] = model_filename
         self.system_variables["_sdname"] = os.path.basename(model_filename)  # deprecated
         self.system_variables["_modelname"] = os.path.basename(model_filename)
         self.system_variables["_modelclass"] = self.env_info.get("model_class", "")
-        self.system_variables["_is_sd1"] = sdchecks["sd1"]
-        self.system_variables["_is_sd2"] = sdchecks["sd2"]
-        self.system_variables["_is_sdxl"] = sdchecks["sdxl"]
+        is_models = {
+            model_name: (model_type_and_substrings[0] == "" or sdchecks.get(model_type_and_substrings[0], False))
+            and any(s in model_filename.lower() for s in model_type_and_substrings[1])
+            for model_name, model_type_and_substrings in self.variants_definitions.items()
+            if model_name not in self.SUPPORTED_MODELS
+        }
+        self.system_variables.update({"_is_" + x: y for x, y in is_models.items()})
+        for x in sdchecks.keys():
+            if x != "":
+                self.system_variables["_is_" + x] = sdchecks[x]
+                self.system_variables["_is_pure_" + x] = sdchecks[x] and not any(is_models.values())
+                self.system_variables["_is_variant_" + x] = sdchecks[x] and any(is_models.values())
+        # special cases
+        self.system_variables["_is_sd"] = sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"]
+        is_ssd = self.env_info.get("is_ssd", False)
         self.system_variables["_is_ssd"] = is_ssd
         self.system_variables["_is_sdxl_no_ssd"] = sdchecks["sdxl"] and not is_ssd
-        self.system_variables["_is_pony"] = sdchecks["sdxl"] and is_pony
-        self.system_variables["_is_sdxl_no_pony"] = sdchecks["sdxl"] and not is_pony
-        self.system_variables["_is_sd3"] = sdchecks["sd3"]
-        self.system_variables["_is_sd"] = sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"]
-        self.system_variables["_is_flux"] = sdchecks["flux"]
-        self.system_variables["_is_auraflow"] = sdchecks["auraflow"]
+        # backcompatibility (but the modern one to use would be _is_pure_sdxl)
+        self.system_variables["_is_sdxl_no_pony"] = sdchecks["sdxl"] and not self.system_variables.get(
+            "_is_pony", False
+        )
 
     def __add_to_insertion_points(
         self, negative_prompt: str, add_at_insertion_point: list[str], insertion_at: list[tuple[int, int]]
@@ -729,10 +756,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 bool: The result of the condition evaluation.
             """
-            var_value = self.__ppp.system_variables.get(cond_var, self.__get_user_variable_value(cond_var))
-            if var_value is None:
-                var_value = ""
-                self.__ppp.logger.warning(f"Unknown variable {cond_var}")
+            if cond_var.startswith("_"):  # system variable
+                var_value = self.__ppp.system_variables.get(cond_var, None)
+                if var_value is None:
+                    var_value = ""
+                    self.__ppp.logger.warning(f"Unknown system variable {cond_var}")
+            else: # user variable
+                var_value = self.__get_user_variable_value(cond_var)
+                if var_value is None:
+                    var_value = ""
+                    self.__ppp.logger.warning(f"Unknown user variable {cond_var}")
             if isinstance(var_value, str):
                 var_value = var_value.lower()
             if isinstance(cond_value, list):
@@ -758,7 +791,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 (
                     c[1:-1].lower()
                     if c.startswith('"') or c.startswith("'")
-                    else True if c.lower() == "true" else False if c.lower() == "false" else int(c)
+                    else True if c.lower() == "true" else False if c.lower() == "false" or c == "" else int(c)
                 )
                 for c in cond_value
             )
@@ -769,7 +802,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if isinstance(c, str)
                     else (
                         True
-                        if isinstance(c, bool) and var_value != "false" and var_value is not False
+                        if isinstance(c, bool) and var_value != "false" and var_value != "" and var_value is not False
                         else (
                             False
                             if isinstance(c, bool) and (var_value != "true" or var_value is False)
@@ -1154,13 +1187,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             t2 = time.time()
             self.__debug_end("extranetworktag", start_result, t2 - t1)
 
-        def __get_choices(
+        def __get_choices_internal(
             self,
             options: dict | None,
             choice_values: list[dict],
             filter_specifier: Optional[list[list[str]]] = None,
             wildcard_key: str = None,
-        ) -> str:
+        ) -> tuple[str, list[str], str, str]:
             """
             Select choices based on the options.
 
@@ -1171,7 +1204,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 wildcard_key (str): The wildcard key if it is a wildcard.
 
             Returns:
-                str: The selected choice.
+                tuple: A tuple containing the prefix, selected choices, separator and suffix
             """
             if options is None:
                 options = {}
@@ -1188,7 +1221,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 msg = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
                 self.__ppp.logger.warning(f"Unsupported sampler '{sampler}' in {msg} options!")
                 self.__ppp.interrupt()
-                return ""
+                return ("", [], separator, "")
             if filter_specifier is not None:
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
@@ -1297,8 +1330,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     suffix = " " + suffix
                 # remove comments
                 results = [re.sub(r"\s*#[^\n]*(?:\n|$)", "", r, flags=re.DOTALL) for r in selected_choices_text]
-                return prefix + separator.join(results) + suffix
-            return ""
+                return (prefix, results, separator, suffix)
+            return ("", "", separator, "")
+
+        def __get_choices(
+            self,
+            options: dict | None,
+            choice_values: list[dict],
+            filter_specifier: Optional[list[list[str]]] = None,
+            wildcard_key: str = None,
+        ) -> str:
+            r = self.__get_choices_internal(options, choice_values, filter_specifier, wildcard_key)
+            return r[0] + r[2].join(r[1]) + r[3]
 
         def __convert_choices_options(self, options: Optional[lark.Tree]) -> dict:
             """
@@ -1490,7 +1533,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     t2 = time.time()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return
-                filter_specifier = None
+                filter_specifier:list[int|str] = None
                 filter_object = tree.children[2]
                 if filter_object is not None:
                     if (
@@ -1515,7 +1558,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if (
                     len(selected_wildcards) > 1
                     and filter_specifier is not None
-                    and any(x.isdecimal() for x in reduce(lambda x, y: x + y, filter_specifier))
+                    and any(x.isdecimal() for x in filter_specifier)
                 ):
                     self.__ppp.logger.warning(
                         f"Using a globbing wildcard '{wildcard_key}' with positional index filters is not recommended!"

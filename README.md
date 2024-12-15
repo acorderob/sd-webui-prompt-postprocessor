@@ -54,9 +54,8 @@ On SD.Next I recommend you disable the native wildcard processing.
 On ComfyUI:
 
 1. Go to Manager > Custom Nodes Manager
-2. Install through ComfyUI Manager
-3. Click Install via Git URL and enter <https://github.com/acorderob/sd-webui-prompt-postprocessor>
-4. Restart
+2. Search for "Prompt PostProcessor" and install or click Install via Git URL and enter <https://github.com/acorderob/sd-webui-prompt-postprocessor>
+3. Restart
 
 ## Usage
 
@@ -118,7 +117,7 @@ These are examples of formats you can use to insert a choice construct:
 Notes:
 
 * The Dynamic Prompts format `{2$$__flavours__}` does not work as expected. It will only output one value. You can write is as `{r2$$__flavours__}` to get two values, but they may repeat since the evaluation of the wildcard is independent of the choices selection.
-* Whitespace in the choices is not ignored like in Dynamic Prompts, but will be cleaned up if the appropriate settings are checked.
+* Whitespace around the choices is not ignored like in Dynamic Prompts, but will be cleaned up if the appropriate settings are checked.
 
 ### Wildcards
 
@@ -246,6 +245,8 @@ The full format is:
 <ppp:if condition1>content one<ppp:elif condition2>content two<ppp:else>other content<ppp:/if>
 ```
 
+Any `elif`s (there can be multiple) and the `else` are optional.
+
 The *conditionN* compares a variable with a value or a list of values. The allowed formats are:
 
 ```text
@@ -272,15 +273,24 @@ The variable can be one set with the `set` or `add` commands or you can use inte
 * `_is_sd1`: true if the loaded model version is SD 1.x
 * `_is_sd2`: true if the loaded model version is SD 2.x
 * `_is_sdxl`: true if the loaded model version is SDXL (includes Pony models)
-* `_is_ssd`: true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.
-* `_is_sdxl_no_ssd`: true if the loaded model version is SDXL and not an SSD model.
-* `_is_pony`: true if the loaded model version is SDXL and a Pony model (based on its filename). Note that for a pony model `_is_sdxl` will also be true.
-* `_is_sdxl_no_pony`: true if the loaded model version is SDXL and not a Pony model.
 * `_is_sd3`: true if the loaded model version is SD 3.x
 * `_is_flux`: true if the loaded model is Flux
 * `_is_auraflow`: true if the loaded model is AuraFlow
+* `_is_ssd`: true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.
+* `_is_sdxl_no_ssd`: true if the loaded model version is SDXL and not an SSD model.
 
-Any `elif`s (there can be multiple) and the `else` are optional.
+Then there are also variables for the user defined model variants defined by the "model variant definitions" setting. This is where the pony, and now also illustrious, definitions are to detect those models.
+
+* `_is_xxxx`: true if the loaded model matches the xxxx definition (based on its filename). Note that the corresponding variable for the model kind will also be true.
+
+To maintain compatibility with previous versions the following variable still exists:
+
+* `_is_sdxl_no_pony`: true if the loaded model version is SDXL and not a Pony model (the "pony" variant must be defined in settings).
+
+But in general these new variables are created for all model types:
+
+* `_is_pure_xxxx`: true if the loaded model is of kind xxxx (f.e. sdxl) and not a variant.
+* `_is_variant_xxxx`: true if the loaded model version is any variant of model kind xxxx and not the pure version.
 
 #### Example
 
@@ -289,7 +299,7 @@ Any `elif`s (there can be multiple) and the `else` are optional.
 ```text
 <ppp:if _is_sd1><lora:test_sd1> test sd1x
 <ppp:elif _sd_pony><lora:test_pony> test pony
-<ppp:elif _sd_sdxl><lora:test_sdxl> test sdxl
+<ppp:elif _sd_pure_sdxl><lora:test_sdxl> test sdxl
 <ppp:else>unknown model
 <ppp:/if>
 ```
@@ -362,9 +372,9 @@ This should still work as intended, and the only negative point i see is the unn
 ### A1111 (and compatible UIs) UI options
 
 * **Force equal seeds**: Changes the image seeds and variation seeds to be equal to the first of the batch. This allows using the same values for all the images in a batch.
-* **Unlink seed**: Uses the specified seed for the prompt generation instead of the one from the image.
-* **Seed**: The seed to use for the prompt generation. If -1 a random one will be used for each image in the batch. This seed is only used for wildcards and choices.
-* **Variable seed**: If the seed is not -1 you can use this to increase it for the other images in the batch.
+* **Unlink seed**: Uses the specified seed for the prompt generation instead of the one from the image. This seed is only used for wildcards and choices.
+* **Prompt seed**: The seed to use for the prompt generation. If -1 a random one will be used.
+* **Incremental seed**: When using a batch you can use this to set the rest of the prompt seeds with consecutive values.
 
 ### ComfyUI specific inputs
 
@@ -377,7 +387,13 @@ This should still work as intended, and the only negative point i see is the unn
 ### General settings
 
 * **Debug level**: what to write to the console. Note: in SD.Next debug messages only show if you launch it with the --debug argument.
-* **Pony substrings**: list of substrings to detect a Pony model.
+* **Model variant definitions**: definitions for model variants to be recognized based on strings found in the full filename.
+
+    The format for each line is (with *kind* being one of the base model identifiers or not defined):
+
+    ```name(kind)=comma separated list of substrings (case insensitive)```
+
+    The default value defines strings for Pony and Illustrious models.
 * **Apply in img2img**: check if you want to do the processing in img2img processes (does not apply to ComfyUI node).
 
 ### Wildcard settings

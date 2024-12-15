@@ -95,12 +95,13 @@ class PromptPostProcessorComfyUINode:
                         "forceInput": False,
                     },
                 ),
-                "pony_substrings": (
+                "variants_definitions": (
                     "STRING",
                     {
-                        "default": PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
-                        "placeholder": "comma separated list",
-                        "tooltip": "Comma separated list of substrings to look for in the modelname to determine if the model is a pony model",
+                        "default": PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
+                        "multiline": True,
+                        "placeholder": "",
+                        "tooltip": "Definitions for variant models to be recognized based on strings found in the full filename. Format for each line is: 'name(kind)=comma separated list of substrings (case insensitive)' with kind being one of the base model types or not specified",
                         "defaultInput": False,
                         "forceInput": False,
                     },
@@ -333,7 +334,7 @@ class PromptPostProcessorComfyUINode:
         neg_prompt,
         seed,
         debug_level,  # pylint: disable=unused-argument
-        pony_substrings,
+        variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
         wc_if_wildcards,
@@ -361,7 +362,7 @@ class PromptPostProcessorComfyUINode:
             "pos_prompt": pos_prompt,
             "neg_prompt": neg_prompt,
             "seed": seed,
-            "pony_substrings": pony_substrings,
+            "variants_definitions": variants_definitions,
             "process_wildcards": wc_process_wildcards,
             "wildcards_folders": wc_wildcards_folders,
             "if_wildcards": wc_if_wildcards,
@@ -392,7 +393,7 @@ class PromptPostProcessorComfyUINode:
         neg_prompt,
         seed,
         debug_level,
-        pony_substrings,
+        variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
         wc_if_wildcards,
@@ -448,7 +449,7 @@ class PromptPostProcessorComfyUINode:
         ]
         options = {
             "debug_level": debug_level,
-            "pony_substrings": pony_substrings,
+            "variants_definitions": variants_definitions,
             "process_wildcards": wc_process_wildcards,
             "if_wildcards": wc_if_wildcards,
             "choice_separator": wc_choice_separator,

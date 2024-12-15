@@ -29,7 +29,7 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__ppp_logger.setLevel(logging.DEBUG)
         self.__defopts = {
             "debug_level": DEBUG_LEVEL.full.value,
-            "pony_substrings": PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
+            "variants_definitions": PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
             "process_wildcards": True,
             "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
             "choice_separator": ", ",
@@ -355,7 +355,7 @@ class TestPromptPostProcessor(unittest.TestCase):
     def test_cmd_if_nested(self):  # nested if command
         self.__process(
             PromptPair(
-                "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _is_pony>PONY<ppp:else>SD2<ppp:/if><ppp:/if>", ""
+                "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _is_pony>PONY<ppp:else>SD2<ppp:/if><ppp:/if><ppp:if _is_sdxl_no_pony>NOPONY<ppp:/if><ppp:if _is_pure_sdxl>NOPONY<ppp:/if>", ""
             ),
             PromptPair("this is PONY", ""),
             ppp=PromptPostProcessor(
@@ -822,6 +822,28 @@ class TestPromptPostProcessor(unittest.TestCase):
             PromptPair("the choices are: __yaml/anonwildcards__", ""),
             PromptPair("the choices are: six", ""),
             ppp=self.__nocupppp,
+        )
+
+    # Model variants tests
+
+    def test_variants(self):
+        self.__process(
+            PromptPair("<ppp:if _is_test1>test1<ppp:/if><ppp:if _is_test2>test2<ppp:/if><ppp:if _is_test3>test3<ppp:/if><ppp:if _is_test4>test4<ppp:/if>", ""),
+            PromptPair("test1test2", ""),
+            ppp=PromptPostProcessor(
+                self.__ppp_logger,
+                self.__interrupt,
+                {
+                    **self.__def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
+                },
+                {
+                    **self.__defopts,
+                    "variants_definitions": "test1(sdxl)=testmodel\ntest2=testmodel\ntest3(sd1)=testmodel\ntest4(invalid)=testmodel\nsdxl()=testmodel",
+                },
+                self.__grammar_content,
+                self.__wildcards_obj,
+            ),
         )
 
     # ComfyUI tests

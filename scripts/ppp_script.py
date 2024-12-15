@@ -37,6 +37,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
         __on_ui_settings(): Callback function for UI settings.
     """
 
+    instance_count = 0
+
+    @classmethod
+    def increment_instance_count(cls):
+        cls.instance_count += 1
+
+    @classmethod
+    def get_instance_count(cls):
+        return cls.instance_count
+
     def __init__(self):
         """
         Initializes the PromptPostProcessor object.
@@ -49,6 +59,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         Returns:
             None
         """
+        self.increment_instance_count()
         lf = PromptPostProcessorLogFactory()
         self.name = PromptPostProcessor.NAME
         self.ppp_logger = lf.log
@@ -58,7 +69,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
-        self.ppp_logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
+        i = self.get_instance_count()
+        if i == 1: # some UIs create multiple instances
+            self.ppp_logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
 
     def title(self):
         """
@@ -86,48 +99,67 @@ class PromptPostProcessorA1111Script(scripts.Script):
             force_equal_seeds = gr.Checkbox(
                 label="Force equal seeds",
                 info="Force all image seeds and variation seeds to be equal to the first one, disabling the default autoincrease.",
-                default=False,
+                value=False,
                 # show_label=True,
                 elem_id="ppp_force_equal_seeds",
             )
-            gr.HTML(
-                """<br><div>Unlink the seed to use the specified one for the prompts instead of the image seed. 
-                This seed will only change for each image in the batch if the value is -1 or 'variable seed' is checked.</div>
-                <div>Seeds are only used for the wildcards and choice constructs.</div>"""
+            gr.HTML("<br>")
+            gr.Markdown(
+                """
+                Unlink the seed to use the specified one for the prompts instead of the image seed.
+
+                * A seed of -1 and "Incremental seed" checked will use a random seed for the first prompt and consecutive values for the rest. This is the same as when you use -1 for the image seed.
+                * A seed of -1 and "Incremental seed" unchecked will use a random seed for each prompt.
+                * Any other seed value and "Incremental seed" checked will use the specified seed for the first prompt and consecutive values for the rest.
+                * Any other seed value and "Incremental seed" unchecked will use the specified seed for all the prompts.
+
+                Seeds are only used for the wildcards and choice constructs.
+            """
             )
-            unlink_seed = gr.Checkbox(
-                label="Unlink seed",
-                default=False,
-                # show_label=True,
-                elem_id="ppp_unlink_seed",
-            )
-            seed = gr.Number(
-                label="Seed",
-                default=-1,
-                precision=0,
-                # minimum=-1,
-                # maximum=2**32 - 1,
-                # step=1,
-                # show_label=True,
-                min_width=100,
-                elem_id="ppp_seed",
-            )
-            variable_seed = gr.Checkbox(
-                label="Variable seed",
-                default=False,
-                # show_label=True,
-                elem_id="ppp_variable_seed",
-            )
-        return [force_equal_seeds, unlink_seed, seed, variable_seed]
+            gr.HTML("<br>")
+            with gr.Row(equal_height=True):
+                unlink_seed = gr.Checkbox(
+                    label="Unlink seed",
+                    value=False,
+                    # show_label=True,
+                    elem_id="ppp_unlink_seed",
+                )
+                seed = gr.Number(
+                    label="Prompt seed",
+                    value=-1,
+                    precision=0,
+                    # minimum=-1,
+                    # maximum=2**32 - 1,
+                    # step=1,
+                    # show_label=True,
+                    min_width=100,
+                    elem_id="ppp_seed",
+                )
+                incremental_seed = gr.Checkbox(
+                    label="Incremental seed (only applies to batches)",
+                    value=False,
+                    # show_label=True,
+                    elem_id="ppp_incremental_seed",
+                )
+        return [force_equal_seeds, unlink_seed, seed, incremental_seed]
 
     def process(
-        self, p: StableDiffusionProcessing, input_force_equal_seeds, input_unlink_seed, input_seed, input_variable_seed
+        self,
+        p: StableDiffusionProcessing,
+        input_force_equal_seeds,
+        input_unlink_seed,
+        input_seed,
+        input_incremental_seed,
     ):  # pylint: disable=arguments-differ
         """
         Processes the prompts and applies post-processing operations.
 
         Args:
             p (StableDiffusionProcessing): The StableDiffusionProcessing object containing the prompts.
+            input_force_equal_seeds (bool): Flag indicating whether to force equal seeds.
+            input_unlink_seed (bool): Flag indicating whether to unlink the seed.
+            input_seed (int): The seed value.
+            input_incremental_seed (bool): Flag indicating whether to use incremental seed.
 
         Returns:
             None
@@ -143,13 +175,35 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("Not processing the prompt for i2i")
             return
-        if self.ppp_debug_level != DEBUG_LEVEL.none:
-            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})")
+        app_names = {
+            "sdnext": "SD.Next",
+            "forge": "Forge",
+            "reforge": "reForge",
+            "a1111": "A1111 (or compatible)",
+        }
         app = (
             "forge"
             if hasattr(p.sd_model, "model_config")
-            else "sdnext" if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd") else "a1111"
+            else (
+                "reforge"
+                if hasattr(p.sd_model, "forge_objects")
+                else ("sdnext" if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd") else "a1111")
+            )
         )
+        if self.ppp_debug_level != DEBUG_LEVEL.none:
+            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'}) running on {app_names[app]}")
+        models_supported = {x: True for x in PromptPostProcessor.SUPPORTED_MODELS}
+        if app == "sdnext":
+            models_supported["ssd"] = False
+        elif app == "forge":
+            models_supported["ssd"] = False
+            models_supported["auraflow"] = False
+        elif app == "reforge":
+            models_supported["flux"] = False
+            models_supported["auraflow"] = False
+        else:  # assume A1111 compatible
+            models_supported["flux"] = False
+            models_supported["auraflow"] = False
         env_info = {
             "app": app,
             "models_path": models_path,
@@ -183,6 +237,15 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
             env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
             env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
+        elif app == "reforge":
+            env_info["model_class"] = p.sd_model.__class__.__name__
+            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
+            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
+            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
+            env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
+            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
+            env_info["is_flux"] = False
+            env_info["is_auraflow"] = False
         else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -202,7 +265,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
         ]
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
-            "pony_substrings": getattr(opts, "ppp_gen_ponysubstrings", PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS),
+            "variants_definitions": getattr(
+                opts, "ppp_gen_variantsdefinitions", PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS
+            ),
             "process_wildcards": getattr(opts, "ppp_wil_processwildcards", True),
             "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
@@ -241,10 +306,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("Using unlinked seed")
             num_seeds = len(getattr(p, "all_seeds", []))
-            if input_seed == -1:
+            if input_incremental_seed:
+                first_seed = np.random.randint(0, 2**32, dtype=np.int64) if input_seed == -1 else input_seed
+                calculated_seeds = [first_seed + i for i in range(num_seeds)]
+            elif input_seed == -1:
                 calculated_seeds = np.random.randint(0, 2**32, size=num_seeds, dtype=np.int64)
-            elif input_variable_seed:
-                calculated_seeds = [input_seed + i for i in range(num_seeds)]
             else:
                 calculated_seeds = [input_seed for _ in range(num_seeds)]
         else:
@@ -379,10 +445,15 @@ def on_ui_settings():
         ),
     )
     shared.opts.add_option(
-        key="ppp_gen_ponysubstrings",
+        key="ppp_gen_variantsdefinitions",
         info=shared.OptionInfo(
-            PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
-            label="Comma separated list of substrings to look for in the model full filename to flag it as Pony (case insensitive)",
+            PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
+            label="Definitions for variant models",
+            comment_after="Recognized based on strings found in the full filename. Format for each line is: 'name(kind)=comma separated list of substrings (case insensitive)' with kind being one of the base model types ("
+            + ",".join(PromptPostProcessor.SUPPORTED_MODELS)
+            + ") or not specified.",
+            component=gr.Textbox,
+            component_args={"lines": 7},
             section=section,
         ),
     )
