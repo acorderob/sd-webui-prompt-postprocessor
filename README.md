@@ -193,15 +193,16 @@ This command sets the value of a variable that can be checked later.
 The format is:
 
 ```text
-<ppp:set varname>value<ppp:/set>
-<ppp:set varname evaluate>value<ppp:/set>
-<ppp:set varname add>value<ppp:/set>
-<ppp:set varname evaluate add>value<ppp:/set>
+<ppp:set varname [modifiers]>value<ppp:/set>
 ```
 
-The `evaluate` parameter makes it so the value of the variable is evaluated at this moment, instead of when it is used.
+These are the available optional modifiers:
 
-With the `add` parameter the value is added to the current value of the variable. It does not force an immediate evaluation of the old nor the added value.
+* `evaluate`: the value of the variable is evaluated at this moment, instead of when it is used.
+* `add`: the value is added to the current value of the variable. It does not force an immediate evaluation of the old nor the added value.
+* `ifundefined`: the value will only be set if the variable is undefined.
+
+The `add` and `ifundefined` modifiers are mutually exclusive and cannot be used together.
 
 The Dynamic Prompts format also works:
 
@@ -210,11 +211,13 @@ ${var=value}
 ${var=!value}   # immediate evaluation
 ```
 
-If also supports the addition as an extension of the Dynamic Prompts format:
+If also supports the addition and undefined check as an extension of the Dynamic Prompts format:
 
 ```text
-${var+=value}
-${var+=!value}
+${var+=value}   # equivalent to "add"
+${var+=!value}  # equivalent to "evaluate add"
+${var?=value}   # equivalent to "ifundefined"
+${var?=!value}  # equivalent to "evaluate ifundefined"
 ```
 
 ### Echo command

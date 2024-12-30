@@ -355,7 +355,9 @@ class PromptPostProcessorComfyUINode:
         remove_extranetwork_tags,
     ):
         if wc_process_wildcards:
-            return float("NaN") # since we can't detect changes in wildcards we assume they are always changed when enabled
+            return float(
+                "NaN"
+            )  # since we can't detect changes in wildcards we assume they are always changed when enabled
         new_run = {  # everything except debug_level
             "model": model,
             "modelname": modelname,
@@ -432,11 +434,11 @@ class PromptPostProcessorComfyUINode:
             ),
             "is_ssd": modelclass in ("SSD1B",),
             "is_sd3": modelclass in ("SD3",),
-            "is_flux": modelclass in ("Flux",),
+            "is_flux": modelclass in ("Flux", "FluxInpaint", "FluxSchnell"),
             "is_auraflow": modelclass in ("AuraFlow",),
         }
-        # SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler,
-        # Stable_Cascade_C, Stable_Cascade_B, StableAudio
+        # Also supported: SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler,
+        # Stable_Cascade_C, Stable_Cascade_B, StableAudio, HunyuanDiT, HunyuanDiT1, GenmoMochi, LTXV
 
         if wc_wildcards_folders == "":
             wc_wildcards_folders = ",".join(folder_paths.get_folder_paths("wildcards") or [])
@@ -447,6 +449,8 @@ class PromptPostProcessorComfyUINode:
             for f in wc_wildcards_folders.split(",")
             if f.strip() != ""
         ]
+        if variants_definitions != "" and not "=" in variants_definitions:  # mainly to warn about the old format
+            raise ValueError("Invalid variants_definitions format")
         options = {
             "debug_level": debug_level,
             "variants_definitions": variants_definitions,

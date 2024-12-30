@@ -64,13 +64,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
         self.name = PromptPostProcessor.NAME
         self.ppp_logger = lf.log
         self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
-        self.lru_cache = PPPLRUCache(1000)
+        self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
         i = self.get_instance_count()
-        if i == 1: # some UIs create multiple instances
+        if i == 1:  # some UIs create multiple instances
             self.ppp_logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
 
     def title(self):
@@ -175,6 +175,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("Not processing the prompt for i2i")
             return
+
+        p.extra_generation_params.update(
+            {
+                "PPP force equal seeds": input_force_equal_seeds,
+                "PPP unlink seed": input_unlink_seed,
+                "PPP prompt seed": input_seed,
+                "PPP incremental seed": input_incremental_seed,
+            }
+        )
+
         app_names = {
             "sdnext": "SD.Next",
             "forge": "Forge",
@@ -228,15 +238,24 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sd3"] = p.sd_model.__class__.__name__ == "StableDiffusion3Pipeline"
             env_info["is_flux"] = p.sd_model.__class__.__name__ == "FluxPipeline"
             env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
+            # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'PixArt-Alpha': 'PixArtAlphaPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'AuraFlow': 'AuraFlowPipeline', 'CogView': 'CogView3PlusPipeline'
         elif app == "forge":
             env_info["model_class"] = p.sd_model.model_config.__class__.__name__
-            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
+            env_info["is_sd1"] = getattr(
+                p.sd_model, "is_sd1", False
+            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion"
+            env_info["is_sd2"] = getattr(
+                p.sd_model, "is_sd2", False
+            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion2"
+            env_info["is_sdxl"] = getattr(
+                p.sd_model, "is_sdxl", False
+            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusionXL"
             env_info["is_ssd"] = False  # ?
-            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
+            env_info["is_sd3"] = getattr(
+                p.sd_model, "is_sd3", False
+            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion3" # not actually supported?
             env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
-            env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
+            env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
         elif app == "reforge":
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -328,24 +347,44 @@ class PromptPostProcessorA1111Script(scripts.Script):
             else:
                 calculated_seeds = seeds
 
+        # initialize extra generation parameters
+        extra_params = {}
+
         # adds regular prompts
-        rpr = getattr(p, "all_prompts", None)
-        rnr = getattr(p, "all_negative_prompts", None)
+        rpr: list[str] = getattr(p, "all_prompts", None)
+        rnr: list[str] = getattr(p, "all_negative_prompts", None)
         if rpr is not None and rnr is not None:
+            extra_params.update(
+                {
+                    "PPP original prompts": rpr.copy(),
+                    "PPP original negative prompts": rnr.copy(),
+                }
+            )
             prompts_list += [
                 ("regular", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rpr, rnr)
                 if (seed, prompt, negative_prompt) not in prompts_list
             ]
         # make it compatible with A1111 hires fix
-        rph = getattr(p, "all_hr_prompts", None)
-        rnh = getattr(p, "all_hr_negative_prompts", None)
+        rph: list[str] = getattr(p, "all_hr_prompts", None)
+        rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
         if rph is not None and rnh is not None:
+            extra_params.update(
+                {
+                    "PPP original HR prompts": rph.copy(),
+                    "PPP original HR negative prompts": rnh.copy(),
+                }
+            )
             prompts_list += [
                 ("hiresfix", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rph, rnh)
                 if (seed, prompt, negative_prompt) not in prompts_list
             ]
+
+        # fill extra generation parameters only if not already present
+        for k, v in extra_params.items():
+            if p.extra_generation_params.get(k) is None:
+                p.extra_generation_params[k] = v
 
         # processes prompts
         for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):

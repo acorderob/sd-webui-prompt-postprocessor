@@ -67,13 +67,15 @@ SIMPLEVALUE: STRING | NUMBER | BOOLEAN
 listvalue: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLEVALUE )* _WHITESPACE? ")"
 
 // command: set
-commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ _WHITESPACE? /evaluate/ ] [ _WHITESPACE? /add/ ] _WHITESPACE? ">" content "<ppp:/set>"
+commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ commandsetmodifiers ] _WHITESPACE? ">" content "<ppp:/set>"
+commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
 
 // command: echo
 commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ">" [ content "<ppp:/echo>" ]
 
 // variable set
-variableset.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ /\+/ ] "=" [ /!/ ] varvalue "}"
+variableset.2: "${" _WHITESPACE? IDENTIFIER [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] varvalue "}"
+variablesetmodifiers: /[+?!]+/
 
 // variable use
 variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ ":" varvalue ] "}"

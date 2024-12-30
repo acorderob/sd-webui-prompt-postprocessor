@@ -108,9 +108,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             f"Unsupported model type '{model_type}' in definition for variant '{model_name}'."
                         )
                     elif model_name in self.SUPPORTED_MODELS:
-                        self.logger.warning(
-                            f"Invalid model name in definition for variant '{model_name}'."
-                        )
+                        self.logger.warning(f"Invalid model name in definition for variant '{model_name}'.")
                     else:
                         self.variants_definitions[model_name.strip()] = (
                             model_type or "",
@@ -477,7 +475,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.interrupt()
         # Check for special character sequences that should not be in the result
         compound_prompt = prompt + "\n" + negative_prompt
-        found_sequences = re.findall(r"::|\$\$|\$\{|[{|}]", compound_prompt)
+        found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
         if len(found_sequences) > 0:
             self.logger.warning(
                 f"""Found probably invalid character sequences on the result ({', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}). Something might be wrong!"""
@@ -521,6 +519,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.logger.info(self.format_output(f"Result negative_prompt: {negative_prompt}"))
                 self.logger.info(f"Process prompt pair time: {t2 - t1:.3f} seconds")
 
+            # if self.debug_level != DEBUG_LEVEL.none:
+            #     self.logger.debug(f"Wildcards memory usage: {self.wildcard_obj.__sizeof__()}")
             # Check for constructs not processed due to parsing problems
             fullcontent: str = prompt + negative_prompt
             if fullcontent.find("<ppp:") >= 0:
@@ -761,7 +761,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if var_value is None:
                     var_value = ""
                     self.__ppp.logger.warning(f"Unknown system variable {cond_var}")
-            else: # user variable
+            else:  # user variable
                 var_value = self.__get_user_variable_value(cond_var)
                 if var_value is None:
                     var_value = ""
@@ -1057,8 +1057,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self,
             command: str,
             variable: str,
-            immediateevaluation: str | None,
-            adding: str | None,
+            modifiers: lark.Tree | None,
             content: lark.Tree | None,
         ):
             """
@@ -1073,7 +1072,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             info = variable
             value_description = self.__get_original_node_content(content, None)
             value = content
-            if adding is not None:
+            modifiers_str: list[str] = [m.value for m in modifiers.children] if modifiers is not None else []
+            if any(item in modifiers_str for item in ["+", "add"]):
                 info += f" += '{value_description}'"
                 raw_oldvalue = self.__ppp.user_variables.get(variable, None)
                 if raw_oldvalue is None:
@@ -1091,19 +1091,28 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         [raw_oldvalue, value],
                         # Meta should be {"content": raw_oldvalue.meta.content + value.meta.content},
                     )
+            elif any(item in modifiers_str for item in ["?", "ifundefined"]):
+                info += f" ?= '{value_description}'"
+                raw_oldvalue = self.__ppp.user_variables.get(variable, None)
+                if raw_oldvalue is None:
+                    newvalue = value
+                else:
+                    info += " (not set)"
+                    newvalue = None
             else:
                 newvalue = value
-            if immediateevaluation is not None:
-                newvalue = self.__visit(newvalue, False, True)
-                info += " =! "
-            else:
-                info += " = "
-            self.__set_user_variable_value(variable, newvalue)
-            currentvalue = self.__get_user_variable_value(variable, False)
-            if currentvalue is None:
-                info += "not evaluated yet"
-            else:
-                info += f"'{currentvalue}'"
+            if newvalue is not None:
+                if any(item in modifiers_str for item in ["!", "evaluate"]):
+                    newvalue = self.__visit(newvalue, False, True)
+                    info += " =! "
+                else:
+                    info += " = "
+                self.__set_user_variable_value(variable, newvalue)
+                currentvalue = self.__get_user_variable_value(variable, False)
+                if currentvalue is None:
+                    info += "not evaluated yet"
+                else:
+                    info += f"'{currentvalue}'"
             t2 = time.time()
             self.__debug_end(command, start_result, t2 - t1, info)
 
@@ -1111,13 +1120,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a DP set variable command in the tree and add it to the dictionary of variables.
             """
-            self.__varset("variableset", tree.children[0], tree.children[2], tree.children[1], tree.children[3])
+            modifiers = tree.children[1] or lark.Tree(lark.Token("RULE", "variablesetmodifiers"), [])
+            immediate = tree.children[2]
+            if immediate is not None:
+                modifiers.children = modifiers.children.copy()
+                modifiers.children.append(immediate)
+            self.__varset("variableset", tree.children[0], modifiers, tree.children[3])
 
         def commandset(self, tree: lark.Tree):
             """
             Process a set command in the tree and add it to the dictionary of variables.
             """
-            self.__varset("commandset", tree.children[0], tree.children[1], tree.children[2], tree.children[3])
+            self.__varset("commandset", tree.children[0], tree.children[1], tree.children[2])
 
         def __varecho(self, command: str, variable: str, default: lark.Tree | None):
             """
@@ -1533,7 +1547,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     t2 = time.time()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return
-                filter_specifier:list[int|str] = None
+                filter_specifier: list[int | str] = None
                 filter_object = tree.children[2]
                 if filter_object is not None:
                     if (

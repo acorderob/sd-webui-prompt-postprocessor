@@ -51,6 +51,15 @@ class PPPWildcard:
         t = (self.key, deep_freeze(self.unprocessed_choices))
         return hash(t)
 
+    def __sizeof__(self):
+        return (
+            self.key.__sizeof__()
+            + self.file.__sizeof__()
+            + self.unprocessed_choices.__sizeof__()
+            + self.choices.__sizeof__()
+            + self.options.__sizeof__()
+        )
+
 
 class PPPWildcards:
     """
@@ -71,6 +80,13 @@ class PPPWildcards:
 
     def __hash__(self) -> int:
         return hash(deep_freeze(self.wildcards))
+
+    def __sizeof__(self):
+        return (
+            self.wildcards.__sizeof__()
+            + self.__wildcards_folders.__sizeof__()
+            + self.__wildcard_files.__sizeof__()
+        )
 
     def refresh_wildcards(self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]]):
         """

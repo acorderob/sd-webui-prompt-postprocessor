@@ -442,6 +442,42 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__nocupppp,
         )
 
+    def test_cmd_set_ifundefined_if(self):  # set, ifundefined and if commands
+        self.__process(
+            PromptPair(
+                "<ppp:set v ifundefined>value<ppp:/set>this test is <ppp:if v eq 'value'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_ifundefined_if_2(self):  # set, ifundefined and if commands
+        self.__process(
+            PromptPair(
+                "<ppp:set v>value<ppp:/set><ppp:set v ifundefined>value2<ppp:/set>this test is <ppp:if v eq 'value'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_ifundefined_DP_if(self):  # set, ifundefined (DP format) and if commands
+        self.__process(
+            PromptPair(
+                "${v?=value}this test is <ppp:if v eq 'value'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_ifundefined_DP_if_2(self):  # set, ifundefined (DP format) and if commands
+        self.__process(
+            PromptPair(
+                "${v=!value}${v?=!value2}this test is <ppp:if v eq 'value'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("this test is OK", ""),
+        )
+
     # Choices tests
 
     def test_ch_choices(self):  # simple choices with weights
