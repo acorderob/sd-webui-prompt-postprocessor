@@ -441,9 +441,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = self.__add_to_insertion_points(
             negative_prompt, p_processor.add_at["insertion_point"], n_processor.insertion_at
         )
-        if len(p_processor.add_at["start"]) > 0:
+        if p_processor.add_at["start"]:
             negative_prompt = self.__add_to_start(negative_prompt, p_processor.add_at["start"])
-        if len(p_processor.add_at["end"]) > 0:
+        if p_processor.add_at["end"]:
             negative_prompt = self.__add_to_end(negative_prompt, p_processor.add_at["end"])
 
         # Clean up
@@ -451,8 +451,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = self.__cleanup(negative_prompt)
 
         # Check for wildcards not processed
-        foundP = len(p_processor.detectedWildcards) > 0
-        foundNP = len(n_processor.detectedWildcards) > 0
+        foundP = bool(p_processor.detectedWildcards)
+        foundNP = bool(n_processor.detectedWildcards)
         if foundP or foundNP:
             if self.wil_ifwildcards == self.IFWILDCARDS_CHOICES.stop:
                 self.logger.error("Found unprocessed wildcards!")
@@ -473,10 +473,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if foundNP:
                     negative_prompt = self.WILDCARD_STOP.format(npwl) + negative_prompt
                 self.interrupt()
+
         # Check for special character sequences that should not be in the result
         compound_prompt = prompt + "\n" + negative_prompt
         found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
-        if len(found_sequences) > 0:
+        if found_sequences:
             self.logger.warning(
                 f"""Found probably invalid character sequences on the result ({', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}). Something might be wrong!"""
             )
@@ -1255,15 +1256,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             break
                     if passes:
                         filtered_choice_values.append(c)
-                if len(filtered_choice_values) == 0:
+                if not filtered_choice_values:
                     self.__ppp.logger.warning(
                         f"Wildcard filter specifier '{','.join(['+'.join(y for y in x) for x in filter_specifier])}' found no matches in choices for wildcard '{wildcard_key}'!"
                     )
             else:
                 filtered_choice_values = choice_values.copy()
-            if len(filtered_choice_values) == 0:
-                num_choices = 0
-            else:
+            if filtered_choice_values:
                 if from_value < 0:
                     from_value = 1
                 elif from_value > len(filtered_choice_values):
@@ -1277,6 +1276,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if from_value < to_value
                     else from_value
                 )
+            else:
+                num_choices = 0
             if num_choices < 2:
                 repeating = False
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -1541,7 +1542,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
                     self.__ppp.logger.debug(f"Processing wildcard: {wildcard_key}")
                 selected_wildcards = self.__ppp.wildcard_obj.get_wildcards(wildcard_key)
-                if len(selected_wildcards) == 0:
+                if not selected_wildcards:
                     self.detectedWildcards.append(wc)
                     self.result += wc
                     t2 = time.time()

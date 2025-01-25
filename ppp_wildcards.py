@@ -82,11 +82,7 @@ class PPPWildcards:
         return hash(deep_freeze(self.wildcards))
 
     def __sizeof__(self):
-        return (
-            self.wildcards.__sizeof__()
-            + self.__wildcards_folders.__sizeof__()
-            + self.__wildcard_files.__sizeof__()
-        )
+        return self.wildcards.__sizeof__() + self.__wildcards_folders.__sizeof__() + self.__wildcard_files.__sizeof__()
 
     def refresh_wildcards(self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]]):
         """
@@ -245,50 +241,59 @@ class PPPWildcards:
         Returns:
             list: list of choices
         """
-        choices = None
-        if obj is not None:
-            if isinstance(obj, (str, dict)):
-                choices = [obj]
-            elif isinstance(obj, (int, float, bool)):
-                choices = [str(obj)]
-            elif isinstance(obj, list) and len(obj) > 0:
-                choices = []
-                for i, c in enumerate(obj):
-                    invalid_choice = False
-                    if isinstance(c, str):
-                        choice = c
-                    elif isinstance(c, (int, float, bool)):
-                        choice = str(c)
-                    elif isinstance(c, list):
-                        # we create an anonymous wildcard
-                        choice = self.__create_anonymous_wildcard(full_path, key_parts, i, c)
-                    elif isinstance(c, dict):
-                        if self.is_dict_choices_options(c) or self.is_dict_choice_options(c):
-                            # we assume it is a choice or wildcard parameters in object format
-                            choice = c
-                            choice_content = choice.get("content", choice.get("text", None))
-                            if choice_content is not None and isinstance(choice_content, list):
-                                # we create an anonymous wildcard
-                                choice["content"] = self.__create_anonymous_wildcard(
-                                    full_path, key_parts, i, choice_content
-                                )
-                                if "text" in choice:
-                                    del choice["text"]
-                        elif len(c) == 1:
-                            # we assume it is an anonymous wildcard with options
-                            firstkey = list(c.keys())[0]
-                            choice = self.__create_anonymous_wildcard(full_path, key_parts, i, c[firstkey], firstkey)
-                        else:
-                            invalid_choice = True
-                    else:
-                        invalid_choice = True
-                    if invalid_choice:
-                        self.__logger.warning(
-                            f"Invalid choice {i+1} in wildcard '{'/'.join(key_parts)}' in file '{full_path}'!"
-                        )
-                    else:
-                        choices.append(choice)
+        if obj is None:
+            return None
+        if isinstance(obj, (str, dict)):
+            return [obj]
+        if isinstance(obj, (int, float, bool)):
+            return [str(obj)]
+        if not isinstance(obj, list) or len(obj) == 0:
+            self.__logger.warning(f"Invalid format in wildcard '{'/'.join(key_parts)}' in file '{full_path}'!")
+            return None
+        choices = []
+        for i, c in enumerate(obj):
+            if isinstance(c, (str, int, float, bool)):
+                choices.append(str(c))
+            elif isinstance(c, list):
+                # we create an anonymous wildcard
+                choices.append(self.__create_anonymous_wildcard(full_path, key_parts, i, c))
+            elif isinstance(c, dict):
+                choices.append(self.__process_dict_choice(c, full_path, key_parts, i))
+            else:
+                self.__logger.warning(
+                    f"Invalid choice {i+1} in wildcard '{'/'.join(key_parts)}' in file '{full_path}'!"
+                )
         return choices
+
+    def __process_dict_choice(self, c: dict, full_path: str, key_parts: list[str], i: int) -> dict:
+        """
+        Process a dictionary choice.
+
+        Args:
+            c (dict): The dictionary choice.
+            full_path (str): The path to the file.
+            key_parts (list[str]): The parts of the key.
+            i (int): The index of the choice.
+
+        Returns:
+            dict: The processed choice.
+        """
+        if self.is_dict_choices_options(c) or self.is_dict_choice_options(c):
+            # we assume it is a choice or wildcard parameters in object format
+            choice = c
+            choice_content = choice.get("content", choice.get("text", None))
+            if choice_content is not None and isinstance(choice_content, list):
+                # we create an anonymous wildcard
+                choice["content"] = self.__create_anonymous_wildcard(full_path, key_parts, i, choice_content)
+                if "text" in choice:
+                    del choice["text"]
+            return choice
+        if len(c) == 1:
+            # we assume it is an anonymous wildcard with options
+            firstkey = list(c.keys())[0]
+            return self.__create_anonymous_wildcard(full_path, key_parts, i, c[firstkey], firstkey)
+        self.__logger.warning(f"Invalid choice {i+1} in wildcard '{'/'.join(key_parts)}' in file '{full_path}'!")
+        return None
 
     def __create_anonymous_wildcard(self, full_path, key_parts, i, content, options=None):
         """

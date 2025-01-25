@@ -722,6 +722,20 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__nocupppp,
         )
 
+    def test_wc_test2_yaml(self):  # simple yaml wildcard
+        self.__process(
+            PromptPair("the choice is: __testwc/test2__", ""),
+            PromptPair("the choice is: 2", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_test3_yaml(self):  # simple yaml wildcard
+        self.__process(
+            PromptPair("the choice is: __testwc/test3__", ""),
+            PromptPair("the choice is: one choice", ""),
+            ppp=self.__nocupppp,
+        )
+
     def test_wc_wildcard_filter_index(self):  # wildcard with positional index filter
         self.__process(
             PromptPair("the choice is: __yaml/wildcard2'2'__", ""),
