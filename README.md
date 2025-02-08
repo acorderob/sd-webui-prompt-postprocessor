@@ -271,11 +271,15 @@ The variable can be one set with the `set` or `add` commands or you can use inte
 * `_is_sd`: true if the loaded model version is any version of SD
 * `_is_sd1`: true if the loaded model version is SD 1.x
 * `_is_sd2`: true if the loaded model version is SD 2.x
-* `_is_sdxl`: true if the loaded model version is SDXL (includes Pony models)
+* `_is_sdxl`: true if the loaded model version is SDXL (includes Pony and Illustrious models)
 * `_is_ssd`: true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.
 * `_is_sdxl_no_ssd`: true if the loaded model version is SDXL and not an SSD model.
 * `_is_pony`: true if the loaded model version is SDXL and a Pony model (based on its filename). Note that for a pony model `_is_sdxl` will also be true.
 * `_is_sdxl_no_pony`: true if the loaded model version is SDXL and not a Pony model.
+* `_is_illustrious`: true if the loaded model version is SDXL and an Illustrious model (based on its filename). Note that for an Illustrious model `_is_sdxl` will also be true.
+* `_is_sdxl_no_illustrious`: true if the loaded model version is SDXL and not an Illustrious model.
+* `_is_sdxl_no_pony_no_illustrious`: true if the loaded model version is SDXL and not a pony model and not an Illustrious model.
+* `_is_both_pony_and_illustrious`: true if the loaded model version is detected as both a pony and Illustrious model. Only for detecting false lables. 
 * `_is_sd3`: true if the loaded model version is SD 3.x
 * `_is_flux`: true if the loaded model is Flux
 * `_is_auraflow`: true if the loaded model is AuraFlow
@@ -289,6 +293,7 @@ Any `elif`s (there can be multiple) and the `else` are optional.
 ```text
 <ppp:if _is_sd1><lora:test_sd1> test sd1x
 <ppp:elif _sd_pony><lora:test_pony> test pony
+<ppp:elif _sd_illustrious><lora:test_illustrious> test illustrious
 <ppp:elif _sd_sdxl><lora:test_sdxl> test sdxl
 <ppp:else>unknown model
 <ppp:/if>
@@ -369,7 +374,7 @@ This should still work as intended, and the only negative point i see is the unn
 ### ComfyUI specific inputs
 
 * **model**: Connect here the MODEL or a string with the model class name used by ComfyUI. Needed for the model kind system variables.
-* **modelname**: Name of the model. Needed for the model name system variables and detection of pony (this also requieres for the model to be SDXL).
+* **modelname**: Name of the model. Needed for the model name system variables and detection of pony and illustrious (this also requieres for the model to be SDXL).
 * **seed**: Connect here the seed used. By default it is -1 (random).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
@@ -378,6 +383,7 @@ This should still work as intended, and the only negative point i see is the unn
 
 * **Debug level**: what to write to the console. Note: in SD.Next debug messages only show if you launch it with the --debug argument.
 * **Pony substrings**: list of substrings to detect a Pony model.
+* **Illustrious substrings**: list of substrings to detect an Illustrious model.
 * **Apply in img2img**: check if you want to do the processing in img2img processes (does not apply to ComfyUI node).
 
 ### Wildcard settings

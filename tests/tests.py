@@ -30,6 +30,7 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__defopts = {
             "debug_level": DEBUG_LEVEL.full.value,
             "pony_substrings": PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
+            "illustrious_substrings": PromptPostProcessor.DEFAULT_ILLUSTRIOUS_SUBSTRINGS,
             "process_wildcards": True,
             "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
             "choice_separator": ", ",

@@ -203,6 +203,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
             "pony_substrings": getattr(opts, "ppp_gen_ponysubstrings", PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS),
+            "illustrious_substrings": getattr(opts, "ppp_gen_illustrioussubstrings", PromptPostProcessor.DEFAULT_ILLUSTRIOUS_SUBSTRINGS),
             "process_wildcards": getattr(opts, "ppp_wil_processwildcards", True),
             "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
@@ -383,6 +384,14 @@ def on_ui_settings():
         info=shared.OptionInfo(
             PromptPostProcessor.DEFAULT_PONY_SUBSTRINGS,
             label="Comma separated list of substrings to look for in the model full filename to flag it as Pony (case insensitive)",
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_gen_illustrioussubstrings",
+        info=shared.OptionInfo(
+            PromptPostProcessor.DEFAULT_ILLUSTRIOUS_SUBSTRINGS,
+            label="Comma separated list of substrings to look for in the model full filename to flag it as Illustrious (case insensitive)",
             section=section,
         ),
     )

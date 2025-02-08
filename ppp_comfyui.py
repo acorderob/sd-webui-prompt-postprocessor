@@ -105,6 +105,16 @@ class PromptPostProcessorComfyUINode:
                         "forceInput": False,
                     },
                 ),
+                "illustrious_substrings": (
+                    "STRING",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_ILLUSTRIOUS_SUBSTRINGS,
+                        "placeholder": "comma separated list",
+                        "tooltip": "Comma separated list of substrings to look for in the modelname to determine if the model is an illustrious model",
+                        "defaultInput": False,
+                        "forceInput": False,
+                    },
+                ),
                 "wc_process_wildcards": (
                     "BOOLEAN",
                     {
@@ -334,6 +344,7 @@ class PromptPostProcessorComfyUINode:
         seed,
         debug_level,  # pylint: disable=unused-argument
         pony_substrings,
+        illustrious_substrings,
         wc_process_wildcards,
         wc_wildcards_folders,
         wc_if_wildcards,
@@ -362,6 +373,7 @@ class PromptPostProcessorComfyUINode:
             "neg_prompt": neg_prompt,
             "seed": seed,
             "pony_substrings": pony_substrings,
+            "illustrious_substrings": illustrious_substrings,
             "process_wildcards": wc_process_wildcards,
             "wildcards_folders": wc_wildcards_folders,
             "if_wildcards": wc_if_wildcards,
@@ -393,6 +405,7 @@ class PromptPostProcessorComfyUINode:
         seed,
         debug_level,
         pony_substrings,
+        illustrious_substrings,
         wc_process_wildcards,
         wc_wildcards_folders,
         wc_if_wildcards,
@@ -449,6 +462,7 @@ class PromptPostProcessorComfyUINode:
         options = {
             "debug_level": debug_level,
             "pony_substrings": pony_substrings,
+            "illustrious_substrings": illustrious_substrings,
             "process_wildcards": wc_process_wildcards,
             "if_wildcards": wc_if_wildcards,
             "choice_separator": wc_choice_separator,

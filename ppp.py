@@ -53,6 +53,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     DEFAULT_STN_SEPARATOR = ", "
     DEFAULT_PONY_SUBSTRINGS = ",".join(["pony", "pny", "pdxl"])
+    DEFAULT_ILLUSTRIOUS_SUBSTRINGS = ",".join(["Illustrious", "illust", "ilust", "noob"])
     DEFAULT_CHOICE_SEPARATOR = ", "
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
@@ -89,6 +90,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.debug_level = DEBUG_LEVEL(options.get("debug_level", DEBUG_LEVEL.none.value))
         self.pony_substrings = list(
             x.strip() for x in (str(options.get("pony_substrings", self.DEFAULT_PONY_SUBSTRINGS))).split(",")
+        )
+        self.illustrious_substrings = list(
+            x.strip() for x in (str(options.get("illustrious_substrings", self.DEFAULT_ILLUSTRIOUS_SUBSTRINGS))).split(",")
         )
         # Wildcards options
         self.wil_process_wildcards = options.get("process_wildcards", True)
@@ -192,6 +196,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.system_variables["_sd"] = self.system_variables["_model"]  # deprecated
         model_filename = self.env_info.get("model_filename", "")
         is_pony = any(s in model_filename.lower() for s in self.pony_substrings)
+        is_illustrious = any(s in model_filename.lower() for s in self.illustrious_substrings)
         is_ssd = self.env_info.get("is_ssd", False)
         self.system_variables["_sdfullname"] = model_filename  # deprecated
         self.system_variables["_modelfullname"] = model_filename
@@ -205,6 +210,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.system_variables["_is_sdxl_no_ssd"] = sdchecks["sdxl"] and not is_ssd
         self.system_variables["_is_pony"] = sdchecks["sdxl"] and is_pony
         self.system_variables["_is_sdxl_no_pony"] = sdchecks["sdxl"] and not is_pony
+        self.system_variables["_is_illustrious"] = sdchecks["sdxl"] and is_illustrious
+        self.system_variables["_is_sdxl_no_illustrious"] = sdchecks["sdxl"] and not is_illustrious
+        self.system_variables["_is_sdxl_no_pony_no_illustrious"] = sdchecks["sdxl"] and not is_pony and not is_illustrious
+        self.system_variables["_is_both_pony_and_illustrious"] = sdchecks["sdxl"] and is_pony and is_illustrious
         self.system_variables["_is_sd3"] = sdchecks["sd3"]
         self.system_variables["_is_sd"] = sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"]
         self.system_variables["_is_flux"] = sdchecks["flux"]
