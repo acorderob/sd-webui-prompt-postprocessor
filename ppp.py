@@ -213,7 +213,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.system_variables["_is_illustrious"] = sdchecks["sdxl"] and is_illustrious
         self.system_variables["_is_sdxl_no_illustrious"] = sdchecks["sdxl"] and not is_illustrious
         self.system_variables["_is_sdxl_no_pony_no_illustrious"] = sdchecks["sdxl"] and not is_pony and not is_illustrious
-        self.system_variables["_is_both_pony_and_illustrious"] = sdchecks["sdxl"] and is_pony and is_illustrious
+        if sdchecks["sdxl"] and is_pony and is_illustrious:
+            self.logger.warning(
+                f"""SDXL Model matched both Pony and Illustrious substrings. Change the substrings in Settings -> Promp Post-Processor or rename the model file/path. ({model_filename}) """
+            )
         self.system_variables["_is_sd3"] = sdchecks["sd3"]
         self.system_variables["_is_sd"] = sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"]
         self.system_variables["_is_flux"] = sdchecks["flux"]

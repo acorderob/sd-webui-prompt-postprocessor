@@ -279,7 +279,6 @@ The variable can be one set with the `set` or `add` commands or you can use inte
 * `_is_illustrious`: true if the loaded model version is SDXL and an Illustrious model (based on its filename). Note that for an Illustrious model `_is_sdxl` will also be true.
 * `_is_sdxl_no_illustrious`: true if the loaded model version is SDXL and not an Illustrious model.
 * `_is_sdxl_no_pony_no_illustrious`: true if the loaded model version is SDXL and not a pony model and not an Illustrious model.
-* `_is_both_pony_and_illustrious`: true if the loaded model version is detected as both a pony and Illustrious model. Only for detecting false lables. 
 * `_is_sd3`: true if the loaded model version is SD 3.x
 * `_is_flux`: true if the loaded model is Flux
 * `_is_auraflow`: true if the loaded model is AuraFlow
