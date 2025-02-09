@@ -181,7 +181,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
             env_info["is_ssd"] = False  # ?
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-            env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
+            env_info["is_flux"] = "Flux" in p.sd_model.model_config.__class__.__name__
             env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow"
         else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
             env_info["model_class"] = p.sd_model.__class__.__name__
