@@ -51,7 +51,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         stop = "stop"
 
     DEFAULT_STN_SEPARATOR = ", "
-    DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,ilxl"
+    DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,illust,ilxl"
     DEFAULT_CHOICE_SEPARATOR = ", "
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
@@ -172,6 +172,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
         self.__init_sysvars()
         self.user_variables = {}
+        self.echoed_variables = {}
 
     def interrupt(self):
         if self.interrupt_callback is not None:
@@ -423,6 +424,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             tuple: A tuple containing the processed prompt and negative prompt.
         """
         self.user_variables = {}
+        self.echoed_variables = {}
+        all_variables = {**self.system_variables}
 
         # Process prompt
         p_processor = self.TreeProcessor(self)
@@ -433,6 +436,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         n_processor = self.TreeProcessor(self)
         n_parsed = self.parse_prompt("negative prompt", negative_prompt, self.parser_complete)
         negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
+
+        var_keys = set(self.user_variables.keys()).union(set(self.echoed_variables.keys()))
+        all_variables.update(
+            {k: self.echoed_variables.get(k, p_processor.get_final_user_variable(k)) for k in var_keys}
+        )
 
         # Insertions in the negative prompt
         if self.debug_level == DEBUG_LEVEL.full:
@@ -481,7 +489,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.logger.warning(
                 f"""Found probably invalid character sequences on the result ({', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}). Something might be wrong!"""
             )
-        return prompt, negative_prompt
+        return prompt, negative_prompt, all_variables
 
     def process_prompt(
         self,
@@ -498,8 +506,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             seed (int): The seed.
 
         Returns:
-            tuple: A tuple containing the processed prompt and negative prompt.
+            tuple: A tuple containing the processed prompt, negative prompt and all the prompt variables.
         """
+        all_variables = {}
         try:
             if seed == -1:
                 seed = np.random.randint(0, 2**32, dtype=np.int64)
@@ -513,7 +522,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.logger.info(self.format_output(f"Input prompt: {prompt}"))
                 self.logger.info(self.format_output(f"Input negative_prompt: {negative_prompt}"))
             t1 = time.time()
-            prompt, negative_prompt = self.__processprompts(prompt, negative_prompt)
+            prompt, negative_prompt, all_variables = self.__processprompts(prompt, negative_prompt)
             t2 = time.time()
             if self.debug_level != DEBUG_LEVEL.none:
                 self.logger.info(self.format_output(f"Result prompt: {prompt}"))
@@ -528,10 +537,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.logger.error("Found unprocessed constructs in prompt or negative prompt! Stopping the generation.")
                 prompt = self.UNPROCESSED_STOP + prompt
                 self.interrupt()
-            return prompt, negative_prompt
+            return prompt, negative_prompt, all_variables
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.exception(e)
-            return original_prompt, original_negative_prompt
+            return original_prompt, original_negative_prompt, all_variables
 
     def parse_prompt(self, prompt_description: str, prompt: str, parser: lark.Lark, raise_parsing_error: bool = False):
         """
@@ -706,6 +715,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.result += v
             return v
 
+        def get_final_user_variable(self, name: str) -> str:
+            return self.__get_user_variable_value(name, True, False)
+
         def __set_user_variable_value(self, name: str, value: str):
             """
             Set the value of a user variable.
@@ -745,7 +757,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__ppp.format_output(f"TreeProcessor.{construct} {info}({duration:.3f} seconds){output}")
                 )
 
-        def __eval_condition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
+        def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
             """
             Evaluate a condition based on the given variable, comparison, and value.
 
@@ -816,7 +828,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     break
             return result
 
-        def __evaluate_if(self, condition: lark.Tree) -> bool:
+        def __eval_condition(self, condition: lark.Tree) -> bool:
             """
             Evaluate an if condition based on the given condition tree.
 
@@ -826,38 +838,47 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 bool: The result of the if condition evaluation.
             """
-            individualcondition: lark.Tree = condition.children[0]
-            # we get the name of the variable and check for a preceding not
-            invert = False
-            first = individualcondition.children[0].value  # it should be a Token
-            if first == "not":
-                invert = True
-                cond_var = individualcondition.children[1].value  # it should be a Token
-                poscomp = 2
-            else:
-                cond_var = first
+            # self.__ppp.logger.debug(f"__eval_condition {condition.data}")
+            if condition.data == "operation_and":
+                cond_result = True
+                for c in condition.children:
+                    cond_result = cond_result and self.__eval_condition(c)
+                    if not cond_result:
+                        break
+            elif condition.data == "operation_or":
+                cond_result = False
+                for c in condition.children:
+                    cond_result = cond_result or self.__eval_condition(c)
+                    if cond_result:
+                        break
+            elif condition.data == "operation_not":
+                cond_result = not self.__eval_condition(condition.children[0])
+            else:  # truthy_operand / comparison_simple_value / comparison_list_value
+                # we get the name of the variable
+                cond_var = condition.children[0].value  # it should be a Token
                 poscomp = 1
-            if poscomp >= len(individualcondition.children):
-                # no condition, just a variable
-                cond_comp = "truthy"
-                cond_value = "true"
-            else:
-                # we get the comparison (with possible not) and the value
-                cond_comp = individualcondition.children[poscomp].value  # it should be a Token
-                if cond_comp == "not":
-                    invert = not invert
+                invert = False
+                if poscomp >= len(condition.children):
+                    # no condition, just a variable
+                    cond_comp = "truthy"
+                    cond_value = "true"
+                else:
+                    # we get the comparison (with possible not) and the value
+                    cond_comp = condition.children[poscomp].value  # it should be a Token
+                    if cond_comp == "not":
+                        invert = not invert
+                        poscomp += 1
+                        cond_comp = condition.children[poscomp].value  # it should be a Token
                     poscomp += 1
-                    cond_comp = individualcondition.children[poscomp].value  # it should be a Token
-                poscomp += 1
-                cond_value_node = individualcondition.children[poscomp]
-                cond_value = (
-                    list(v.value for v in cond_value_node.children)
-                    if isinstance(cond_value_node, (lark.Tree, list))
-                    else cond_value_node.value if isinstance(cond_value_node, lark.Token) else cond_value_node
-                )
-            cond_result = self.__eval_condition(cond_var, cond_comp, cond_value)
-            if invert:
-                cond_result = not cond_result
+                    cond_value_node = condition.children[poscomp]
+                    cond_value = (
+                        list(v.value for v in cond_value_node.children)
+                        if isinstance(cond_value_node, (lark.Tree, list))
+                        else cond_value_node.value if isinstance(cond_value_node, lark.Token) else cond_value_node
+                    )
+                cond_result = self.__eval_basiccondition(cond_var, cond_comp, cond_value)
+                if invert:
+                    cond_result = not cond_result
             return cond_result
 
         def promptcomp(self, tree: lark.Tree):
@@ -1126,13 +1147,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if immediate is not None:
                 modifiers.children = modifiers.children.copy()
                 modifiers.children.append(immediate)
-            self.__varset("variableset", tree.children[0], modifiers, tree.children[3])
+            self.__varset("variableset", str(tree.children[0]), modifiers, tree.children[3])
 
         def commandset(self, tree: lark.Tree):
             """
             Process a set command in the tree and add it to the dictionary of variables.
             """
-            self.__varset("commandset", tree.children[0], tree.children[1], tree.children[2])
+            self.__varset("commandset", str(tree.children[0]), tree.children[1], tree.children[2])
 
         def __varecho(self, command: str, variable: str, default: lark.Tree | None):
             """
@@ -1145,7 +1166,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             value = self.__get_user_variable_value(variable, True, True)
             if value is None:
                 if default is not None:
-                    self.result += self.__visit(default, False, True)
+                    v = self.__visit(default, False, True)
+                    self.__ppp.echoed_variables[variable] = v
+                    self.result += v
                 else:
                     self.__ppp.logger.warning(f"Unknown variable {variable}")
             t2 = time.time()
@@ -1158,13 +1181,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a DP use variable command in the tree.
             """
-            self.__varecho("variableuse", tree.children[0], tree.children[1])
+            self.__varecho("variableuse", str(tree.children[0]), tree.children[1])
 
         def commandecho(self, tree: lark.Tree):
             """
             Process an echo command in the tree.
             """
-            self.__varecho("commandecho", tree.children[0], tree.children[1])
+            self.__varecho("commandecho", str(tree.children[0]), tree.children[1])
 
         def commandif(self, tree: lark.Tree):
             """
@@ -1178,7 +1201,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     # has a condition
                     condition = n.children[0]
                     c = self.__get_original_node_content(condition, f"condition {i}")
-                    if self.__evaluate_if(condition):
+                    if self.__eval_condition(condition):
                         self.__visit(content)
                         t2 = time.time()
                         self.__debug_end("commandif", start_result, t2 - t1, c)
@@ -1297,7 +1320,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     c["choice_index"] = i  # we index them to later sort the results
                     weight = float(c.get("weight", 1.0))
                     condition = c.get("if", None)
-                    if weight > 0 and (condition is None or self.__evaluate_if(condition)):
+                    if weight > 0 and (condition is None or self.__eval_condition(condition)):
                         available_choices.append(c)
                         weights.append(weight)
                         included_choices += 1

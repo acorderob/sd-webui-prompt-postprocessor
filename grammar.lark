@@ -3,8 +3,10 @@
 _WHITESPACE:   /\s+/
 STRING:        /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
 BOOLEAN:       /true|false/i
-INDEX:         INT | IDENTIFIER
 WILDCARD_NAME: /(?:(?!__|\$\$|[('"])\S)+/
+INDEX:         INT | IDENTIFIER
+IDENTIFIER:    CNAME
+SIMPLEVALUE:   STRING | NUMBER | BOOLEAN
 
 // plain text and weights
 ?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
@@ -58,12 +60,17 @@ commandif_else: "<ppp:else" _WHITESPACE? ">" ifvalue
 ifvalue: content
 
 // conditions
-condition: conditionsimplevalue | conditionlistvalue | conditionnocomparison
-conditionnocomparison: ( /not/ _WHITESPACE )? IDENTIFIER
-conditionsimplevalue: ( /not/ _WHITESPACE )? IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
-conditionlistvalue: ( /not/ _WHITESPACE )? IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
-IDENTIFIER: CNAME
-SIMPLEVALUE: STRING | NUMBER | BOOLEAN
+?condition: grouped_condition | ungrouped_condition
+?ungrouped_condition: operation | basic_condition
+?grouped_condition: "(" _WHITESPACE? condition _WHITESPACE? ")"
+?basic_condition: comparison_simple_value | comparison_list_value | truthy_operand
+?operation: operation_not | operation_and | operation_or
+operation_and: condition _WHITESPACE "and" _WHITESPACE condition
+operation_or: condition _WHITESPACE "or" _WHITESPACE condition
+operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
+truthy_operand: IDENTIFIER
+comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
+comparison_list_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
 listvalue: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLEVALUE )* _WHITESPACE? ")"
 
 // command: set

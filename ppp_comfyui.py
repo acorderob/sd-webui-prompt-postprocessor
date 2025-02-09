@@ -15,6 +15,9 @@ if __name__ == "__main__":
 
 
 class PromptPostProcessorComfyUINode:
+    """
+    Node for processing prompts.
+    """
 
     logger = None
 
@@ -315,10 +318,12 @@ class PromptPostProcessorComfyUINode:
     RETURN_TYPES = (
         "STRING",
         "STRING",
+        "PPP_DICT",
     )
     RETURN_NAMES = (
         "pos_prompt",
         "neg_prompt",
+        "variables",
     )
 
     FUNCTION = "process"
@@ -476,11 +481,67 @@ class PromptPostProcessorComfyUINode:
         ppp = PromptPostProcessor(
             self.logger, self.interrupt, env_info, options, self.grammar_content, self.wildcards_obj
         )
-        pos_prompt, neg_prompt = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
+        pos_prompt, neg_prompt, variables = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
         return (
             pos_prompt,
             neg_prompt,
+            variables,
         )
 
     def interrupt(self):
         nodes.interrupt_processing(True)
+
+
+class PromptPostProcessorSelectVariableComfyUINode:
+    """
+    Node for selecting a variable from a dictionary.
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "variables": (
+                    "PPP_DICT",
+                    {
+                        "forceInput": True,
+                    },
+                ),
+            },
+            "optional": {
+                "name": (
+                    "STRING",
+                    {
+                        "placeholder": "variable name",
+                        "multiline": False,
+                        "default": "",
+                        "dynamicPrompts": False,
+                        "defaultInput": False,
+                        "forceInput": False,
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("value",)
+
+    FUNCTION = "select"
+
+    CATEGORY = "ACB"
+
+    def select(
+        self,
+        variables: dict[str, str],
+        name: str,
+    ):
+        value = ""
+        if variables:
+            if name == "":
+                value = "\n".join(f"{k}: {v}" for k, v in variables.items())
+            elif name in variables:
+                value = variables[name]
+        return (value,)

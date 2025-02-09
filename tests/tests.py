@@ -141,7 +141,7 @@ class TestPromptPostProcessor(unittest.TestCase):
         the_obj = ppp or self.__defppp
         out = expected_output_prompts if isinstance(expected_output_prompts, list) else [expected_output_prompts]
         for eo in out:
-            result_prompt, result_negative_prompt = the_obj.process_prompt(
+            result_prompt, result_negative_prompt, _ = the_obj.process_prompt(
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
@@ -390,6 +390,48 @@ class TestPromptPostProcessor(unittest.TestCase):
                 "",
             ),
             PromptPair("OK OK OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_1(self):  # complex conditions (or)
+        self.__process(
+            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if v1 or v2>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_2(self):  # complex conditions (and)
+        self.__process(
+            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>true<ppp:/set>this test is <ppp:if v1 and v2>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_3(self):  # complex conditions (not)
+        self.__process(
+            PromptPair("<ppp:set v1>false<ppp:/set>this test is <ppp:if not v1>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_4(self):  # complex conditions (not, precedence)
+        self.__process(
+            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not (v1 and v2)>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_5(self):  # complex conditions (not, precedence, comparison)
+        self.__process(
+            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not(v1 eq '1' and v2)>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_6(self):  # complex conditions
+        self.__process(
+            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 eq '2' and v3 eq '3'>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_if_complex_conditions_7(self):  # complex conditions
+        self.__process(
+            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 not eq '2' or v3 eq '3'>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if2(self):  # set and more complex if commands

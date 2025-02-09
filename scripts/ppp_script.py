@@ -240,21 +240,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
             # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'PixArt-Alpha': 'PixArtAlphaPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'AuraFlow': 'AuraFlowPipeline', 'CogView': 'CogView3PlusPipeline'
         elif app == "forge":
+            # from repositories\huggingface_guess\huggingface_guess\model_list.py
             env_info["model_class"] = p.sd_model.model_config.__class__.__name__
-            env_info["is_sd1"] = getattr(
-                p.sd_model, "is_sd1", False
-            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion"
-            env_info["is_sd2"] = getattr(
-                p.sd_model, "is_sd2", False
-            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion2"
-            env_info["is_sdxl"] = getattr(
-                p.sd_model, "is_sdxl", False
-            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusionXL"
+            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
+            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
+            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
             env_info["is_ssd"] = False  # ?
             env_info["is_sd3"] = getattr(
                 p.sd_model, "is_sd3", False
-            )  # p.sd_model.model_config.__class__.__name__ == "StableDiffusion3" # not actually supported?
-            env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ == "Flux"
+            )  # p.sd_model.model_config.__class__.__name__ == "SD3" # not actually supported?
+            env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ in ("Flux", "FluxSchnell")
             env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
         elif app == "reforge":
             env_info["model_class"] = p.sd_model.__class__.__name__
@@ -391,7 +386,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info(f"processing prompts[{i+1}] ({prompttype})")
             if self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt)) is None:
-                posp, negp = ppp.process_prompt(prompt, negative_prompt, seed)
+                posp, negp, _ = ppp.process_prompt(prompt, negative_prompt, seed)
                 self.lru_cache.put((seed, hash(self.wildcards_obj), prompt, negative_prompt), (posp, negp))
                 # adds also the result so i2i doesn't process it unnecessarily
                 self.lru_cache.put((seed, hash(self.wildcards_obj), posp, negp), (posp, negp))
