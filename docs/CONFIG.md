@@ -40,6 +40,7 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 
     The default value defines strings for *Pony* and *Illustrious* models.
 * **Apply in img2img**: check if you want to do the processing in img2img processes (*does not apply to the ComfyUI node*).
+* **Add original prompts to metadata**: adds to original prompts to the metadata.
 
 ### Wildcard settings
 

@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import re
+import sys
 import textwrap
 import time
 from collections import namedtuple
@@ -9,11 +10,12 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 import lark
-import lark.parsers
 import numpy as np
 
-from ppp_logging import DEBUG_LEVEL
-from ppp_wildcards import PPPWildcard, PPPWildcards
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+from ppp_logging import DEBUG_LEVEL # pylint: disable=import-error
+from ppp_wildcards import PPPWildcard, PPPWildcards # pylint: disable=import-error
 
 
 class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
@@ -220,6 +222,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             for model_name, model_type_and_substrings in self.variants_definitions.items()
             if model_name not in self.SUPPORTED_MODELS
         }
+        is_models_true = [k for k, v in is_models.items() if v]
+        if len(is_models_true) > 1:
+            self.logger.warning(
+                f"Multiple model variants detected at the same time in the filename!: {', '.join(is_models_true)}"
+            )
         self.system_variables.update({"_is_" + x: y for x, y in is_models.items()})
         for x in sdchecks.keys():
             if x != "":

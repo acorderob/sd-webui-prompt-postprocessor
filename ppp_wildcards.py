@@ -5,7 +5,7 @@ from typing import Optional
 import logging
 import yaml
 
-from ppp_logging import DEBUG_LEVEL
+from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
 
 
 def deep_freeze(obj):

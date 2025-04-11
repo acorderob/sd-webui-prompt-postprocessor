@@ -6,18 +6,17 @@ import os
 import time
 import numpy as np
 
-sys.path.append(os.path.join(sys.path[0], ".."))
+sys.path.append(os.path.join(os.path.realpath(__file__), ".."))  # base path for the extension
 
-
-from modules import scripts, shared, script_callbacks
-from modules.processing import StableDiffusionProcessing
-from modules.shared import opts
-from modules.paths import models_path
-import gradio as gr
-from ppp import PromptPostProcessor
-from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
-from ppp_cache import PPPLRUCache
-from ppp_wildcards import PPPWildcards
+from modules import scripts, shared, script_callbacks  # pylint: disable=import-error
+from modules.processing import StableDiffusionProcessing  # pylint: disable=import-error
+from modules.shared import opts  # pylint: disable=import-error
+from modules.paths import models_path  # pylint: disable=import-error
+import gradio as gr  # pylint: disable=import-error
+from ppp import PromptPostProcessor  # pylint: disable=import-error
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
+from ppp_cache import PPPLRUCache  # pylint: disable=import-error
+from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
 
 
 class PromptPostProcessorA1111Script(scripts.Script):
@@ -82,7 +81,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         """
         return PromptPostProcessor.NAME
 
-    def show(self, is_img2img):
+    def show(self, is_img2img):  # pylint: disable=unused-argument
         """
         Determines whether the script should be shown based on the kind of processing.
 
@@ -94,7 +93,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         """
         return scripts.AlwaysVisible
 
-    def ui(self, is_img2img):
+    def ui(self, is_img2img):  # pylint: disable=unused-argument
         with gr.Accordion(PromptPostProcessor.NAME, open=False):
             force_equal_seeds = gr.Checkbox(
                 label="Force equal seeds",
@@ -171,6 +170,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         is_i2i = bool(init_images[0])
         self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
         do_i2i = getattr(opts, "ppp_gen_doi2i", False)
+        add_prompts = getattr(opts, "ppp_gen_addpromptstometadata", True)
         if is_i2i and not do_i2i:
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("Not processing the prompt for i2i")
@@ -349,12 +349,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
         rpr: list[str] = getattr(p, "all_prompts", None)
         rnr: list[str] = getattr(p, "all_negative_prompts", None)
         if rpr is not None and rnr is not None:
-            extra_params.update(
-                {
-                    "PPP original prompts": rpr.copy(),
-                    "PPP original negative prompts": rnr.copy(),
-                }
-            )
+            if add_prompts:
+                extra_params.update(
+                    {
+                        "PPP original prompts": rpr.copy(),
+                        "PPP original negative prompts": rnr.copy(),
+                    }
+                )
             prompts_list += [
                 ("regular", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rpr, rnr)
@@ -364,12 +365,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
         rph: list[str] = getattr(p, "all_hr_prompts", None)
         rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
         if rph is not None and rnh is not None:
-            extra_params.update(
-                {
-                    "PPP original HR prompts": rph.copy(),
-                    "PPP original HR negative prompts": rnh.copy(),
-                }
-            )
+            if add_prompts:
+                extra_params.update(
+                    {
+                        "PPP original HR prompts": rph.copy(),
+                        "PPP original HR negative prompts": rnh.copy(),
+                    }
+                )
             prompts_list += [
                 ("hiresfix", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rph, rnh)
@@ -497,6 +499,14 @@ def on_ui_settings():
             False,
             label="Apply in img2img",
             comment_after='<span class="info">(this includes any pass that contains an initial image, like adetailer)</span>',
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_gen_addpromptstometadata",
+        info=shared.OptionInfo(
+            True,
+            label="Add original prompts to metadata",
             section=section,
         ),
     )

@@ -2,7 +2,7 @@ from collections import OrderedDict
 from logging import Logger
 from typing import Tuple
 
-from ppp_logging import DEBUG_LEVEL
+from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
 
 
 class PPPLRUCache:

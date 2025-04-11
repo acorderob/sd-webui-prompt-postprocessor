@@ -4,12 +4,11 @@ import unittest
 import sys
 import os
 
-from ppp_wildcards import PPPWildcards
+sys.path.append(os.path.join(os.path.realpath(__file__), ".."))  # base path for the extension
 
-sys.path.append(os.path.join(sys.path[0], ".."))
-
-from ppp import PromptPostProcessor
-from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
+from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
+from ppp import PromptPostProcessor  # pylint: disable=import-error
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
 
 
 PromptPair = namedtuple("PromptPair", ["prompt", "negative_prompt"], defaults=["", ""])
@@ -355,7 +354,8 @@ class TestPromptPostProcessor(unittest.TestCase):
     def test_cmd_if_nested(self):  # nested if command
         self.__process(
             PromptPair(
-                "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _is_pony>PONY<ppp:else>SD2<ppp:/if><ppp:/if><ppp:if _is_sdxl_no_pony>NOPONY<ppp:/if><ppp:if _is_pure_sdxl>NOPONY<ppp:/if>", ""
+                "this is <ppp:if _sd eq 'sd1'>SD1<ppp:else><ppp:if _is_pony>PONY<ppp:else>SD2<ppp:/if><ppp:/if><ppp:if _is_sdxl_no_pony>NOPONY<ppp:/if><ppp:if _is_pure_sdxl>NOPONY<ppp:/if>",
+                "",
             ),
             PromptPair("this is PONY", ""),
             ppp=PromptPostProcessor(
@@ -394,13 +394,19 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     def test_cmd_set_if_complex_conditions_1(self):  # complex conditions (or)
         self.__process(
-            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if v1 or v2>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if v1 or v2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if_complex_conditions_2(self):  # complex conditions (and)
         self.__process(
-            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>true<ppp:/set>this test is <ppp:if v1 and v2>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>true<ppp:/set><ppp:set v2>true<ppp:/set>this test is <ppp:if v1 and v2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
@@ -412,25 +418,37 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     def test_cmd_set_if_complex_conditions_4(self):  # complex conditions (not, precedence)
         self.__process(
-            PromptPair("<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not (v1 and v2)>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>true<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not (v1 and v2)>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if_complex_conditions_5(self):  # complex conditions (not, precedence, comparison)
         self.__process(
-            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not(v1 eq '1' and v2)>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not(v1 eq '1' and v2)>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if_complex_conditions_6(self):  # complex conditions
         self.__process(
-            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 eq '2' and v3 eq '3'>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 eq '2' and v3 eq '3'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
     def test_cmd_set_if_complex_conditions_7(self):  # complex conditions
         self.__process(
-            PromptPair("<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 not eq '2' or v3 eq '3'>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 not eq '2' or v3 eq '3'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
             PromptPair("this test is OK", ""),
         )
 
@@ -920,7 +938,10 @@ class TestPromptPostProcessor(unittest.TestCase):
 
     def test_variants(self):
         self.__process(
-            PromptPair("<ppp:if _is_test1>test1<ppp:/if><ppp:if _is_test2>test2<ppp:/if><ppp:if _is_test3>test3<ppp:/if><ppp:if _is_test4>test4<ppp:/if>", ""),
+            PromptPair(
+                "<ppp:if _is_test1>test1<ppp:/if><ppp:if _is_test2>test2<ppp:/if><ppp:if _is_test3>test3<ppp:/if><ppp:if _is_test4>test4<ppp:/if>",
+                "",
+            ),
             PromptPair("test1test2", ""),
             ppp=PromptPostProcessor(
                 self.__ppp_logger,
@@ -947,7 +968,6 @@ class TestPromptPostProcessor(unittest.TestCase):
             ppp=self.__comfyuippp,
         )
 
-
     # def test_mix(self):
     #     self.__process(
     #         PromptPair(
@@ -959,19 +979,6 @@ class TestPromptPostProcessor(unittest.TestCase):
     #             "",
     #         ),
     #         ppp=self.__nocupppp,
-    #     )
-
-    # def test_real(self):
-    #     self.__wildcards_obj.refresh_wildcards(
-    #         DEBUG_LEVEL.full,
-    #         ["D:\\AI\\SD\\_configuraciones\\acb-wildcards\\wildcards"],
-    #     )
-    #     self.__process(
-    #         PromptPair(
-    #             "${separator=()}, __quality/high__ __misc/sep__, photograph of a __character__",
-    #             "__negatives/ng_generic__",
-    #         ),
-    #         PromptPair("", ""),
     #     )
 
 
