@@ -9,6 +9,7 @@
 * **seed**: Connect here the seed used. By default it is -1 (random).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
+* **wc_wildcards_input**: Wildcards definitions (in yaml or json format). Direct input added to the ones found in the wildcards folders. Allows wildcards to be included in the workflow.
 
 Other common settings (see [below](#common-settings)) also appear as inputs or widgets.
 

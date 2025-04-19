@@ -121,7 +121,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.wil_keep_choices_order = options.get("keep_choices_order", False)
         self.wil_choice_separator = options.get("choice_separator", self.DEFAULT_CHOICE_SEPARATOR)
         self.wil_ifwildcards = self.IFWILDCARDS_CHOICES(
-            options.get("if_wildcards", self.IFWILDCARDS_CHOICES.ignore.value)
+            options.get("if_wildcards", self.IFWILDCARDS_CHOICES.stop.value)
         )
         # Send to negative options
         self.stn_ignore_repeats = options.get("stn_ignore_repeats", True)

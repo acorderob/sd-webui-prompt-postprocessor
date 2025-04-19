@@ -1,5 +1,3 @@
-# pylint: disable=missing-module-docstring, missing-class-docstring, missing-function-docstring, invalid-name
-
 import os
 
 # pylint: disable=import-error
@@ -48,8 +46,6 @@ class PromptPostProcessorComfyUINode:
                         "multiline": True,
                         "default": "",
                         "dynamicPrompts": False,
-                        "defaultInput": True,
-                        "forceInput": False,
                     },
                 ),
                 "neg_prompt": (
@@ -58,8 +54,6 @@ class PromptPostProcessorComfyUINode:
                         "multiline": True,
                         "default": "",
                         "dynamicPrompts": False,
-                        "defaultInput": True,
-                        "forceInput": False,
                     },
                 ),
             },
@@ -77,16 +71,13 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": "",
                         "placeholder": "full path of the model",
-                        "defaultInput": True,
-                        "forceInput": False,
+                        "dynamicPrompts": False,
                     },
                 ),
                 "seed": (
                     "INT",
                     {
                         "default": -1,
-                        "defaultInput": True,
-                        "forceInput": False,
                     },
                 ),
                 "debug_level": (
@@ -94,8 +85,6 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": DEBUG_LEVEL.minimal.value,
                         "tooltip": "Debug level",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "variants_definitions": (
@@ -105,8 +94,7 @@ class PromptPostProcessorComfyUINode:
                         "multiline": True,
                         "placeholder": "",
                         "tooltip": "Definitions for variant models to be recognized based on strings found in the full filename. Format for each line is: 'name(kind)=comma separated list of substrings (case insensitive)' with kind being one of the base model types or not specified",
-                        "defaultInput": False,
-                        "forceInput": False,
+                        "dynamicPrompts": False,
                     },
                 ),
                 "wc_process_wildcards": (
@@ -116,8 +104,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Process wildcards in the prompt",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "wc_wildcards_folders": (
@@ -125,17 +111,24 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": "",
                         "tooltip": "Comma separated list of wildcards folders",
-                        "defaultInput": False,
-                        "forceInput": False,
+                        "dynamicPrompts": False,
+                    },
+                ),
+                "wc_wildcards_input": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "placeholder": "wildcards definitions",
+                        "tooltip": "Wildcards definitions in yaml/json format",
+                        "dynamicPrompts": False,
                     },
                 ),
                 "wc_if_wildcards": (
                     [e.value for e in PromptPostProcessor.IFWILDCARDS_CHOICES],
                     {
-                        "default": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
+                        "default": PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value,
                         "tooltip": "How to handle invalid wildcards in the prompt",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "wc_choice_separator": (
@@ -143,8 +136,7 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR,
                         "tooltip": "Default separator for selected choices",
-                        "defaultInput": False,
-                        "forceInput": False,
+                        "dynamicPrompts": False,
                     },
                 ),
                 "wc_keep_choices_order": (
@@ -154,8 +146,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Keep the order of the choices in the prompt",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "stn_separator": (
@@ -163,8 +153,7 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": PromptPostProcessor.DEFAULT_STN_SEPARATOR,
                         "tooltip": "Separator for the content added to the negative prompt",
-                        "defaultInput": False,
-                        "forceInput": False,
+                        "dynamicPrompts": False,
                     },
                 ),
                 "stn_ignore_repeats": (
@@ -174,8 +163,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Ignore repeated content added to the negative prompt",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_extra_spaces": (
@@ -185,8 +172,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Remove extra spaces",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_empty_constructs": (
@@ -196,8 +181,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Remove empty constructs",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_extra_separators": (
@@ -207,8 +190,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Remove extra separators",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_extra_separators2": (
@@ -218,8 +199,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Remove extra separators (additional cases)",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_breaks": (
@@ -229,8 +208,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Cleanup around BREAKs",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_breaks_eol": (
@@ -240,8 +217,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Set BREAKs in their own line",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_ands": (
@@ -251,8 +226,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Cleanup around ANDs",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_ands_eol": (
@@ -262,8 +235,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Set ANDs in their own line",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_extranetwork_tags": (
@@ -273,8 +244,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Clean up around extra network tags",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "cleanup_merge_attention": (
@@ -284,8 +253,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Merge nested attention constructs",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
                 "remove_extranetwork_tags": (
@@ -295,8 +262,6 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Remove extra network tags",
                         "label_on": "Yes",
                         "label_off": "No",
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
             },
@@ -342,6 +307,7 @@ class PromptPostProcessorComfyUINode:
         variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
+        wc_wildcards_input,
         wc_if_wildcards,
         wc_choice_separator,
         wc_keep_choices_order,
@@ -372,6 +338,7 @@ class PromptPostProcessorComfyUINode:
             "variants_definitions": variants_definitions,
             "process_wildcards": wc_process_wildcards,
             "wildcards_folders": wc_wildcards_folders,
+            "wildcards_input": wc_wildcards_input,
             "if_wildcards": wc_if_wildcards,
             "choice_separator": wc_choice_separator,
             "keep_choices_order": wc_keep_choices_order,
@@ -403,6 +370,7 @@ class PromptPostProcessorComfyUINode:
         variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
+        wc_wildcards_input,
         wc_if_wildcards,
         wc_choice_separator,
         wc_keep_choices_order,
@@ -427,13 +395,14 @@ class PromptPostProcessorComfyUINode:
             self.logger.warning("Model class is not provided. System variables might not be properly set.")
         if modelname == "":
             self.logger.warning("Modelname is not provided. System variables will not be properly set.")
+        # model class values in ComfyUI\comfy\supported_models.py
         env_info = {
             "app": "comfyui",
             "models_path": folder_paths.models_dir,
             "model_filename": modelname or "",  # path is relative to checkpoints folder
             "model_class": modelclass,
             "is_sd1": modelclass in ("SD15", "SD15_instructpix2pix"),
-            "is_sd2": modelclass in ("SD20", "SD21UnclipL", "SD21UnclipH"),
+            "is_sd2": modelclass in ("SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"),
             "is_sdxl": (
                 modelclass in ("SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B")
             ),
@@ -441,9 +410,18 @@ class PromptPostProcessorComfyUINode:
             "is_sd3": modelclass in ("SD3",),
             "is_flux": modelclass in ("Flux", "FluxInpaint", "FluxSchnell"),
             "is_auraflow": modelclass in ("AuraFlow",),
+            "is_pixart": modelclass in ("PixArtAlpha", "PixArtSigma"),
+            "is_lumina2": modelclass in ("Lumina2",),
+            "is_ltxv": modelclass in ("LTXV",),
+            "is_cosmos": modelclass in ("CosmosT2V", "CosmosI2V"),
+            "is_genmomochi": modelclass in ("GenmoMochi",),
+            "is_hunyuan": modelclass in ("HunyuanDiT", "HunyuanDiT1"),
+            "is_hunyuanvideo": modelclass in ("HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V"),
+            "is_hunyuan3d": modelclass in ("Hunyuan3Dv2", "Hunyuan3Dv2mini"),
+            "is_wanvideo": modelclass in ("WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V"),
+            "is_hidream": modelclass in ("HiDream",),
         }
-        # Also supported: SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler,
-        # Stable_Cascade_C, Stable_Cascade_B, StableAudio, HunyuanDiT, HunyuanDiT1, GenmoMochi, LTXV
+        # Also supported: SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler, Stable_Cascade_C, Stable_Cascade_B, StableAudio
 
         if wc_wildcards_folders == "":
             wc_wildcards_folders = ",".join(folder_paths.get_folder_paths("wildcards") or [])
@@ -477,7 +455,11 @@ class PromptPostProcessorComfyUINode:
             "cleanup_merge_attention": cleanup_merge_attention,
             "remove_extranetwork_tags": remove_extranetwork_tags,
         }
-        self.wildcards_obj.refresh_wildcards(debug_level, wildcards_folders if options["process_wildcards"] else None)
+        self.wildcards_obj.refresh_wildcards(
+            debug_level,
+            wildcards_folders if options["process_wildcards"] else None,
+            wc_wildcards_input,
+        )
         ppp = PromptPostProcessor(
             self.logger, self.interrupt, env_info, options, self.grammar_content, self.wildcards_obj
         )
@@ -519,8 +501,6 @@ class PromptPostProcessorSelectVariableComfyUINode:
                         "multiline": False,
                         "default": "",
                         "dynamicPrompts": False,
-                        "defaultInput": False,
-                        "forceInput": False,
                     },
                 ),
             },

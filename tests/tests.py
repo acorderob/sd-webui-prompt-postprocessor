@@ -68,6 +68,13 @@ class TestPromptPostProcessor(unittest.TestCase):
                 os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards")),
                 os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards2")),
             ],
+            """
+            yaml_input:
+                wildcardI:
+                    - choice1
+                    - choice2
+                    - choice3
+            """
         )
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
@@ -931,6 +938,13 @@ class TestPromptPostProcessor(unittest.TestCase):
         self.__process(
             PromptPair("the choices are: __yaml/anonwildcards__", ""),
             PromptPair("the choices are: six", ""),
+            ppp=self.__nocupppp,
+        )
+
+    def test_wc_wildcard_input(self):  # simple yaml wildcard input
+        self.__process(
+            PromptPair("the choices are: __yaml_input/wildcardI__", ""),
+            PromptPair("the choices are: choice2", ""),
             ppp=self.__nocupppp,
         )
 

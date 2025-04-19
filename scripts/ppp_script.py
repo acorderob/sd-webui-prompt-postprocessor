@@ -226,6 +226,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "is_sd3": False,  # Stable Diffusion 3
             "is_flux": False,  # Flux
             "is_auraflow": False,  # AuraFlow
+            "is_pixart": False,  # PixArt
+            "is_lumina2": False,  # Lumina2
+            "is_ltxv": False,  # LTXV
+            "is_cosmos": False,  # Cosmos
+            "is_genmomochi": False,  # GenmoMochi
+            "is_hunyuan": False,  # Hunyuan
+            "is_hunyuanvideo": False,  # HunyuanVideo
+            "is_hunyuan3d": False,  # Hunyuan3D
+            "is_wanvideo": False,  # WanVideo
+            "is_hidream": False,  # HiDream
         }
         if app == "sdnext":
             # cannot differentiate SD1 and SD2, we set True to both
@@ -283,7 +293,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 opts, "ppp_gen_variantsdefinitions", PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS
             ),
             "process_wildcards": getattr(opts, "ppp_wil_processwildcards", True),
-            "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value),
+            "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
             "keep_choices_order": getattr(opts, "ppp_wil_keep_choices_order", False),
             "stn_separator": getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),

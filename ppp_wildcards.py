@@ -1,6 +1,5 @@
 import fnmatch
 import os
-import json
 from typing import Optional
 import logging
 import yaml
@@ -20,12 +19,11 @@ def deep_freeze(obj):
     """
     if isinstance(obj, dict):
         return tuple((k, deep_freeze(v)) for k, v in sorted(obj.items()))
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return tuple(deep_freeze(i) for i in obj)
-    elif isinstance(obj, set):
+    if isinstance(obj, set):
         return tuple(deep_freeze(i) for i in sorted(obj))
-    else:
-        return obj
+    return obj
 
 
 class PPPWildcard:
@@ -70,6 +68,7 @@ class PPPWildcards:
     """
 
     DEFAULT_WILDCARDS_FOLDER = "wildcards"
+    LOCALINPUT_FILENAME = "#INPUT"
 
     def __init__(self, logger):
         self.__logger: logging.Logger = logger
@@ -84,31 +83,38 @@ class PPPWildcards:
     def __sizeof__(self):
         return self.wildcards.__sizeof__() + self.__wildcards_folders.__sizeof__() + self.__wildcard_files.__sizeof__()
 
-    def refresh_wildcards(self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]]):
+    def refresh_wildcards(
+        self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]], wildcards_input: str = None
+    ):
         """
         Initialize the wildcards.
         """
         self.__debug_level = debug_level
-        self.__wildcards_folders = wildcards_folders
-        if wildcards_folders is not None:
-            # if self.debug_level != DEBUG_LEVEL.none:
-            #     self.logger.info("Initializing wildcards...")
-            # t1 = time.time()
-            for fullpath in list(self.__wildcard_files.keys()):
+        self.__wildcards_folders = wildcards_folders or []
+        # if self.debug_level != DEBUG_LEVEL.none:
+        #     self.logger.info("Refreshing wildcards...")
+        # t1 = time.time()
+        for fullpath in list(self.__wildcard_files.keys()):
+            if fullpath != self.LOCALINPUT_FILENAME:
                 path = os.path.dirname(fullpath)
                 if not os.path.exists(fullpath) or not any(
                     os.path.commonpath([path, folder]) == folder for folder in self.__wildcards_folders
                 ):
-                    self.__remove_wildcards_from_file(fullpath)
-            for f in self.__wildcards_folders:
-                self.__get_wildcards_in_directory(f, f)
-            # t2 = time.time()
-            # if self.debug_level != DEBUG_LEVEL.none:
-            #     self.logger.info(f"Wildcards init time: {t2 - t1:.3f} seconds")
+                    self.__remove_wildcards_from_path(fullpath)
+            elif wildcards_input is None:
+                self.__remove_wildcards_from_path(fullpath)
+        if wildcards_folders is not None or wildcards_input is not None:
+            if wildcards_folders is not None:
+                for f in self.__wildcards_folders:
+                    self.__get_wildcards_in_directory(f, f)
+            if wildcards_input is not None:
+                self.__get_wildcards_in_input(wildcards_input)
         else:
-            self.__wildcards_folders = []
             self.wildcards = {}
             self.__wildcard_files = {}
+        # t2 = time.time()
+        # if self.debug_level != DEBUG_LEVEL.none:
+        #     self.logger.info(f"Wildcards refresh time: {t2 - t1:.3f} seconds")
 
     def get_wildcards(self, key: str) -> list[PPPWildcard]:
         """
@@ -161,7 +167,7 @@ class PPPWildcards:
                 return None
         return current_dict
 
-    def __remove_wildcards_from_file(self, full_path: str, debug=True):
+    def __remove_wildcards_from_path(self, full_path: str, debug=True):
         """
         Clear all wildcards in a file.
 
@@ -169,9 +175,12 @@ class PPPWildcards:
             full_path (str): The path to the file.
             debug (bool): Whether to print debug messages or not.
         """
-        last_modified_cached = self.__wildcard_files.get(full_path, None)
+        last_modified_cached = self.__wildcard_files.get(full_path, None)  # a time or a hash
         if debug and last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
-            self.__logger.debug(f"Removing wildcards from file: {full_path}")
+            if full_path == self.LOCALINPUT_FILENAME:
+                self.__logger.debug("Removing wildcards from input")
+            else:
+                self.__logger.debug(f"Removing wildcards from file: {full_path}")
         if full_path in self.__wildcard_files.keys():
             del self.__wildcard_files[full_path]
         for key in list(self.wildcards.keys()):
@@ -194,7 +203,7 @@ class PPPWildcards:
         _, extension = os.path.splitext(filename)
         if extension not in (".txt", ".json", ".yaml", ".yml"):
             return
-        self.__remove_wildcards_from_file(full_path, False)
+        self.__remove_wildcards_from_path(full_path, False)
         if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
             self.__logger.debug(f"Updating wildcards from file: {full_path}")
         if extension == ".txt":
@@ -202,6 +211,31 @@ class PPPWildcards:
         elif extension in (".json", ".yaml", ".yml"):
             self.__get_wildcards_in_structured_file(full_path, base)
         self.__wildcard_files[full_path] = last_modified
+
+    def __get_wildcards_in_input(self, wildcards_input: str):
+        """
+        Get all wildcards in the string.
+
+        Args:
+            wildcards_input (str): The input string containing wildcards in json or yaml format.
+        """
+        new_h = hash(wildcards_input)
+        h = self.__wildcard_files.get(self.LOCALINPUT_FILENAME, None)
+        if h == new_h:
+            return
+        self.__remove_wildcards_from_path(self.LOCALINPUT_FILENAME, False)
+        if h is not None and self.__debug_level != DEBUG_LEVEL.none:
+            self.__logger.debug("Updating wildcards from input")
+        wildcards_input = wildcards_input.strip()
+        if wildcards_input != "":
+            try:
+                content = yaml.safe_load(wildcards_input)
+            except yaml.YAMLError as e:
+                self.__logger.warning(f"Invalid format for input wildcards: {e}")
+                return
+            if content is not None:
+                self.__add_wildcard(content, self.LOCALINPUT_FILENAME, [self.LOCALINPUT_FILENAME])
+        self.__wildcard_files[self.LOCALINPUT_FILENAME] = new_h
 
     def is_dict_choices_options(self, d: dict) -> bool:
         """
@@ -374,12 +408,8 @@ class PPPWildcards:
         """
         external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
         external_key_parts = external_key.split(os.sep)
-        _, extension = os.path.splitext(full_path)
         with open(full_path, "r", encoding="utf-8") as file:
-            if extension == ".json":
-                content = json.loads(file.read())
-            else:
-                content = yaml.safe_load(file)
+            content = yaml.safe_load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
 
     def __get_wildcards_in_text_file(self, full_path, base):
