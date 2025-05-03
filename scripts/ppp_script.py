@@ -359,13 +359,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
         rpr: list[str] = getattr(p, "all_prompts", None)
         rnr: list[str] = getattr(p, "all_negative_prompts", None)
         if rpr is not None and rnr is not None:
-            if add_prompts:
-                extra_params.update(
-                    {
-                        "PPP original prompts": rpr.copy(),
-                        "PPP original negative prompts": rnr.copy(),
-                    }
-                )
             prompts_list += [
                 ("regular", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rpr, rnr)
@@ -375,23 +368,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
         rph: list[str] = getattr(p, "all_hr_prompts", None)
         rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
         if rph is not None and rnh is not None:
-            if add_prompts:
-                extra_params.update(
-                    {
-                        "PPP original HR prompts": rph.copy(),
-                        "PPP original HR negative prompts": rnh.copy(),
-                    }
-                )
             prompts_list += [
                 ("hiresfix", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rph, rnh)
                 if (seed, prompt, negative_prompt) not in prompts_list
             ]
-
-        # fill extra generation parameters only if not already present
-        for k, v in extra_params.items():
-            if p.extra_generation_params.get(k) is None:
-                p.extra_generation_params[k] = v
 
         # processes prompts
         for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):
@@ -407,17 +388,48 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         # updates the prompts
         if rpr is not None and rnr is not None:
+            rpr_changes = False
+            rnr_changes = False
+            rpr_copy = rpr.copy()
+            rnr_copy = rnr.copy()
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rpr, rnr)):
                 found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
                 if found is not None:
+                    if rpr[i].strip() != found[0].strip():
+                        rpr_changes = True
+                    if rnr[i].strip() != found[1].strip():
+                        rnr_changes = True
                     rpr[i] = found[0]
                     rnr[i] = found[1]
+            if add_prompts:
+                if rpr_changes:
+                    extra_params["PPP original prompts"] = rpr_copy
+                if rnr_changes:
+                    extra_params["PPP original negative prompts"] = rnr_copy
         if rph is not None and rnh is not None:
+            rph_changes = False
+            rnh_changes = False
+            rph_copy = rph.copy()
+            rnh_copy = rnh.copy()
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rph, rnh)):
                 found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
                 if found is not None:
+                    if rph[i].strip() != found[0].strip():
+                        rph_changes = True
+                    if rnh[i].strip() != found[1].strip():
+                        rnh_changes = True
                     rph[i] = found[0]
                     rnh[i] = found[1]
+            if add_prompts:
+                if rph_changes:
+                    extra_params["PPP original HR prompts"] = rph_copy
+                if rnh_changes:
+                    extra_params["PPP original HR negative prompts"] = rnh_copy
+
+        # fill extra generation parameters only if not already present
+        for k, v in extra_params.items():
+            if p.extra_generation_params.get(k) is None:
+                p.extra_generation_params[k] = v
 
         t2 = time.time()
         if self.ppp_debug_level != DEBUG_LEVEL.none:
@@ -516,7 +528,7 @@ def on_ui_settings():
         key="ppp_gen_addpromptstometadata",
         info=shared.OptionInfo(
             True,
-            label="Add original prompts to metadata",
+            label="Add original prompts to metadata (if they change)",
             section=section,
         ),
     )
