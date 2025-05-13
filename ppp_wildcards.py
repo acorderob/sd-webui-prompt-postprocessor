@@ -91,8 +91,8 @@ class PPPWildcards:
         """
         self.__debug_level = debug_level
         self.__wildcards_folders = wildcards_folders or []
-        # if self.debug_level != DEBUG_LEVEL.none:
-        #     self.logger.info("Refreshing wildcards...")
+        # if self.__debug_level != DEBUG_LEVEL.none:
+        #     self.__logger.info("Refreshing wildcards...")
         # t1 = time.time()
         for fullpath in list(self.__wildcard_files.keys()):
             if fullpath != self.LOCALINPUT_FILENAME:
@@ -113,8 +113,8 @@ class PPPWildcards:
             self.wildcards = {}
             self.__wildcard_files = {}
         # t2 = time.time()
-        # if self.debug_level != DEBUG_LEVEL.none:
-        #     self.logger.info(f"Wildcards refresh time: {t2 - t1:.3f} seconds")
+        # if self.__debug_level != DEBUG_LEVEL.none:
+        #     self.__logger.info(f"Wildcards refresh time: {t2 - t1:.3f} seconds")
 
     def get_wildcards(self, key: str) -> list[PPPWildcard]:
         """

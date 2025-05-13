@@ -2,20 +2,30 @@ import logging
 import math
 import os
 import re
-import sys
 import textwrap
 import time
+
 from collections import namedtuple
 from enum import Enum
 from typing import Any, Callable, Optional
-
 import lark
 import numpy as np
 
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
+from ppp_wildcards import PPPWildcard, PPPWildcards  # pylint: disable=import-error
 
-from ppp_logging import DEBUG_LEVEL # pylint: disable=import-error
-from ppp_wildcards import PPPWildcard, PPPWildcards # pylint: disable=import-error
+
+class PPPInterrupt(Exception):
+    """
+    Custom exception to handle interruptions in the PromptPostProcessor.
+    This exception can be raised to stop the processing of prompts.
+    """
+
+    def __init__(self, message: str = "Processing interrupted.", pos_prefix: str = "", neg_prefix: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.pos_prefix = pos_prefix
+        self.neg_prefix = neg_prefix
 
 
 class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
@@ -52,12 +62,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         warn = "warn"
         stop = "stop"
 
+    class ONWARNING_CHOICES(Enum):
+        warn = "warn"
+        stop = "stop"
+
     DEFAULT_STN_SEPARATOR = ", "
     DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,illust,ilxl"
     DEFAULT_CHOICE_SEPARATOR = ", "
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
+    INVALID_CONTENT_STOP = "INVALID CONTENT! {0}\nBREAK "
 
     SUPPORTED_MODELS = [
         "sd1",
@@ -97,6 +112,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         # General options
         self.debug_level = DEBUG_LEVEL(options.get("debug_level", DEBUG_LEVEL.none.value))
+        self.gen_onwarning = self.ONWARNING_CHOICES(options.get("on_warning", self.ONWARNING_CHOICES.warn.value))
         variants_definitions_option = str(options.get("variants_definitions", self.DEFAULT_VARIANTS_DEFINITIONS))
         self.variants_definitions = {}
         if variants_definitions_option:
@@ -131,6 +147,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.cup_emptyconstructs = options.get("cleanup_empty_constructs", True)
         self.cup_extraseparators = options.get("cleanup_extra_separators", True)
         self.cup_extraseparators2 = options.get("cleanup_extra_separators2", True)
+        self.cup_extraseparators_include_eol = options.get("cleanup_extra_separators_include_eol", False)
         self.cup_breaks = options.get("cleanup_breaks", True)
         self.cup_breaks_eol = options.get("cleanup_breaks_eol", False)
         self.cup_ands = options.get("cleanup_ands", True)
@@ -331,36 +348,33 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             str: The resulting text.
         """
         escapedSeparator = re.escape(self.stn_separator)
-        if self.cup_extraseparators:
-            #
-            # sendtonegative separator
-            #
-            # collapse separators
-            text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*){2,}", self.stn_separator, text)
-            # remove separator after starting parenthesis or bracket
-            text = re.sub(r"(\s*" + escapedSeparator + r"\s*[([])(?:\s*" + escapedSeparator + r"\s*)+", r"\1", text)
-            # remove before colon or ending parenthesis or bracket
-            text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*)+([:)\]]\s*" + escapedSeparator + r"\s*)", r"\1", text)
-        if self.cup_extraseparators2:
-            # remove at start of prompt or line
-            text = re.sub(r"^(?:\s*" + escapedSeparator + r"\s*)+", "", text, flags=re.MULTILINE)
-            # remove at end of prompt or line
-            text = re.sub(r"(?:\s*" + escapedSeparator + r"\s*)+$", "", text, flags=re.MULTILINE)
-        if self.cup_extraseparators:
-            #
-            # regular comma separator
-            #
-            # collapse separators
-            text = re.sub(r"(?:\s*,\s*){2,}", ", ", text)
-            # remove separators after starting parenthesis or bracket
-            text = re.sub(r"(\s*,\s*[([])(?:\s*,\s*)+", r"\1", text)
-            # remove separators before colon or ending parenthesis or bracket
-            text = re.sub(r"(?:\s*,\s*)+([:)\]]\s*,\s*)", r"\1", text)
-        if self.cup_extraseparators2:
-            # remove at start of prompt or line
-            text = re.sub(r"^(?:\s*,\s*)+", "", text, flags=re.MULTILINE)
-            # remove at end of prompt or line
-            text = re.sub(r"(?:\s*,\s*)+$", "", text, flags=re.MULTILINE)
+        optwhitespace = r"\s*" if self.cup_extraseparators_include_eol else r"[ \t\v\f]*"
+        optwhitespace_separator = optwhitespace + escapedSeparator + optwhitespace
+        optwhitespace_comma = optwhitespace + "," + optwhitespace
+        sep_options = [(optwhitespace_separator, self.stn_separator)]  # sendtonegative separator
+        if optwhitespace_comma != optwhitespace_separator:
+            sep_options.append((optwhitespace_comma, ", "))  # regular comma separator
+        for sep, replacement in sep_options:
+            if self.cup_extraseparators:
+                # collapse separators
+                text = re.sub(r"(?:" + sep + r"){2,}", replacement, text)
+                # remove separator after starting parenthesis or bracket
+                text = re.sub(
+                    r"(" + sep + r"[([])(?:" + sep + r")+",
+                    r"\1",
+                    text,
+                )
+                # remove before colon or ending parenthesis or bracket
+                text = re.sub(
+                    r"(?:" + sep + r")+([:)\]]" + sep + r")",
+                    r"\1",
+                    text,
+                )
+            if self.cup_extraseparators2:
+                # remove at start of prompt or line
+                text = re.sub(r"^(?:" + sep + r")+", "", text, flags=re.MULTILINE)
+                # remove at end of prompt or line
+                text = re.sub(r"(?:" + sep + r")+$", "", text, flags=re.MULTILINE)
         if self.cup_breaks_eol:
             # replace spaces before break with EOL
             text = re.sub(r"[, ]+BREAK\b", "\nBREAK", text)
@@ -482,12 +496,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.wil_ifwildcards == self.IFWILDCARDS_CHOICES.warn:
                 prompt = self.WILDCARD_WARNING + prompt
             elif self.wil_ifwildcards == self.IFWILDCARDS_CHOICES.stop:
-                self.logger.error("Stopping the generation.")
-                if foundP:
-                    prompt = self.WILDCARD_STOP.format(ppwl) + prompt
-                if foundNP:
-                    negative_prompt = self.WILDCARD_STOP.format(npwl) + negative_prompt
-                self.interrupt()
+                raise PPPInterrupt(
+                    "Found unprocessed wildcards!",
+                    self.WILDCARD_STOP.format(ppwl) if foundP else "",
+                    self.WILDCARD_STOP.format(npwl) if foundNP else "",
+                )
 
         # Check for special character sequences that should not be in the result
         compound_prompt = prompt + "\n" + negative_prompt
@@ -541,9 +554,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # Check for constructs not processed due to parsing problems
             fullcontent: str = prompt + negative_prompt
             if fullcontent.find("<ppp:") >= 0:
-                self.logger.error("Found unprocessed constructs in prompt or negative prompt! Stopping the generation.")
-                prompt = self.UNPROCESSED_STOP + prompt
-                self.interrupt()
+                raise PPPInterrupt(
+                    "Found unprocessed constructs!",
+                    self.UNPROCESSED_STOP if prompt.find("<ppp:") >= 0 else "",
+                    self.UNPROCESSED_STOP if negative_prompt.find("<ppp:") >= 0 else "",
+                )
+            return prompt, negative_prompt, all_variables
+        except PPPInterrupt as e:
+            self.logger.error(e.message)
+            if e.pos_prefix:
+                prompt = e.pos_prefix + prompt
+            if e.neg_prefix:
+                negative_prompt = e.neg_prefix + negative_prompt
+            self.logger.error("Interrupting!")
+            self.interrupt()
             return prompt, negative_prompt, all_variables
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.exception(e)
@@ -612,6 +636,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.insertion_at: list[tuple[int, int]] = [None for x in range(10)]
             self.detectedWildcards: list[str] = []
             self.result = ""
+
+        def warn_or_stop(self, message: str, e: Exception = None):
+            if self.__ppp.gen_onwarning == self.__ppp.ONWARNING_CHOICES.stop:
+                raise PPPInterrupt(
+                    message,
+                    self.__ppp.INVALID_CONTENT_STOP.format(message) if not self.__is_negative else "",
+                    self.__ppp.INVALID_CONTENT_STOP.format(message) if self.__is_negative else "",
+                ) from e
+            self.__ppp.logger.warning(message)
 
         def start_visit(self, prompt_description: str, parsed_prompt: lark.Tree, is_negative: bool = False) -> str:
             """
@@ -780,12 +813,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 var_value = self.__ppp.system_variables.get(cond_var, None)
                 if var_value is None:
                     var_value = ""
-                    self.__ppp.logger.warning(f"Unknown system variable {cond_var}")
+                    self.warn_or_stop(f"Unknown system variable {cond_var}")
             else:  # user variable
                 var_value = self.__get_user_variable_value(cond_var)
                 if var_value is None:
                     var_value = ""
-                    self.__ppp.logger.warning(f"Unknown user variable {cond_var}")
+                    self.warn_or_stop(f"Unknown user variable {cond_var}")
             if isinstance(var_value, str):
                 var_value = var_value.lower()
             if isinstance(cond_value, list):
@@ -987,11 +1020,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if len(tree.children) == 2:
                 weight_str = tree.children[-1]
                 if weight_str is not None:
+                    weight_kind = 2  # specific weight
                     weight = float(weight_str)
                 else:
+                    weight_kind = 1  # increase attention
                     weight = 1.1
                     weight_str = "1.1"
             else:
+                weight_kind = 0  # decrease attention
                 weight = 0.9
                 weight_str = "0.9"
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -1012,13 +1048,22 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     current_tree = current_tree.children[0]
                 weight = math.floor(weight * 100) / 100  # we round to 2 decimals
                 weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
-            self.__shell.append(self.AccumulatedShell("at", weight))
-            if weight == 0.9 and not self.__ppp.is_comfy_ui():
+                if weight_str == "0.9":
+                    weight_kind = 0
+                elif weight_str == "1.1":
+                    weight_kind = 1
+                else:
+                    weight_kind = 2
+            if weight_kind == 0 and self.__ppp.is_comfy_ui():
+                weight_kind = 2
+                weight_str = "0.9"
+            self.__shell.append(self.AccumulatedShell("at", (weight_kind, weight_str)))
+            if weight_kind == 0:
                 starttag = "["
                 self.result += starttag
                 self.__visit(current_tree)
                 endtag = "]"
-            elif weight == 1.1:
+            elif weight_kind == 1:
                 starttag = "("
                 self.result += starttag
                 self.__visit(current_tree)
@@ -1055,7 +1100,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 )
                 info = f"with {parameters or 'no parameters'} : {content}"
             else:
-                self.__ppp.logger.warning("Ignored negative command in negative prompt")
+                self.warn_or_stop("Ignored negative command in negative prompt")
                 self.__visit(tree.children[1::])
             t2 = time.time()
             self.__debug_end("commandstn", start_result, t2 - t1, info)
@@ -1078,7 +1123,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 )
                 info = f"with {parameters or 'no parameters'}"
             else:
-                self.__ppp.logger.warning("Ignored negative insertion point command in positive prompt")
+                self.warn_or_stop("Ignored negative insertion point command in positive prompt")
             t2 = time.time()
             self.__debug_end("commandstni", start_result, t2 - t1, info)
 
@@ -1095,8 +1140,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             t1 = time.time()
             start_result = self.result
             if variable.startswith("_"):
-                self.__ppp.logger.warning(f"Invalid variable name '{variable}' detected!")
-                self.__ppp.interrupt()
+                self.warn_or_stop(f"Invalid variable name '{variable}' detected! System variables cannot be set.")
                 return
             info = variable
             value_description = self.__get_original_node_content(content, None)
@@ -1107,7 +1151,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 raw_oldvalue = self.__ppp.user_variables.get(variable, None)
                 if raw_oldvalue is None:
                     newvalue = value
-                    self.__ppp.logger.warning(f"Unknown variable {variable}")
+                    self.warn_or_stop(f"Unknown variable {variable}")
                 elif isinstance(raw_oldvalue, str):
                     newvalue = lark.Tree(
                         lark.Token("RULE", "varvalue"),
@@ -1177,7 +1221,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__ppp.echoed_variables[variable] = v
                     self.result += v
                 else:
-                    self.__ppp.logger.warning(f"Unknown variable {variable}")
+                    self.warn_or_stop(f"Unknown variable {variable}")
             t2 = time.time()
             info = variable
             if default is not None:
@@ -1264,9 +1308,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             separator: str = options.get("separator", self.__ppp.wil_choice_separator)
             if sampler != "~":
                 msg = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
-                self.__ppp.logger.warning(f"Unsupported sampler '{sampler}' in {msg} options!")
-                self.__ppp.interrupt()
-                return ("", [], separator, "")
+                self.warn_or_stop(f"Unsupported sampler '{sampler}' in {msg} options!")
+                sampler = "~"
             if filter_specifier is not None:
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
@@ -1287,7 +1330,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if passes:
                         filtered_choice_values.append(c)
                 if not filtered_choice_values:
-                    self.__ppp.logger.warning(
+                    self.warn_or_stop(
                         f"Wildcard filter specifier '{','.join(['+'.join(y for y in x) for x in filter_specifier])}' found no matches in choices for wildcard '{wildcard_key}'!"
                     )
             else:
@@ -1376,7 +1419,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 # remove comments
                 results = [re.sub(r"\s*#[^\n]*(?:\n|$)", "", r, flags=re.DOTALL) for r in selected_choices_text]
                 return (prefix, results, separator, suffix)
-            return ("", "", separator, "")
+            return ("", [], separator, "")
 
         def __get_choices(
             self,
@@ -1473,10 +1516,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     "choicevalue", prefix, self.__ppp.parser_choicevalue, True
                                 )
                             except lark.exceptions.UnexpectedInput as e:
-                                self.__ppp.logger.warning(
-                                    f"Error parsing choice prefix '{prefix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                self.warn_or_stop(
+                                    f"Error parsing choice prefix '{prefix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                    e,
                                 )
-                                del options["prefix"]
                         suffix = options.get("suffix", None)
                         if suffix is not None and isinstance(suffix, str):
                             try:
@@ -1484,10 +1527,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     "choicevalue", suffix, self.__ppp.parser_choicevalue, True
                                 )
                             except lark.exceptions.UnexpectedInput as e:
-                                self.__ppp.logger.warning(
-                                    f"Error parsing choice suffix '{suffix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                self.warn_or_stop(
+                                    f"Error parsing choice suffix '{suffix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                    e,
                                 )
-                                del options["suffix"]
                         n = 1
                 else:
                     try:
@@ -1516,8 +1559,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                         "condition", condition, self.__ppp.parser_condition, True
                                     )
                                 except lark.exceptions.UnexpectedInput as e:
-                                    self.__ppp.logger.warning(
-                                        f"Error parsing condition '{condition}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                    self.warn_or_stop(
+                                        f"Error parsing condition '{condition}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                        e,
                                     )
                                     cv["if"] = None
                             content = cv.get("content", cv.get("text", None))
@@ -1530,8 +1574,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                         "choicevalue", content, self.__ppp.parser_choicevalue, True
                                     )
                                 except lark.exceptions.UnexpectedInput as e:
-                                    self.__ppp.logger.warning(
-                                        f"Error parsing choice content '{content}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                                    self.warn_or_stop(
+                                        f"Error parsing choice content '{content}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                        e,
                                     )
                                     cv["content"] = None
                             if cv["content"] is not None:
@@ -1539,9 +1584,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     self.__ppp.logger.debug(f"Processed choice {cv}")
                                 choice_values.append(cv)
                             else:
-                                self.__ppp.logger.warning(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
+                                self.warn_or_stop(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
                         else:
-                            self.__ppp.logger.warning(f"Invalid choice '{cv}' in wildcard '{wildcard.key}'!")
+                            self.warn_or_stop(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
                     else:
                         try:
                             choice_values.append(
@@ -1550,8 +1595,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 )
                             )
                         except lark.exceptions.UnexpectedInput as e:
-                            self.__ppp.logger.warning(
-                                f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}"
+                            self.warn_or_stop(
+                                f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}", e
                             )
                 wildcard.choices = choice_values
                 t2 = time.time()
@@ -1683,11 +1728,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     for i in range(len(negtag.shell) - 1, 0, -1):
                         if negtag.shell[i].type == "at" and negtag.shell[i - 1].type == "at":
                             new_weight = (  # we limit the new weight to two decimals
-                                math.floor(100 * negtag.shell[i - 1].data * negtag.shell[i].data) / 100
+                                math.floor(100 * float(negtag.shell[i - 1].data[1]) * float(negtag.shell[i].data[1]))
+                                / 100
                             )
+                            new_weight_str = f"{new_weight:.2f}".rstrip("0").rstrip(".")
+                            if new_weight_str == "0.9" and not self.__ppp.is_comfy_ui():
+                                new_kind = 0
+                            elif new_weight_str == "1.1":
+                                new_kind = 1
+                            else:
+                                new_kind = 2
                             negtag.shell[i - 1] = self.AccumulatedShell(
                                 "at",
-                                new_weight,
+                                (new_kind, new_weight_str),
                             )
                             negtag.shell.pop(i)
                 start = ""
@@ -1695,16 +1748,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 for s in negtag.shell:
                     match s.type:
                         case "at":
-                            if s.data == 0.9:
+                            if s.data[0] == 0:
                                 start += "["
                                 end = "]" + end
-                            elif s.data == 1.1:
+                            elif s.data[0] == 1:
                                 start += "("
                                 end = ")" + end
                             else:
                                 start += "("
-                                weight_str = f"{s.data:.2f}".rstrip("0").rstrip(".")
-                                end = f":{weight_str})" + end
+                                end = f":{s.data[1]})" + end
                         # case "sc":
                         case "scb":
                             start += "["

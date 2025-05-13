@@ -87,6 +87,13 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Debug level",
                     },
                 ),
+                "on_warnings": (
+                    [e.value for e in PromptPostProcessor.ONWARNING_CHOICES],
+                    {
+                        "default": PromptPostProcessor.ONWARNING_CHOICES.warn.value,
+                        "tooltip": "How to handle invalid content warnings",
+                    },
+                ),
                 "variants_definitions": (
                     "STRING",
                     {
@@ -201,6 +208,15 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "cleanup_extra_separators_include_eol": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Extra separators options also remove EOLs",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "cleanup_breaks": (
                     "BOOLEAN",
                     {
@@ -304,6 +320,7 @@ class PromptPostProcessorComfyUINode:
         neg_prompt,
         seed,
         debug_level,  # pylint: disable=unused-argument
+        on_warnings,
         variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
@@ -317,6 +334,7 @@ class PromptPostProcessorComfyUINode:
         cleanup_empty_constructs,
         cleanup_extra_separators,
         cleanup_extra_separators2,
+        cleanup_extra_separators_include_eol,
         cleanup_breaks,
         cleanup_breaks_eol,
         cleanup_ands,
@@ -335,6 +353,7 @@ class PromptPostProcessorComfyUINode:
             "pos_prompt": pos_prompt,
             "neg_prompt": neg_prompt,
             "seed": seed,
+            "on_warnings": on_warnings,
             "variants_definitions": variants_definitions,
             "process_wildcards": wc_process_wildcards,
             "wildcards_folders": wc_wildcards_folders,
@@ -348,6 +367,7 @@ class PromptPostProcessorComfyUINode:
             "cleanup_empty_constructs": cleanup_empty_constructs,
             "cleanup_extra_separators": cleanup_extra_separators,
             "cleanup_extra_separators2": cleanup_extra_separators2,
+            "cleanup_extra_separators_include_eol": cleanup_extra_separators_include_eol,
             "cleanup_breaks": cleanup_breaks,
             "cleanup_breaks_eol": cleanup_breaks_eol,
             "cleanup_ands": cleanup_ands,
@@ -367,6 +387,7 @@ class PromptPostProcessorComfyUINode:
         neg_prompt,
         seed,
         debug_level,
+        on_warnings,
         variants_definitions,
         wc_process_wildcards,
         wc_wildcards_folders,
@@ -380,6 +401,7 @@ class PromptPostProcessorComfyUINode:
         cleanup_empty_constructs,
         cleanup_extra_separators,
         cleanup_extra_separators2,
+        cleanup_extra_separators_include_eol,
         cleanup_breaks,
         cleanup_breaks_eol,
         cleanup_ands,
@@ -436,6 +458,7 @@ class PromptPostProcessorComfyUINode:
             raise ValueError("Invalid variants_definitions format")
         options = {
             "debug_level": debug_level,
+            "on_warnings": on_warnings,
             "variants_definitions": variants_definitions,
             "process_wildcards": wc_process_wildcards,
             "if_wildcards": wc_if_wildcards,
@@ -447,6 +470,7 @@ class PromptPostProcessorComfyUINode:
             "cleanup_empty_constructs": cleanup_empty_constructs,
             "cleanup_extra_separators": cleanup_extra_separators,
             "cleanup_extra_separators2": cleanup_extra_separators2,
+            "cleanup_extra_separators_include_eol": cleanup_extra_separators_include_eol,
             "cleanup_breaks": cleanup_breaks,
             "cleanup_breaks_eol": cleanup_breaks_eol,
             "cleanup_ands": cleanup_ands,

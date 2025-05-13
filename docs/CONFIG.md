@@ -33,6 +33,7 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 ### General settings
 
 * **Debug level**: what to write to the console. Note: in *SD.Next* debug messages only show if you launch it with the `--debug` argument.
+* **What to do on invalid content warnings?**: warn on the console or stop the generation.
 * **Model variant definitions**: definitions for model variants to be recognized based on strings found in the full filename.
 
     The format for each line is (with *kind* being one of the base model identifiers or not defined):
@@ -65,6 +66,7 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 * **Remove empty constructs**: removes attention/scheduling/alternation constructs when they are invalid.
 * **Remove extra separators**: removes unnecessary separators. This applies to the configured separator and regular commas.
 * **Remove additional extra separators**: removes unnecessary separators at start or end of lines. This applies to the configured separator and regular commas.
+* **The extra separators options also remove EOLs**: in the previous two options it also removes EOLs attached to the separators.
 * **Clean up around BREAKs**: removes consecutive BREAKs and unnecessary commas and space around them.
 * **Use EOL instead of Space before BREAKs**: add a newline before BREAKs.
 * **Clean up around ANDs**: removes consecutive ANDs and unnecessary commas and space around them.

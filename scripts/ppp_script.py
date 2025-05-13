@@ -4,9 +4,10 @@ if __name__ == "__main__":
 import sys
 import os
 import time
+from pathlib import Path
 import numpy as np
 
-sys.path.append(os.path.join(os.path.realpath(__file__), ".."))  # base path for the extension
+sys.path.append(str(Path(__file__).parent))  # base path for the extension
 
 from modules import scripts, shared, script_callbacks  # pylint: disable=import-error
 from modules.processing import StableDiffusionProcessing  # pylint: disable=import-error
@@ -279,6 +280,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
             env_info["is_flux"] = False
             env_info["is_auraflow"] = False
+        hash_envinfo = hash(tuple(sorted(env_info.items())))
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
@@ -289,6 +291,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         ]
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
+            "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.ONWARNING_CHOICES.warn.value),
             "variants_definitions": getattr(
                 opts, "ppp_gen_variantsdefinitions", PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS
             ),
@@ -302,6 +305,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "cleanup_empty_constructs": getattr(opts, "ppp_cup_emptyconstructs", True),
             "cleanup_extra_separators": getattr(opts, "ppp_cup_extraseparators", True),
             "cleanup_extra_separators2": getattr(opts, "ppp_cup_extraseparators2", True),
+            "cleanup_extra_separators_include_eol": getattr(opts, "ppp_cup_extraseparators_include_eol", True),
             "cleanup_breaks": getattr(opts, "ppp_cup_breaks", True),
             "cleanup_breaks_eol": getattr(opts, "ppp_cup_breaks_eol", False),
             "cleanup_ands": getattr(opts, "ppp_cup_ands", True),
@@ -310,6 +314,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "cleanup_merge_attention": getattr(opts, "ppp_cup_mergeattention", True),
             "remove_extranetwork_tags": getattr(opts, "ppp_rem_removeextranetworktags", False),
         }
+        hash_options = hash(tuple(sorted(options.items())))
         self.wildcards_obj.refresh_wildcards(
             self.ppp_debug_level, wildcards_folders if options["process_wildcards"] else None
         )
@@ -367,7 +372,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         # make it compatible with A1111 hires fix
         rph: list[str] = getattr(p, "all_hr_prompts", None)
         rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
-        if rph is not None and rnh is not None:
+        if rph is not None and rnh is not None and (rph != rpr or rnh != rnr):
             prompts_list += [
                 ("hiresfix", seed, prompt, negative_prompt)
                 for seed, prompt, negative_prompt in zip(calculated_seeds, rph, rnh)
@@ -378,22 +383,35 @@ class PromptPostProcessorA1111Script(scripts.Script):
         for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):
             if self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info(f"processing prompts[{i+1}] ({prompttype})")
-            if self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt)) is None:
+            if (
+                self.lru_cache.get(
+                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
+                )
+                is None
+            ):
                 posp, negp, _ = ppp.process_prompt(prompt, negative_prompt, seed)
-                self.lru_cache.put((seed, hash(self.wildcards_obj), prompt, negative_prompt), (posp, negp))
+                self.lru_cache.put(
+                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt), (posp, negp)
+                )
                 # adds also the result so i2i doesn't process it unnecessarily
-                self.lru_cache.put((seed, hash(self.wildcards_obj), posp, negp), (posp, negp))
+                self.lru_cache.put(
+                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), posp, negp), (posp, negp)
+                )
             elif self.ppp_debug_level != DEBUG_LEVEL.none:
                 self.ppp_logger.info("result already in cache")
 
         # updates the prompts
+        rpr_copy = None
+        rnr_copy = None
         if rpr is not None and rnr is not None:
             rpr_changes = False
             rnr_changes = False
             rpr_copy = rpr.copy()
             rnr_copy = rnr.copy()
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rpr, rnr)):
-                found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
+                found = self.lru_cache.get(
+                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
+                )
                 if found is not None:
                     if rpr[i].strip() != found[0].strip():
                         rpr_changes = True
@@ -412,11 +430,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
             rph_copy = rph.copy()
             rnh_copy = rnh.copy()
             for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rph, rnh)):
-                found = self.lru_cache.get((seed, hash(self.wildcards_obj), prompt, negative_prompt))
+                found = self.lru_cache.get(
+                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
+                )
                 if found is not None:
-                    if rph[i].strip() != found[0].strip():
+                    if rph[i].strip() != found[0].strip() and (not rpr_copy or rph[i].strip() != rpr_copy[i].strip()):
                         rph_changes = True
-                    if rnh[i].strip() != found[1].strip():
+                    if rnh[i].strip() != found[1].strip() and (not rnr_copy or rnh[i].strip() != rnr_copy[i].strip()):
                         rnh_changes = True
                     rph[i] = found[0]
                     rnh[i] = found[1]
@@ -498,6 +518,21 @@ def on_ui_settings():
                     ("Minimal", DEBUG_LEVEL.minimal.value),
                     ("Full", DEBUG_LEVEL.full.value),
                 ),
+            },
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_gen_onwarning",
+        info=shared.OptionInfo(
+            default=PromptPostProcessor.ONWARNING_CHOICES.warn.value,
+            label="What to do on invalid content warnings?",
+            component=gr.Radio,
+            component_args={
+                "choices": (
+                    ("Show warning in console", PromptPostProcessor.ONWARNING_CHOICES.warn.value),
+                    ("Stop the generation", PromptPostProcessor.ONWARNING_CHOICES.stop.value),
+                )
             },
             section=section,
         ),
@@ -653,6 +688,14 @@ def on_ui_settings():
         info=shared.OptionInfo(
             True,
             label="Remove additional extra separators",
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_cup_extraseparators_include_eol",
+        info=shared.OptionInfo(
+            False,
+            label="The extra separators options also remove EOLs",
             section=section,
         ),
     )

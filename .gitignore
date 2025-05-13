@@ -3,3 +3,5 @@
 .vscode/**/*
 !.vscode/settings.json
 !.vscode/launch.json
+
+tests/tests_local.py
