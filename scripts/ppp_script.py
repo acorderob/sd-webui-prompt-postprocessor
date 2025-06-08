@@ -15,6 +15,7 @@ from modules.shared import opts  # pylint: disable=import-error
 from modules.paths import models_path  # pylint: disable=import-error
 import gradio as gr  # pylint: disable=import-error
 from ppp import PromptPostProcessor  # pylint: disable=import-error
+from ppp_hosts import SUPPORTED_APPS, SUPPORTED_APPS_NAMES  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
 from ppp_cache import PPPLRUCache  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
@@ -42,6 +43,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
     @classmethod
     def increment_instance_count(cls):
         cls.instance_count += 1
+        return cls.instance_count
 
     @classmethod
     def get_instance_count(cls):
@@ -51,27 +53,21 @@ class PromptPostProcessorA1111Script(scripts.Script):
         """
         Initializes the PromptPostProcessor object.
 
-        This method adds callbacks for UI settings and initializes the logger.
-
         Parameters:
             None
 
         Returns:
             None
         """
-        self.increment_instance_count()
-        lf = PromptPostProcessorLogFactory()
+        self.instance_index = self.increment_instance_count()
         self.name = PromptPostProcessor.NAME
-        self.ppp_logger = lf.log
-        self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
-        self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
-        self.wildcards_obj = PPPWildcards(lf.log)
-        i = self.get_instance_count()
-        if i == 1:  # some UIs create multiple instances
-            self.ppp_logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
+        self.ppp_logger = None
+        self.ppp_debug_level = DEBUG_LEVEL.none.value
+        self.lru_cache = None
+        self.wildcards_obj = None
 
     def title(self):
         """
@@ -164,7 +160,29 @@ class PromptPostProcessorA1111Script(scripts.Script):
         Returns:
             None
         """
-        t1 = time.time()
+        app = (
+            SUPPORTED_APPS.forge
+            if hasattr(p.sd_model, "model_config")
+            else (
+                SUPPORTED_APPS.reforge
+                if hasattr(p.sd_model, "forge_objects")
+                else (
+                    SUPPORTED_APPS.sdnext
+                    if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd")
+                    else SUPPORTED_APPS.a1111
+                )
+            )
+        )
+        if self.ppp_logger is None:
+            lf = PromptPostProcessorLogFactory(app)
+            self.ppp_logger = lf.log
+            self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
+            self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
+            self.wildcards_obj = PPPWildcards(self.ppp_logger)
+            self.ppp_logger.info(
+                f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized, running on {SUPPORTED_APPS_NAMES[app]}"
+            )
+        t1 = time.monotonic_ns()
         if getattr(opts, "prompt_attention", "") == "Compel parser":
             self.ppp_logger.warning("Compel parser is not supported!")
         init_images = getattr(p, "init_images", [None]) or [None]
@@ -186,37 +204,22 @@ class PromptPostProcessorA1111Script(scripts.Script):
             }
         )
 
-        app_names = {
-            "sdnext": "SD.Next",
-            "forge": "Forge",
-            "reforge": "reForge",
-            "a1111": "A1111 (or compatible)",
-        }
-        app = (
-            "forge"
-            if hasattr(p.sd_model, "model_config")
-            else (
-                "reforge"
-                if hasattr(p.sd_model, "forge_objects")
-                else ("sdnext" if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd") else "a1111")
-            )
-        )
         if self.ppp_debug_level != DEBUG_LEVEL.none:
-            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'}) running on {app_names[app]}")
+            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})")
         models_supported = {x: True for x in PromptPostProcessor.SUPPORTED_MODELS}
-        if app == "sdnext":
+        if app == SUPPORTED_APPS.sdnext:
             models_supported["ssd"] = False
-        elif app == "forge":
+        elif app == SUPPORTED_APPS.forge:
             models_supported["ssd"] = False
             models_supported["auraflow"] = False
-        elif app == "reforge":
+        elif app == SUPPORTED_APPS.reforge:
             models_supported["flux"] = False
             models_supported["auraflow"] = False
         else:  # assume A1111 compatible
             models_supported["flux"] = False
             models_supported["auraflow"] = False
         env_info = {
-            "app": app,
+            "app": app.value,
             "models_path": models_path,
             "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
             "model_class": "",
@@ -238,7 +241,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "is_wanvideo": False,  # WanVideo
             "is_hidream": False,  # HiDream
         }
-        if app == "sdnext":
+        if app == SUPPORTED_APPS.sdnext:
             # cannot differentiate SD1 and SD2, we set True to both
             # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
             env_info["model_class"] = p.sd_model.__class__.__name__
@@ -250,7 +253,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_flux"] = p.sd_model.__class__.__name__ == "FluxPipeline"
             env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
             # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'PixArt-Alpha': 'PixArtAlphaPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'AuraFlow': 'AuraFlowPipeline', 'CogView': 'CogView3PlusPipeline'
-        elif app == "forge":
+        elif app == SUPPORTED_APPS.forge:
             # from repositories\huggingface_guess\huggingface_guess\model_list.py
             env_info["model_class"] = p.sd_model.model_config.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -262,7 +265,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             )  # p.sd_model.model_config.__class__.__name__ == "SD3" # not actually supported?
             env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ in ("Flux", "FluxSchnell")
             env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
-        elif app == "reforge":
+        elif app == SUPPORTED_APPS.reforge:
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
             env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
@@ -451,9 +454,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if p.extra_generation_params.get(k) is None:
                 p.extra_generation_params[k] = v
 
-        t2 = time.time()
+        t2 = time.monotonic_ns()
         if self.ppp_debug_level != DEBUG_LEVEL.none:
-            self.ppp_logger.info(f"process time: {t2 - t1:.3f} seconds")
+            self.ppp_logger.info(f"process time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
     def ppp_interrupt(self):
         """

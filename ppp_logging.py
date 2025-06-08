@@ -2,6 +2,7 @@ from enum import Enum
 import logging
 import sys
 import copy
+from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
 
 
 class DEBUG_LEVEL(Enum):
@@ -52,14 +53,14 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
-    def __init__(self):
+    def __init__(self, app: SUPPORTED_APPS = None):  # pylint: disable=unused-argument
         """
         Initializes the PromptPostProcessor class.
 
         This method sets up the logger for the PromptPostProcessor class and configures its log level and handlers.
 
         Args:
-            None
+            app (SUPPORTED_APPS): The application for which the logger is being created.
 
         Returns:
             None
@@ -68,7 +69,7 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
         ppplog.propagate = False
         if not ppplog.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(self.ColoredFormatter("%(asctime)s %(levelname)s %(message)s")) # Used in A1111 / Forge / reForge / ComfyUI, but not in SD.Next
+            handler.setFormatter(self.ColoredFormatter("%(asctime)s %(levelname)s %(message)s"))
             ppplog.addHandler(handler)
         ppplog.setLevel(logging.DEBUG)
         self.log = PromptPostProcessorLogCustomAdapter(ppplog)

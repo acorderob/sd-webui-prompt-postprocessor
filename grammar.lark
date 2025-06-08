@@ -27,15 +27,48 @@ promptcomp.4: promptcomppart ( [ ":" numpar ] ( /\bAND\b/ promptcomppart [ ":" n
 promptcomppart: content
 
 // simple prompts
-?content.2: ( old_content | new_content | plain | specialchars )*
-?inside_content.2: ( new_content | plain | specialchars )*
-?content_choice.2: ( old_content | new_content | plain_choice | specialchars_choice )*
-?content_var.2: ( old_content | new_content | plain_var | specialchars_var )*
-?content_negtag.2: ( old_content | new_content_negtag | plain | specialchars_negtag )*
-?content_alternate.2: ( old_content | new_content | plain_alternate | specialchars_alternate )*
+
 ?old_content.2: ( attention | scheduled | alternate | extranetworktag )+
-?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices )+
-?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard | choices )+
+//#if ALLOW_NEW_CONTENT
+    ?content.2: ( old_content | new_content | plain | specialchars )*
+    ?inside_content.2: ( new_content | plain | specialchars )*
+    ?content_choice.2: ( old_content | new_content | plain_choice | specialchars_choice )*
+    ?content_var.2: ( old_content | new_content | plain_var | specialchars_var )*
+    ?content_negtag.2: ( old_content | new_content_negtag | plain | specialchars_negtag )*
+    ?content_alternate.2: ( old_content | new_content | plain_alternate | specialchars_alternate )*
+    //#if ALLOW_WILDCARDS ALLOW_CHOICES ALLOW_COMMVARS
+        ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices )+
+        ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard | choices )+
+    //#elif ALLOW_WILDCARDS !ALLOW_CHOICES ALLOW_COMMVARS
+        ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard )+
+        ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard )+
+    //#elif !ALLOW_WILDCARDS ALLOW_CHOICES ALLOW_COMMVARS
+        ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | choices )+
+        ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | choices )+
+    //#elif ALLOW_WILDCARDS ALLOW_CHOICES !ALLOW_COMMVARS
+        ?new_content.3: ( wildcard | choices )+
+        ?new_content_negtag.3: ( wildcard | choices )+
+    //#elif ALLOW_WILDCARDS !ALLOW_CHOICES !ALLOW_COMMVARS
+        ?new_content.3: ( wildcard )+
+        ?new_content_negtag.3: ( wildcard )+
+    //#elif !ALLOW_WILDCARDS ALLOW_CHOICES !ALLOW_COMMVARS
+        ?new_content.3: ( choices )+
+        ?new_content_negtag.3: ( choices )+
+    //#elif !ALLOW_WILDCARDS !ALLOW_CHOICES ALLOW_COMMVARS
+        ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif )+
+        ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif )+
+    //#else
+        ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | wildcard | choices )+
+        ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard | choices )+
+    //#endif
+//#else
+    ?content.2: ( old_content | plain | specialchars )*
+    ?inside_content.2: ( plain | specialchars )*
+    ?content_choice.2: ( old_content | plain_choice | specialchars_choice )*
+    ?content_var.2: ( old_content | plain_var | specialchars_var )*
+    ?content_negtag.2: ( old_content | plain | specialchars_negtag )*
+    ?content_alternate.2: ( old_content | plain_alternate | specialchars_alternate )*
+//#endif
 
 // attention modifiers
 attention: ( "(" content [ ":" numpar ] ")" ) | ( "[" content "]" )

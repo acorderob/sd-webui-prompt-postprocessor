@@ -5,6 +5,7 @@ import folder_paths  # type: ignore
 import nodes  # type: ignore
 
 from .ppp import PromptPostProcessor
+from .ppp_hosts import SUPPORTED_APPS
 from .ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
 from .ppp_wildcards import PPPWildcards
 
@@ -20,7 +21,7 @@ class PromptPostProcessorComfyUINode:
     logger = None
 
     def __init__(self):
-        lf = PromptPostProcessorLogFactory()
+        lf = PromptPostProcessorLogFactory(SUPPORTED_APPS.comfyui)
         self.logger = lf.log
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
@@ -419,7 +420,7 @@ class PromptPostProcessorComfyUINode:
             self.logger.warning("Modelname is not provided. System variables will not be properly set.")
         # model class values in ComfyUI\comfy\supported_models.py
         env_info = {
-            "app": "comfyui",
+            "app": SUPPORTED_APPS.comfyui.value,
             "models_path": folder_paths.models_dir,
             "model_filename": modelname or "",  # path is relative to checkpoints folder
             "model_class": modelclass,

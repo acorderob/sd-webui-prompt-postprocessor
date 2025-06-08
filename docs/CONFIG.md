@@ -46,9 +46,9 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 
 ### Wildcard settings
 
-* **Process wildcards**: you can choose to process them with this extension or use a different one.
+* **Process wildcards**: you can choose to process wildcards and choices with this extension or use a different one.
 * **Wildcards folders**: you can enter multiple folders separated by commas. In *ComfyUI* you can leave it empty and add a `wildcards` entry in the **extra_model_paths.yaml** file.
-* **What to do with remaining wildcards?**: select what do you want to do with any found wildcards.
+* **What to do with remaining wildcards?**: select what do you want to do with any found wildcards/choices (when process wildcards is off or after the processing).
   * **Ignore**: do not try to detect wildcards.
   * **Remove**: detect wildcards and remove them.
   * **Add visible warning**: detect wildcards and add a warning text to the prompt, that hopefully produces a noticeable generation.

@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 import lark
 import numpy as np
 
+from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcard, PPPWildcards  # pylint: disable=import-error
 
@@ -165,33 +166,211 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammar.lark")
             with open(grammar_filename, "r", encoding="utf-8") as file:
                 grammar_content = file.read()
-        self.parser_complete = lark.Lark(
-            grammar_content,
+
+        # Preprocess grammar content for conditional compilation
+        self.parser_full_only_old = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": False,
+                    "ALLOW_WILDCARDS": False,
+                    "ALLOW_CHOICES": False,
+                    "ALLOW_COMMVARS": False,
+                },
+            ),
             propagate_positions=True,
         )
-        self.parser_choice = lark.Lark(
+        grammar_content_full = self.__preprocess_grammar(
             grammar_content,
+            {
+                "ALLOW_NEW_CONTENT": True,
+                "ALLOW_WILDCARDS": True,
+                "ALLOW_CHOICES": True,
+                "ALLOW_COMMVARS": True,
+            },
+        )
+        self.parser_complete_full = lark.Lark(
+            grammar_content_full,
+            propagate_positions=True,
+        )
+        self.parser_complete_wc_ch = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": True,
+                    "ALLOW_CHOICES": True,
+                    "ALLOW_COMMVARS": False,
+                },
+            ),
+            propagate_positions=True,
+        )
+        self.parser_complete_wc_cv = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": True,
+                    "ALLOW_CHOICES": False,
+                    "ALLOW_COMMVARS": True,
+                },
+            ),
+            propagate_positions=True,
+        )
+        self.parser_complete_ch_cv = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": False,
+                    "ALLOW_CHOICES": True,
+                    "ALLOW_COMMVARS": True,
+                },
+            ),
+            propagate_positions=True,
+        )
+        self.parser_complete_wc = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": True,
+                    "ALLOW_CHOICES": False,
+                    "ALLOW_COMMVARS": False,
+                },
+            ),
+            propagate_positions=True,
+        )
+        self.parser_complete_ch = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": False,
+                    "ALLOW_CHOICES": True,
+                    "ALLOW_COMMVARS": False,
+                },
+            ),
+            propagate_positions=True,
+        )
+        self.parser_complete_cv = lark.Lark(
+            self.__preprocess_grammar(
+                grammar_content,
+                {
+                    "ALLOW_NEW_CONTENT": True,
+                    "ALLOW_WILDCARDS": False,
+                    "ALLOW_CHOICES": False,
+                    "ALLOW_COMMVARS": True,
+                },
+            ),
+            propagate_positions=True,
+        )
+
+        # Partial parsers for wildcards and choices
+        self.parser_choice = lark.Lark(
+            grammar_content_full,
             propagate_positions=True,
             start="choice",
         )
         self.parser_choicesoptions = lark.Lark(
-            grammar_content,
+            grammar_content_full,
             propagate_positions=True,
             start="choicesoptions",
         )
         self.parser_condition = lark.Lark(
-            grammar_content,
+            grammar_content_full,
             propagate_positions=True,
             start="condition",
         )
         self.parser_choicevalue = lark.Lark(
-            grammar_content,
+            grammar_content_full,
             propagate_positions=True,
             start="choicevalue",
         )
         self.__init_sysvars()
         self.user_variables = {}
         self.echoed_variables = {}
+
+    def __preprocess_grammar(self, grammar_content: str, options: dict[str, bool]) -> str:
+        """
+        Preprocesses the grammar content to handle conditional compilation directives.
+
+        Args:
+            grammar_content (str): The raw grammar content.
+            options (dict[str,bool]): Options for preprocessing.
+
+        Returns:
+            str: The preprocessed grammar content.
+        """
+        lines = grammar_content.split("\n")
+        result_lines = []
+        skip_current_block = []
+        all_blocks_skipped = []
+
+        def evaluate_conditions(conditions: list[str]) -> bool:
+            """
+            Evaluates the conditions based on the provided options. Allows for negation with '!' prefix.
+
+            Args:
+                conditions (list[str]): List of conditions to evaluate.
+
+            Returns:
+                bool: True if all conditions are met, False otherwise.
+            """
+            r = True
+            for condition in conditions:
+                if condition.startswith("!"):
+                    r = r and not options.get(condition[1:], False)
+                else:
+                    r = r and options.get(condition, True)
+            return r
+
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line.startswith("//#if"):
+                # Extract condition from the #if directive
+                conditions = stripped_line[5:].strip().split(" ")
+                # Evaluate the conditions
+                skip_current_block.append(not evaluate_conditions(conditions))
+                all_blocks_skipped.append(skip_current_block[-1])
+                continue
+            if stripped_line.startswith("//#elif"):
+                if not skip_current_block:
+                    self.logger.warning("Unmatched //#elif directive found in grammar content.")
+                elif all_blocks_skipped[-1]:
+                    # Extract condition from the #elif directive
+                    conditions = stripped_line[7:].strip().split(" ")
+                    # Evaluate the conditions
+                    skip_current_block[-1] = not evaluate_conditions(conditions)
+                    if not skip_current_block[-1]:
+                        all_blocks_skipped[-1] = False
+                else:
+                    skip_current_block[-1] = True
+                continue
+            if stripped_line.startswith("//#else"):
+                if not skip_current_block:
+                    self.logger.warning("Unmatched //#else directive found in grammar content.")
+                elif all_blocks_skipped[-1]:
+                    skip_current_block[-1] = False
+                else:
+                    skip_current_block[-1] = True
+                continue
+            if stripped_line.startswith("//#endif"):
+                if not skip_current_block:
+                    self.logger.warning("Unmatched //#endif directive found in grammar content.")
+                else:
+                    skip_current_block.pop()
+                    all_blocks_skipped.pop()
+                continue
+            # Include the line if we're not skipping any current block
+            if not any(skip_current_block):
+                result_lines.append(stripped_line)
+        # Check for unclosed blocks at the end
+        if skip_current_block:
+            self.logger.warning(
+                f"Found {len(skip_current_block)} unclosed conditional directive(s) at the end of the file"
+            )
+        return "\n".join(result_lines)
 
     def interrupt(self):
         if self.interrupt_callback is not None:
@@ -216,7 +395,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             bool: True if the environment is ComfyUI, False otherwise.
         """
-        return self.env_info.get("app", "") == "comfyui"
+        return self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value
 
     def __init_sysvars(self):
         """
@@ -433,6 +612,61 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = text.strip()
         return text
 
+    def __get_best_parser(self, prompt: str) -> tuple[lark.Lark, str]:
+        """
+        Checks the prompt and returns the best parser to use based on its content.
+
+        Args:
+            prompt (str): The prompt to check.
+
+        Returns:
+            tuple[lark.Lark, str]: The best parser and its description.
+        """
+        tests = {
+            "ALLOW_WILDCARDS": re.search(r"(?<!\\)__", prompt) is not None,
+            "ALLOW_CHOICES": re.search(r"(?<!\$\\)\{|\}", prompt) is not None,
+            "ALLOW_COMMVARS": re.search(r"(?<!\\)(?:<ppp:|\$\{)", prompt) is not None,
+        }
+        if tests["ALLOW_WILDCARDS"] and tests["ALLOW_CHOICES"] and tests["ALLOW_COMMVARS"]:
+            return (
+                self.parser_complete_full,
+                "full parser with wildcards, choices, commands and variables",
+            )
+        if tests["ALLOW_WILDCARDS"] and tests["ALLOW_CHOICES"]:
+            return (
+                self.parser_complete_wc_ch,
+                "parser with wildcards and choices",
+            )
+        if tests["ALLOW_WILDCARDS"] and tests["ALLOW_COMMVARS"]:
+            return (
+                self.parser_complete_wc_cv,
+                "parser with wildcards, commands and variables",
+            )
+        if tests["ALLOW_CHOICES"] and tests["ALLOW_COMMVARS"]:
+            return (
+                self.parser_complete_ch_cv,
+                "parser with choices, commands and variables",
+            )
+        if tests["ALLOW_WILDCARDS"]:
+            return (
+                self.parser_complete_wc,
+                "parser with wildcards",
+            )
+        if tests["ALLOW_CHOICES"]:
+            return (
+                self.parser_complete_ch,
+                "parser with choices",
+            )
+        if tests["ALLOW_COMMVARS"]:
+            return (
+                self.parser_complete_cv,
+                "parser with commands and variables",
+            )
+        return (
+            self.parser_full_only_old,
+            "simple parser without new constructs",
+        )
+
     def __processprompts(self, prompt, negative_prompt):
         """
         Process the prompt and negative prompt.
@@ -450,12 +684,26 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         # Process prompt
         p_processor = self.TreeProcessor(self)
-        p_parsed = self.parse_prompt("prompt", prompt, self.parser_complete)
+        (prompt_parser, parser_description) = self.__get_best_parser(prompt)
+        if self.debug_level == DEBUG_LEVEL.full:
+            self.logger.debug(f"Using {parser_description} for prompt")
+        p_parsed = self.parse_prompt(
+            "prompt",
+            prompt,
+            prompt_parser,
+        )
         prompt = p_processor.start_visit("prompt", p_parsed, False)
 
         # Process negative prompt
         n_processor = self.TreeProcessor(self)
-        n_parsed = self.parse_prompt("negative prompt", negative_prompt, self.parser_complete)
+        (n_prompt_parser, n_parser_description) = self.__get_best_parser(negative_prompt)
+        if self.debug_level == DEBUG_LEVEL.full:
+            self.logger.debug(f"Using {n_parser_description} for negative prompt")
+        n_parsed = self.parse_prompt(
+            "negative prompt",
+            negative_prompt,
+            n_prompt_parser,
+        )
         negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
 
         var_keys = set(self.user_variables.keys()).union(set(self.echoed_variables.keys()))
@@ -541,13 +789,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.logger.info(f"Input seed: {seed}")
                 self.logger.info(self.format_output(f"Input prompt: {prompt}"))
                 self.logger.info(self.format_output(f"Input negative_prompt: {negative_prompt}"))
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             prompt, negative_prompt, all_variables = self.__processprompts(prompt, negative_prompt)
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             if self.debug_level != DEBUG_LEVEL.none:
                 self.logger.info(self.format_output(f"Result prompt: {prompt}"))
                 self.logger.info(self.format_output(f"Result negative_prompt: {negative_prompt}"))
-                self.logger.info(f"Process prompt pair time: {t2 - t1:.3f} seconds")
+                self.logger.info(f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
             # if self.debug_level != DEBUG_LEVEL.none:
             #     self.logger.debug(f"Wildcards memory usage: {self.wildcard_obj.__sizeof__()}")
@@ -586,7 +834,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             Tree: The parsed prompt.
         """
-        t1 = time.time()
+        t1 = time.monotonic_ns()
+        parsed_prompt = None
         try:
             if self.debug_level == DEBUG_LEVEL.full:
                 self.logger.debug(self.format_output(f"Parsing {prompt_description}: '{prompt}'"))
@@ -602,10 +851,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if raise_parsing_error:
                 raise
             self.logger.exception(self.format_output(f"Parsing failed on prompt!: {prompt}"))
-        t2 = time.time()
+        t2 = time.monotonic_ns()
         if self.debug_level == DEBUG_LEVEL.full:
-            self.logger.debug("Tree:\n" + textwrap.indent(re.sub(r"\n$", "", parsed_prompt.pretty()), "    "))
-            self.logger.debug(f"Parse {prompt_description} time: {t2 - t1:.3f} seconds")
+            self.logger.debug(f"Parse {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
+            if parsed_prompt:
+                self.logger.debug("Tree:\n" + textwrap.indent(re.sub(r"\n$", "", parsed_prompt.pretty()), "    "))
         return parsed_prompt
 
     class TreeProcessor(lark.visitors.Interpreter):
@@ -658,14 +908,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 str: The processed prompt.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             self.__is_negative = is_negative
             if self.__ppp.debug_level != DEBUG_LEVEL.none:
                 self.__ppp.logger.info(f"Processing {prompt_description}...")
             self.visit(parsed_prompt)
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             if self.__ppp.debug_level != DEBUG_LEVEL.none:
-                self.__ppp.logger.info(f"Process {prompt_description} time: {t2 - t1:.3f} seconds")
+                self.__ppp.logger.info(f"Process {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             return self.result
 
         def __visit(
@@ -778,14 +1028,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if name in self.__ppp.user_variables:
                 del self.__ppp.user_variables[name]
 
-        def __debug_end(self, construct: str, start_result: str, duration: float, info=None):
+        def __debug_end(self, construct: str, start_result: str, duration: int, info=None):
             """
             Log the end of a construct processing.
 
             Args:
                 construct (str): The name of the construct.
                 start_result (str): The initial result.
-                duration (float): The duration of the processing.
+                duration (int): The duration of the processing in ns.
                 info: Additional information to log.
             """
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -794,7 +1044,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if output != "":
                     output = f" >> '{output}'"
                 self.__ppp.logger.debug(
-                    self.__ppp.format_output(f"TreeProcessor.{construct} {info}({duration:.3f} seconds){output}")
+                    self.__ppp.format_output(
+                        f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}"
+                    )
                 )
 
         def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
@@ -928,7 +1180,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # if self.__ppp.is_comfy_ui():
             #     self.__ppp.logger.warning("Prompt composition is not supported in ComfyUI.")
             start_result = self.result
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             self.__visit(tree.children[0])
             if len(tree.children) > 1:
                 if tree.children[1] is not None:
@@ -947,7 +1199,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.result += added_result
                     if tree.children[i + 2] is not None:
                         self.result += f":{tree.children[i+2]}"
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("promptcomp", start_result, t2 - t1)
 
         def scheduled(self, tree: lark.Tree):
@@ -957,7 +1209,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # if self.__ppp.is_comfy_ui():
             #     self.__ppp.logger.warning("Prompt scheduling is not supported in ComfyUI.")
             start_result = self.result
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             before = tree.children[0]
             after = tree.children[-2]
             pos_str = tree.children[-1]
@@ -983,7 +1235,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 self.result += f":{pos_str}]"
             # self.__shell.pop()
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("scheduled", start_result, t2 - t1, pos_str)
 
         def alternate(self, tree: lark.Tree):
@@ -993,7 +1245,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # if self.__ppp.is_comfy_ui():
             #     self.__ppp.logger.warning("Prompt alternation is not supported in ComfyUI.")
             start_result = self.result
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
             self.result += "["
             for i, opt in enumerate(tree.children):
@@ -1008,7 +1260,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.__ppp.cup_emptyconstructs and self.result == start_result + "[]":
                 self.result = start_result
             # self.__shell.pop()
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("alternate", start_result, t2 - t1)
 
         def attention(self, tree: lark.Tree):
@@ -1016,7 +1268,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Process a attention change construct in the tree and add it to the accumulated shell.
             """
             start_result = self.result
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             if len(tree.children) == 2:
                 weight_str = tree.children[-1]
                 if weight_str is not None:
@@ -1078,7 +1330,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 self.result += endtag
             self.__shell.pop()
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("attention", start_result, t2 - t1, weight_str)
 
         def commandstn(self, tree: lark.Tree):
@@ -1087,7 +1339,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             start_result = self.result
             info = None
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             if not self.__is_negative:
                 negtagparameters = tree.children[0]
                 if negtagparameters is not None:
@@ -1102,7 +1354,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 self.warn_or_stop("Ignored negative command in negative prompt")
                 self.__visit(tree.children[1::])
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("commandstn", start_result, t2 - t1, info)
 
         def commandstni(self, tree: lark.Tree):
@@ -1111,7 +1363,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             start_result = self.result
             info = None
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             if self.__is_negative:
                 negtagparameters = tree.children[0]
                 if negtagparameters is not None:
@@ -1124,7 +1376,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 info = f"with {parameters or 'no parameters'}"
             else:
                 self.warn_or_stop("Ignored negative insertion point command in positive prompt")
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("commandstni", start_result, t2 - t1, info)
 
         def __varset(
@@ -1137,7 +1389,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a generic set command in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             if variable.startswith("_"):
                 self.warn_or_stop(f"Invalid variable name '{variable}' detected! System variables cannot be set.")
@@ -1186,7 +1438,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     info += "not evaluated yet"
                 else:
                     info += f"'{currentvalue}'"
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end(command, start_result, t2 - t1, info)
 
         def variableset(self, tree: lark.Tree):
@@ -1210,7 +1462,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a generic echo command in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             if default is not None:
                 default_value = self.__visit(default, True)  # for log
@@ -1222,7 +1474,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.result += v
                 else:
                     self.warn_or_stop(f"Unknown variable {variable}")
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             info = variable
             if default is not None:
                 info += f" with default '{default_value}'"
@@ -1244,7 +1496,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process an if command in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             for i, n in enumerate(tree.children):
                 content = n.children[-1]
@@ -1254,12 +1506,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     c = self.__get_original_node_content(condition, f"condition {i}")
                     if self.__eval_condition(condition):
                         self.__visit(content)
-                        t2 = time.time()
+                        t2 = time.monotonic_ns()
                         self.__debug_end("commandif", start_result, t2 - t1, c)
                         return
                 else:  # its an else
                     self.__visit(content)
-                    t2 = time.time()
+                    t2 = time.monotonic_ns()
                     self.__debug_end("commandif", start_result, t2 - t1, "else")
                     return
 
@@ -1267,13 +1519,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process an extra network construct in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             if not self.__ppp.rem_removeextranetworktags:
                 self.result += f"<{tree.children[0]}"
                 self.__visit(tree.children[1])
                 self.result += ">"
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("extranetworktag", start_result, t2 - t1)
 
         def __get_choices_internal(
@@ -1396,16 +1648,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if prefix != "" and re.match(r"\w", prefix[-1]):
                     prefix += " "
                 for i, c in enumerate(selected_choices):
-                    t1 = time.time()
+                    t1 = time.monotonic_ns()
                     choice_content_obj = c.get("content", c.get("text", None))
                     if isinstance(choice_content_obj, str):
                         choice_content = choice_content_obj
                     else:
                         choice_content = self.__visit(choice_content_obj, False, True)
-                    t2 = time.time()
+                    t2 = time.monotonic_ns()
                     if self.__ppp.debug_level == DEBUG_LEVEL.full:
                         self.__ppp.logger.debug(
-                            f"Adding choice {i+1} ({t2-t1:.3f} seconds):\n"
+                            f"Adding choice {i+1} ({(t2-t1) / 1_000_000_000:.3f} seconds):\n"
                             + textwrap.indent(re.sub(r"\n$", "", choice_content), "    ")
                         )
                     selected_choices_text.append(choice_content)
@@ -1502,7 +1754,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             choice_values = wildcard.choices
             options = wildcard.options
             if choice_values is None:
-                t1 = time.time()
+                t1 = time.monotonic_ns()
                 choice_values = []
                 n = 0
                 # we check the first choice to see if it is actually options
@@ -1599,16 +1851,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}", e
                             )
                 wildcard.choices = choice_values
-                t2 = time.time()
+                t2 = time.monotonic_ns()
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                    self.__ppp.logger.debug(f"Processed choices for wildcard '{wildcard.key}' ({t2-t1:.3f} seconds)")
+                    self.__ppp.logger.debug(
+                        f"Processed choices for wildcard '{wildcard.key}' ({(t2-t1) / 1_000_000_000:.3f} seconds)"
+                    )
             return (options, choice_values)
 
         def wildcard(self, tree: lark.Tree):
             """
             Process a wildcard construct in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             applied_options = self.__convert_choices_options(tree.children[0])
             wildcard_key: str = tree.children[1].value  # should be a token
@@ -1620,7 +1874,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if not selected_wildcards:
                     self.detectedWildcards.append(wc)
                     self.result += wc
-                    t2 = time.time()
+                    t2 = time.monotonic_ns()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return
                 filter_specifier: list[int | str] = None
@@ -1667,7 +1921,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if wildcard is None:
                         self.detectedWildcards.append(wc)
                         self.result += wc
-                        t2 = time.time()
+                        t2 = time.monotonic_ns()
                         self.__debug_end("wildcard", start_result, t2 - t1, wc)
                         return
                     (options, choice_values) = self.__check_wildcard_initialization(wildcard)
@@ -1688,14 +1942,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             elif self.__ppp.wil_ifwildcards != self.__ppp.IFWILDCARDS_CHOICES.remove:
                 self.detectedWildcards.append(wc)
                 self.result += wc
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("wildcard", start_result, t2 - t1, f"'{wc}'")
 
         def choices(self, tree: lark.Tree):
             """
             Process a choices construct in the tree.
             """
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             options = self.__convert_choices_options(tree.children[0])
             choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
@@ -1707,19 +1961,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             elif self.__ppp.wil_ifwildcards != self.__ppp.IFWILDCARDS_CHOICES.remove:
                 self.detectedWildcards.append(ch)
                 self.result += ch
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("choices", start_result, t2 - t1, f"'{ch}'")
 
         def __default__(self, tree):
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             start_result = self.result
             self.__visit(tree.children)
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end(tree.data.value, start_result, t2 - t1)
 
         def start(self, tree):
             self.result = ""
-            t1 = time.time()
+            t1 = time.monotonic_ns()
             self.__visit(tree.children)
             # process the found negative tags
             for negtag in self.__negtags:
@@ -1790,5 +2044,5 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             self.add_at["start"].append(content)
                     else:
                         self.__ppp.logger.warning(self.__ppp.format_output(f"Ignoring repeated content: {content}"))
-            t2 = time.time()
+            t2 = time.monotonic_ns()
             self.__debug_end("start", "", t2 - t1)
