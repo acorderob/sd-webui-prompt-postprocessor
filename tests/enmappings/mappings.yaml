@@ -1,0 +1,11 @@
+lora:
+  lora1:
+    - condition: _is_pony
+      name: lorapony
+      parameters: 0.8
+      triggers: ["triggerpony1", "triggerpony2"]
+    - condition: _is_illustrious
+      name: loraillustrious
+      parameters: "0.9:0.8"
+      triggers: ["triggerillustrious1", "triggerillustrious2"]
+    - triggers: ["triggergeneric1", "triggergeneric2", "{one|two}"]

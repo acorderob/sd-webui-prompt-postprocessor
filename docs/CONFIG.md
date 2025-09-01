@@ -10,6 +10,7 @@
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
 * **wc_wildcards_input**: Wildcards definitions (in yaml or json format). Direct input added to the ones found in the wildcards folders. Allows wildcards to be included in the workflow.
+* **en_mappings_input**: Extranetwork Mappings definitions (in yaml format). Direct input added to the ones found in the extranetwork mappings folders. Allows the mappings to be included in the workflow.
 
 Other common settings (see [below](#common-settings)) also appear as inputs or widgets.
 
@@ -43,11 +44,12 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
     The default value defines strings for *Pony* and *Illustrious* models.
 * **Apply in img2img**: check if you want to do the processing in img2img processes (*does not apply to the ComfyUI node*).
 * **Add original prompts to metadata**: adds original prompts to the metadata if they have changed (*does not apply to the ComfyUI node*).
+* **Extranetwork Mappings folders**: you can enter multiple folders separated by commas. In *ComfyUI* you can leave it empty and add a `ppp_extranetworkmappings` entry in the **extra_model_paths.yaml** file.
 
 ### Wildcard settings
 
 * **Process wildcards**: you can choose to process wildcards and choices with this extension or use a different one.
-* **Wildcards folders**: you can enter multiple folders separated by commas. In *ComfyUI* you can leave it empty and add a `wildcards` entry in the **extra_model_paths.yaml** file.
+* **Wildcards folders**: you can enter multiple folders separated by commas. In *ComfyUI* you can leave it empty and add a `ppp_wildcards` or `wildcards` entry in the **extra_model_paths.yaml** file.
 * **What to do with remaining wildcards?**: select what do you want to do with any found wildcards/choices (when process wildcards is off or after the processing).
   * **Ignore**: do not try to detect wildcards.
   * **Remove**: detect wildcards and remove them.

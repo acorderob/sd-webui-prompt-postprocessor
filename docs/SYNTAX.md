@@ -26,14 +26,14 @@ The construct parameters can be written with the following options (all are opti
 * "**r**": means it allows repetition of the choices.
 * "**n**" or "**n-m**" or "**n-**" or "**-m**": number or range of choices to select. Allows zero as the start of a range. Default is 1.
 * "**$$sep**": separator when multiple choices are selected. Default is set in settings.
-* "**$$**": end of the parameters.
+* "**$$**": end of the parameters (not optional if any parameters).
 
 The choice options are as follows:
 
 * "**'identifiers'**": comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
 * "**n**": weight of the choice (optional, default 1).
 * "**if condition**": filters out the choice if the condition is false (optional; this is an extension to the *Dynamic Prompts* syntax). Same conditions as in the `if` command.
-* "**::**": end of choice options
+* "**::**": end of choice options (not optional if any options)
 
 Whitespace is allowed between parameters/options.
 
@@ -220,6 +220,80 @@ The variable can be one set with the `set` or `add` commands (user variables) or
 ```
 
 Only one of the options will end up in the prompt, depending on the loaded model.
+
+## ExtraNetwork command
+
+This command is a shortcut to add an extranetwork (usually a lora), and its triggers, with conditions. More legible and sometimes shorter than adding regular extranetworks inside if commands.
+
+The full format is:
+
+`<ppp:ext type name [parameters] [if condition]>[triggers]<ppp:/ext>`
+`<ppp:ext type name [parameters] [if condition]>`
+
+The `type` is the kind of extranetwork, like `lora` or `hypernet`.
+
+The `name` is the extranetwork identifier. If it is not a regular identifier (i.e. starts with a number or contains spaces or symbols) it should be inside quotes.
+
+The `parameters` is optional and its format depends on the extranetwork type. With loras or hypernets it is usually a single weight number, so if the type is one of those and there are no parameters it will default to `1`. If it is not a number it should go inside quotes.
+
+The `condition` uses the same format as in the `if` command, and it is also optional.
+
+The `triggers` are also optional, and can be any content. If there are no triggers the command ending can be omitted.
+
+If the condition passes (or if there is no condition) the extranetwork tag will be built and added to the result along with any triggers.
+
+### Examples
+
+(multiline to be easier to read)
+
+```text
+<ppp:ext lora test_sd1 if _is_sd1>test sd1x<ppp:/ext>
+<ppp:ext lora test_pony 0.5 if _is_pony>test pony<ppp:/ext>
+<ppp:ext lora test_ilxl if _is_illustrious>
+<ppp:ext lora 'test sdxl' '1:0.8' if _is_pure_sdxl>test sdxl<ppp:/ext>
+```
+
+Will turn into one of these (or none) depending on the model:
+
+* `<lora:test_sd1:1>test sd1x`
+* `<lora:test_pony:0.5>test pony`
+* `<lora:test_illustrious:1>`
+* `<lora:test sdxl:1:0.8>test sdxl`
+
+### Extranetworks mappings
+
+The extranetwork command supports specifying mappings of extranetworks, so a different lora can be used depending on the loaded model.
+
+If the type of extranetwork is prefixed with a `$` the command will look for a mapping.
+
+The mappings are configured in yaml files in any of the configured extranetwork mappings folders. The format is like this:
+
+```yaml
+extnettype:
+  mappingname:
+    - condition: "<a supported condition>"
+      name: "<name of the extranetwork>"
+      parameters: "<parameters of the extranetwork>"
+      triggers: [<list of triggers>]
+    ...
+```
+
+Used like this:
+
+```text
+<ppp:ext $lora mappingname>
+<ppp:ext $lora mappingname>inline triggers<ppp:/ext>
+```
+
+Each mapping can have any number of elements in its list of mappings. There are no mandatory properties for a mapping. The properties mean the following:
+
+* `condition`: the condition to check for this mapping to be used (usually it should be one of the `_is_*` variables). If the conditions of multiple mappings evaluate to True, one will be chosen randomly. If the condition is missing it is considered True, to be used in the last mapping to catch as an "else" condition, and will be used if no other mapping applies.
+* `name`: name of the real extranetwork. If it is missing no extranetwork tag will be added.
+* `parameters`: parameters for the real extranetwork. If it is missing it is assumed "1" for loras and hypernets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
+* `triggers`: list of trigger strings. If it is missing, only the inline triggers in the ext command will be added.
+* `weight`: weight for this variant, in case multiple of them apply, to choose one. Default is 1.
+
+See the file in the tests folder as an example.
 
 ## Sending content to the negative prompt
 

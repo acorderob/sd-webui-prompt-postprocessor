@@ -19,6 +19,7 @@ from ppp_hosts import SUPPORTED_APPS, SUPPORTED_APPS_NAMES  # pylint: disable=im
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
 from ppp_cache import PPPLRUCache  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
+from ppp_enmappings import PPPExtraNetworkMappings  # pylint: disable=import-error
 
 
 class PromptPostProcessorA1111Script(scripts.Script):
@@ -68,6 +69,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         self.ppp_debug_level = DEBUG_LEVEL.none.value
         self.lru_cache = None
         self.wildcards_obj = None
+        self.extranetwork_mappings_obj = None
 
     def title(self):
         """
@@ -179,6 +181,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
             self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
             self.wildcards_obj = PPPWildcards(self.ppp_logger)
+            self.extranetwork_mappings_obj = PPPExtraNetworkMappings(self.ppp_logger)
             self.ppp_logger.info(
                 f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized, running on {SUPPORTED_APPS_NAMES[app]}"
             )
@@ -292,6 +295,14 @@ class PromptPostProcessorA1111Script(scripts.Script):
             for f in wc_wildcards_folders.split(",")
             if f.strip() != ""
         ]
+        en_mappings_folders = getattr(opts, "ppp_en_mappingsfolders", "")
+        if en_mappings_folders == "":
+            en_mappings_folders = os.getenv("EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER)
+        enmappings_folders = [
+            (f if os.path.isabs(f) else os.path.abspath(os.path.join(models_path, f)))
+            for f in en_mappings_folders.split(",")
+            if f.strip() != ""
+        ]
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
             "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.ONWARNING_CHOICES.warn.value),
@@ -321,8 +332,15 @@ class PromptPostProcessorA1111Script(scripts.Script):
         self.wildcards_obj.refresh_wildcards(
             self.ppp_debug_level, wildcards_folders if options["process_wildcards"] else None
         )
+        self.extranetwork_mappings_obj.refresh_extranetwork_mappings(self.ppp_debug_level, enmappings_folders)
         ppp = PromptPostProcessor(
-            self.ppp_logger, self.ppp_interrupt, env_info, options, self.grammar_content, self.wildcards_obj
+            self.ppp_logger,
+            self.ppp_interrupt,
+            env_info,
+            options,
+            self.grammar_content,
+            self.wildcards_obj,
+            self.extranetwork_mappings_obj,
         )
         prompts_list = []
 
@@ -567,6 +585,16 @@ def on_ui_settings():
         info=shared.OptionInfo(
             True,
             label="Add original prompts to metadata (if they change)",
+            section=section,
+        ),
+    )
+
+    shared.opts.add_option(
+        key="ppp_en_mappingsfolders",
+        info=shared.OptionInfo(
+            PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER,
+            label="Extranetwork Mappings folders",
+            comment_after='<span class="info">(absolute or relative to the models folder)</span>',
             section=section,
         ),
     )

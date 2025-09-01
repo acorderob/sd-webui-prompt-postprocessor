@@ -15,6 +15,7 @@ Currently this extension has these functions:
 * Set and modify local variables.
 * Filter content based on the loaded SD model or a variable.
 * Process wildcards. Compatible with Dynamic Prompts formats. Can also detect invalid wildcards and act as you choose.
+* Map extranetworks depending on conditions (like the loaded model variant).
 * Clean up the prompt and negative prompt.
 
 Note: when used in an *A1111* compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension). Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out. When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.

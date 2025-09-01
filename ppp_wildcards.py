@@ -5,25 +5,7 @@ import logging
 import yaml
 
 from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
-
-
-def deep_freeze(obj):
-    """
-    Deep freeze an object.
-
-    Args:
-        obj (object): The object to freeze.
-
-    Returns:
-        object: The frozen object.
-    """
-    if isinstance(obj, dict):
-        return tuple((k, deep_freeze(v)) for k, v in sorted(obj.items()))
-    if isinstance(obj, list):
-        return tuple(deep_freeze(i) for i in obj)
-    if isinstance(obj, set):
-        return tuple(deep_freeze(i) for i in sorted(obj))
-    return obj
+from ppp_utils import deep_freeze  # pylint: disable=import-error
 
 
 class PPPWildcard:

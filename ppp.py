@@ -14,6 +14,7 @@ import numpy as np
 from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcard, PPPWildcards  # pylint: disable=import-error
+from ppp_enmappings import PPPENMappingVariant, PPPExtraNetworkMappings  # pylint: disable=import-error
 
 
 class PPPInterrupt(Exception):
@@ -92,6 +93,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         options: Optional[dict[str, Any]] = None,
         grammar_content: Optional[str] = None,
         wildcards_obj: PPPWildcards = None,
+        extranetwork_mappings_obj: PPPExtraNetworkMappings = None,
     ):
         """
         Initializes the PPP object.
@@ -103,6 +105,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             options: Optional. The options dictionary for configuring PPP behavior.
             grammar_content: Optional. The grammar content to be used for parsing.
             wildcards_obj: Optional. The wildcards object to be used for processing wildcards.
+            extranetwork_mappings_obj: Optional. The extranetwork mappings object to be used for processing.
         """
         self.logger = logger
         self.rng = np.random.default_rng()  # gets seeded on each process prompt call
@@ -110,6 +113,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.options = options
         self.env_info = env_info
         self.wildcard_obj = wildcards_obj
+        self.extranetwork_mappings_obj = extranetwork_mappings_obj
 
         # General options
         self.debug_level = DEBUG_LEVEL(options.get("debug_level", DEBUG_LEVEL.none.value))
@@ -266,7 +270,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             propagate_positions=True,
         )
 
-        # Partial parsers for wildcards and choices
+        # Partial parsers
+        self.parser_content = lark.Lark(
+            grammar_content_full,
+            propagate_positions=True,
+            start="content",
+        )
         self.parser_choice = lark.Lark(
             grammar_content_full,
             propagate_positions=True,
@@ -841,12 +850,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.logger.debug(self.format_output(f"Parsing {prompt_description}: '{prompt}'"))
             parsed_prompt = parser.parse(prompt)
             # we store the contents so we can use them later even if the meta position is not valid anymore
-            for n in parsed_prompt.iter_subtrees():
-                if isinstance(n, lark.Tree):
-                    if n.meta.empty:
-                        n.meta.content = ""
-                    else:
-                        n.meta.content = prompt[n.meta.start_pos : n.meta.end_pos]
+            if isinstance(parsed_prompt, lark.Tree):
+                for n in parsed_prompt.iter_subtrees():
+                    if isinstance(n, lark.Tree):
+                        if n.meta.empty:
+                            n.meta.content = ""
+                        else:
+                            n.meta.content = prompt[n.meta.start_pos : n.meta.end_pos]
         except lark.exceptions.UnexpectedInput:
             if raise_parsing_error:
                 raise
@@ -855,7 +865,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         if self.debug_level == DEBUG_LEVEL.full:
             self.logger.debug(f"Parse {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             if parsed_prompt:
-                self.logger.debug("Tree:\n" + textwrap.indent(re.sub(r"\n$", "", parsed_prompt.pretty()), "    "))
+                self.logger.debug(
+                    "Tree:\n"
+                    + textwrap.indent(
+                        re.sub(
+                            r"\n$",
+                            "",
+                            parsed_prompt.pretty() if isinstance(parsed_prompt, lark.Tree) else parsed_prompt,
+                        ),
+                        "    ",
+                    )
+                )
         return parsed_prompt
 
     class TreeProcessor(lark.visitors.Interpreter):
@@ -951,7 +971,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.visit(node)
                 elif isinstance(node, lark.Token):
                     self.result += node
-            added_result = self.result[len(backup_result) :]
+            len_backup = len(backup_result)
+            # if self.result[:len_backup] == backup_result:  # this is only necessary if we call parse_prompt with a parser from "start", because it resets the result
+            added_result = self.result[len_backup:]
+            # else:
+            #     added_result = self.result
             if discard_content or restore_state:
                 self.result = backup_result
             if restore_state:
@@ -1515,6 +1539,135 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__debug_end("commandif", start_result, t2 - t1, "else")
                     return
 
+        def commandext(self, tree: lark.Tree):
+            """
+            Process an extranetwork command in the tree.
+            """
+            t1 = time.monotonic_ns()
+            start_result = self.result
+            extnet = "(ignored)"
+            if not self.__ppp.rem_removeextranetworktags:
+                extnet_type: str = (tree.children[0].children[0] or "") + tree.children[0].children[1]
+                is_mapping = extnet_type.startswith("$")
+                if is_mapping:
+                    extnet_type = extnet_type[1:]
+                extnet_id: str = tree.children[1].value
+                if extnet_id.startswith("'") or extnet_id.startswith('"'):
+                    extnet_id = extnet_id[1:-1]
+                extnet_id = re.sub(r"\\(.)", r"\1", extnet_id)  # so we can escape some special characters
+                parameters: str = ""
+                parameters_defaulted = False
+                if tree.children[2]:
+                    parameters = tree.children[2].value
+                elif extnet_type in ("lora", "hypernet"):
+                    parameters = "1"
+                    parameters_defaulted = True
+                if parameters.startswith("'") or parameters.startswith('"'):
+                    parameters = parameters[1:-1]
+                parameters_is_number = bool(re.match(r"^[-+]?\d*\.?\d+$", parameters or ""))
+                condition = tree.children[3]
+                if not condition or self.__eval_condition(condition):
+                    extnet_id = f"{extnet_type}:{extnet_id}"
+                    triggers = tree.children[4] if len(tree.children) > 4 else None
+                    extra_triggers = None
+                    compiled_extra_triggers = None
+                    if is_mapping:
+                        found_mappings: list[PPPENMappingVariant] = []
+                        else_mapping = None
+                        if self.__ppp.extranetwork_mappings_obj:
+                            enmapping = self.__ppp.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
+                            if enmapping:
+                                for v in enmapping.variants:
+                                    if v.condition:
+                                        try:
+                                            cnd = self.__ppp.parse_prompt(
+                                                "condition", v.condition, self.__ppp.parser_condition, True
+                                            )
+                                        except lark.exceptions.UnexpectedInput as e:
+                                            self.warn_or_stop(
+                                                f"Error parsing condition '{v.condition}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
+                                                e,
+                                            )
+                                            cnd = None
+                                    else:
+                                        cnd = "True"
+                                    if cnd is not None and (cnd == "True" or self.__eval_condition(cnd)):
+                                        if v.condition:
+                                            found_mappings.append(v)
+                                        else:
+                                            else_mapping = v
+                        if found_mappings:
+                            found = found_mappings[
+                                self.__ppp.rng.choice(
+                                    len(found_mappings),
+                                    p=[v.weight or 1 for v in found_mappings],
+                                )
+                            ]
+                        else:
+                            found = else_mapping
+                        if found:
+                            if found.name:
+                                if self.__ppp.debug_level != DEBUG_LEVEL.none:
+                                    self.__ppp.logger.info(
+                                        f"Mapping extranetwork '{extnet_id}' to '{extnet_type}:{found.name}'"
+                                    )
+                                extnet_id = f"{extnet_type}:{found.name}"
+                                f_parameters = found.parameters
+                                if not f_parameters and extnet_type in ("lora", "hypernet"):
+                                    f_parameters = "1"
+                                    found_parameters_is_number = True
+                                else:
+                                    found_parameters_is_number = f_parameters and bool(
+                                        re.match(r"^[-+]?\d*\.?\d+$", str(f_parameters) or "")
+                                    )
+                                if found_parameters_is_number and parameters_is_number:
+                                    parameters = f"{float(f_parameters) * float(parameters):.2f}".rstrip("0").rstrip(
+                                        "."
+                                    )
+                                elif f_parameters is not None and parameters_defaulted:
+                                    parameters = f_parameters
+                            elif found.triggers:
+                                self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to just triggers")
+                                extnet_id = None
+                            else:
+                                self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to nothing")
+                                extnet_id = None
+                            if found.triggers:
+                                extra_triggers = ", ".join(found.triggers)
+                                try:
+                                    compiled_extra_triggers = self.__ppp.parse_prompt(
+                                        "triggers", extra_triggers, self.__ppp.parser_content, True
+                                    )
+                                except lark.exceptions.UnexpectedInput as e:
+                                    self.warn_or_stop(
+                                        f"Error parsing triggers '{extra_triggers}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
+                                        e,
+                                    )
+                                    compiled_extra_triggers = None
+                        else:
+                            self.warn_or_stop(f"Extranetwork mapping '{extnet_id}' not found!")
+                    if extnet_id:
+                        extnet = f"<{extnet_id}:{parameters}>"
+                        self.result += extnet
+                    elif triggers or compiled_extra_triggers:
+                        extnet = "(only triggers)"
+                    if triggers or compiled_extra_triggers:
+                        if extnet_id:
+                            if not self.__ppp.cup_extranetworktags:
+                                self.result += " "
+                        else:
+                            self.result += ", "
+                    if triggers:
+                        self.result += self.__visit(triggers, True, True)
+                    if compiled_extra_triggers:
+                        if triggers:
+                            self.result += ", "
+                        self.result += self.__visit(compiled_extra_triggers, True, True)
+                    if triggers or compiled_extra_triggers:
+                        self.result += ", "
+            t2 = time.monotonic_ns()
+            self.__debug_end("commandext", start_result, t2 - t1, extnet)
+
         def extranetworktag(self, tree: lark.Tree):
             """
             Process an extra network construct in the tree.
@@ -1558,9 +1711,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 from_value: int = options.get("from", 1)
                 to_value: int = options.get("to", 1)
             separator: str = options.get("separator", self.__ppp.wil_choice_separator)
+            msg_where = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
             if sampler != "~":
-                msg = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
-                self.warn_or_stop(f"Unsupported sampler '{sampler}' in {msg} options!")
+                self.warn_or_stop(f"Unsupported sampler '{sampler}' in {msg_where} options!")
                 sampler = "~"
             if filter_specifier is not None:
                 filtered_choice_values = []
@@ -1587,15 +1740,36 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
             else:
                 filtered_choice_values = choice_values.copy()
-            if filtered_choice_values:
+            available_choices: list[dict] = []
+            weights = []
+            included_choices = 0
+            excluded_choices = 0
+            excluded_weights_sum = 0
+            for i, c in enumerate(filtered_choice_values):
+                c["choice_index"] = i  # we index them to later sort the results
+                weight = float(c.get("weight", 1.0))
+                condition = c.get("if", None)
+                if weight > 0 and (condition is None or self.__eval_condition(condition)):
+                    available_choices.append(c)
+                    weights.append(weight)
+                    included_choices += 1
+                else:
+                    weights.append(-1)
+                    excluded_choices += 1
+                    excluded_weights_sum += weight
+            if excluded_choices > 0:  # we need to redistribute the excluded weights
+                weights = [weight + excluded_weights_sum / included_choices for weight in weights if weight >= 0]
+            weights = np.array(weights)
+            weights /= weights.sum()  # normalize weights
+            if available_choices:
                 if from_value < 0:
                     from_value = 1
-                elif from_value > len(filtered_choice_values):
-                    from_value = len(filtered_choice_values)
+                elif from_value > len(available_choices):
+                    from_value = len(available_choices)
                 if to_value < 1:
                     to_value = 1
-                elif (to_value > len(filtered_choice_values) and not repeating) or from_value > to_value:
-                    to_value = len(filtered_choice_values)
+                elif (to_value > len(available_choices) and not repeating) or from_value > to_value:
+                    to_value = len(available_choices)
                 num_choices = (
                     self.__ppp.rng.integers(from_value, to_value, endpoint=True)
                     if from_value < to_value
@@ -1603,6 +1777,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 )
             else:
                 num_choices = 0
+                if from_value != 0:
+                    self.__ppp.logger.warning(
+                        f"No available choices could be selected for {msg_where}!"
+                    )
             if num_choices < 2:
                 repeating = False
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -1613,30 +1791,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
                 )
             if num_choices > 0:
-                available_choices: list[dict] = []
-                weights = []
-                included_choices = 0
-                excluded_choices = 0
-                excluded_weights_sum = 0
-                for i, c in enumerate(filtered_choice_values):
-                    c["choice_index"] = i  # we index them to later sort the results
-                    weight = float(c.get("weight", 1.0))
-                    condition = c.get("if", None)
-                    if weight > 0 and (condition is None or self.__eval_condition(condition)):
-                        available_choices.append(c)
-                        weights.append(weight)
-                        included_choices += 1
-                    else:
-                        weights.append(-1)
-                        excluded_choices += 1
-                        excluded_weights_sum += weight
-                if excluded_choices > 0:  # we need to redistribute the excluded weights
-                    weights = [weight + excluded_weights_sum / included_choices for weight in weights if weight >= 0]
-                weights = np.array(weights)
-                weights /= weights.sum()  # normalize weights
                 selected_choices: list[dict] = list(
                     self.__ppp.rng.choice(available_choices, size=num_choices, p=weights, replace=repeating)
-                )
+                ) if available_choices else []
                 if self.__ppp.wil_keep_choices_order:
                     selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
                 selected_choices_text = []
@@ -1681,7 +1838,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             wildcard_key: str = None,
         ) -> str:
             r = self.__get_choices_internal(options, choice_values, filter_specifier, wildcard_key)
-            return r[0] + r[2].join(r[1]) + r[3]
+            if r[1]:
+                return r[0] + r[2].join(r[1]) + r[3]
+            return ""
 
         def __convert_choices_options(self, options: Optional[lark.Tree]) -> dict:
             """

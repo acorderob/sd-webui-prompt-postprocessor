@@ -2,12 +2,13 @@ import os
 
 # pylint: disable=import-error
 import folder_paths  # type: ignore
-import nodes  # type: ignore
+import nodes
 
 from .ppp import PromptPostProcessor
 from .ppp_hosts import SUPPORTED_APPS
 from .ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
 from .ppp_wildcards import PPPWildcards
+from .ppp_enmappings import PPPExtraNetworkMappings
 
 if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
@@ -27,6 +28,7 @@ class PromptPostProcessorComfyUINode:
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
+        self.extranetwork_mappings_obj = PPPExtraNetworkMappings(lf.log)
         self.logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
 
     class SmartType(str):
@@ -281,6 +283,24 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "en_mappings_folders": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "tooltip": "Comma separated list of extranetwork mappings folders",
+                        "dynamicPrompts": False,
+                    },
+                ),
+                "en_mappings_input": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "placeholder": "extranetwork mappings definitions",
+                        "tooltip": "Extranetwork mappings definitions in yaml format",
+                        "dynamicPrompts": False,
+                    },
+                ),
             },
         }
 
@@ -343,6 +363,8 @@ class PromptPostProcessorComfyUINode:
         cleanup_extranetwork_tags,
         cleanup_merge_attention,
         remove_extranetwork_tags,
+        en_mappings_folders,
+        en_mappings_input,
     ):
         if wc_process_wildcards:
             return float(
@@ -376,6 +398,8 @@ class PromptPostProcessorComfyUINode:
             "cleanup_extranetwork_tags": cleanup_extranetwork_tags,
             "cleanup_merge_attention": cleanup_merge_attention,
             "remove_extranetwork_tags": remove_extranetwork_tags,
+            "en_mappings_folders": en_mappings_folders,
+            "en_mappings_input": en_mappings_input,
         }
         return new_run.__hash__
         # return float("NaN")
@@ -410,6 +434,8 @@ class PromptPostProcessorComfyUINode:
         cleanup_extranetwork_tags,
         cleanup_merge_attention,
         remove_extranetwork_tags,
+        en_mappings_folders,
+        en_mappings_input,
     ):
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
@@ -447,7 +473,15 @@ class PromptPostProcessorComfyUINode:
         # Also supported: SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler, Stable_Cascade_C, Stable_Cascade_B, StableAudio
 
         if wc_wildcards_folders == "":
-            wc_wildcards_folders = ",".join(folder_paths.get_folder_paths("wildcards") or [])
+            try:
+                fp1 = folder_paths.get_folder_paths("ppp_wildcards")
+            except Exception:  # pylint: disable=W0718
+                fp1 = None
+            try:
+                fp2 = folder_paths.get_folder_paths("wildcards")
+            except Exception:  # pylint: disable=W0718
+                fp2 = None
+            wc_wildcards_folders = ",".join(fp1 or fp2 or [])
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
         wildcards_folders = [
@@ -455,6 +489,22 @@ class PromptPostProcessorComfyUINode:
             for f in wc_wildcards_folders.split(",")
             if f.strip() != ""
         ]
+        if en_mappings_folders == "":
+            try:
+                fp3 = folder_paths.get_folder_paths("ppp_extranetworkmappings")
+            except Exception:  # pylint: disable=W0718
+                fp3 = None
+            en_mappings_folders = ",".join(fp3 or [])
+        if en_mappings_folders == "":
+            en_mappings_folders = os.getenv(
+                "EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER
+            )
+        enmappings_folders = [
+            (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
+            for f in en_mappings_folders.split(",")
+            if f.strip() != ""
+        ]
+
         if variants_definitions != "" and not "=" in variants_definitions:  # mainly to warn about the old format
             raise ValueError("Invalid variants_definitions format")
         options = {
@@ -485,8 +535,19 @@ class PromptPostProcessorComfyUINode:
             wildcards_folders if options["process_wildcards"] else None,
             wc_wildcards_input,
         )
+        self.extranetwork_mappings_obj.refresh_extranetwork_mappings(
+            debug_level,
+            enmappings_folders,
+            en_mappings_input,
+        )
         ppp = PromptPostProcessor(
-            self.logger, self.interrupt, env_info, options, self.grammar_content, self.wildcards_obj
+            self.logger,
+            self.interrupt,
+            env_info,
+            options,
+            self.grammar_content,
+            self.wildcards_obj,
+            self.extranetwork_mappings_obj,
         )
         pos_prompt, neg_prompt, variables = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
         return (

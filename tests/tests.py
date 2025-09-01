@@ -3,6 +3,7 @@ import logging
 from typing import NamedTuple, Optional
 import unittest
 
+from ppp_enmappings import PPPExtraNetworkMappings  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
 from ppp import PromptPostProcessor  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
@@ -68,6 +69,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         }
         self.interrupted = False
         self.wildcards_obj = PPPWildcards(self.lf.log)
+        self.extranetwork_maps_obj = PPPExtraNetworkMappings(self.lf.log)
         self.wildcards_obj.refresh_wildcards(
             DEBUG_LEVEL.full,
             [
@@ -82,6 +84,12 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     - choice3
             """,
         )
+        self.extranetwork_maps_obj.refresh_extranetwork_mappings(
+            DEBUG_LEVEL.full,
+            [os.path.abspath(os.path.join(os.path.dirname(__file__), "enmappings"))],
+            """
+            """,
+        )
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
@@ -92,6 +100,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             self.defopts,
             self.grammar_content,
             self.wildcards_obj,
+            self.extranetwork_maps_obj,
         )
         self.nocupppp = PromptPostProcessor(
             self.ppp_logger,
@@ -113,6 +122,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             },
             self.grammar_content,
             self.wildcards_obj,
+            self.extranetwork_maps_obj,
         )
         self.comfyuippp = PromptPostProcessor(
             self.ppp_logger,
@@ -125,6 +135,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             self.defopts,
             self.grammar_content,
             self.wildcards_obj,
+            self.extranetwork_maps_obj,
         )
 
     def interrupt(self):
@@ -290,8 +301,8 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
 
     def test_cl_simple(self):  # simple cleanup
         self.process(
-            PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5) (red:1.5)  ", "  normal quality  "),
-            PromptPair("this is a ((test), (test,:2):1.5) (red:1.5)", "normal quality"),
+            PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5), (red:1.5)  ", "  normal quality  "),
+            PromptPair("this is a ((test), (test,:2):1.5), (red:1.5)", "normal quality"),
         )
 
     def test_cl_complex(self):  # complex cleanup
@@ -317,6 +328,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 {**self.defopts, "remove_extranetwork_tags": True},
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -335,6 +347,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -372,6 +385,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -443,12 +457,19 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 self.defopts,
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
     def test_cmd_set_if(self):  # set and if commands
         self.process(
             PromptPair("<ppp:set v>value<ppp:/set>this test is <ppp:if v>OK<ppp:else>not OK<ppp:/if>", ""),
+            PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_set_empty(self):  # set to empty
+        self.process(
+            PromptPair("<ppp:set v><ppp:/set>${v2=}this test is <ppp:if v or v2>not OK<ppp:else>OK<ppp:/if>", ""),
             PromptPair("this test is OK", ""),
         )
 
@@ -530,7 +551,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
     def test_cmd_set_if2(self):  # set and more complex if commands
         self.process(
             PromptPair(
-                "First: <ppp:set v>value1<ppp:/set>this test is <ppp:if v in ('value1','value2')>OK<ppp:else>not OK<ppp:/if>\nSecond: <ppp:set v2>value3<ppp:/set>this test is <ppp:if not v2 in ('value1','value2')>OK<ppp:else>not OK<ppp:/if>",
+                "First: <ppp:set v>value1<ppp:/set>this test is <ppp:if v in ('value1','value2')>OK<ppp:elif v in ('value3')>OK2<ppp:else>not OK<ppp:/if>\nSecond: <ppp:set v2>value3<ppp:/set>this test is <ppp:if not v2 in ('value1','value2')>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("First: this test is OK\nSecond: this test is OK", ""),
@@ -613,6 +634,111 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             PromptPair("this test is OK", ""),
         )
 
+    def test_cmd_ext(self):  # ext
+        self.process(
+            PromptPair(
+                "<ppp:ext lora lora1name if not _is_pony>trigger1<ppp:/ext><ppp:ext lora 'lora2 name' -0.8 if not _is_pony>trigger2<ppp:/ext><ppp:ext lora lora3__name '0.5:0.8' if not _is_pony><ppp:ext lora lora4name>trigger4<ppp:/ext>",
+                "",
+            ),
+            PromptPair(
+                "<lora:lora1name:1>trigger1,<lora:lora2 name:-0.8>trigger2,<lora:lora3__name:0.5:0.8><lora:lora4name:1>trigger4",
+                "",
+            ),
+        )
+
+    def test_cmd_ext_map1(self):  # ext mapping, no lora
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1>inlinetrigger<ppp:/ext>",
+                "",
+            ),
+            PromptPair("inlinetrigger, triggergeneric1, triggergeneric2, two", ""),
+        )
+
+    def test_cmd_ext_map2(self):  # ext mapping, lora with weight
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1>inlinetrigger<ppp:/ext>",
+                "",
+            ),
+            PromptPair("<lora:lorapony:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_cmd_ext_map3(self):  # ext mapping, lora with weight adjusted
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1 0.5>inlinetrigger<ppp:/ext>",
+                "",
+            ),
+            PromptPair("<lora:lorapony:0.4>inlinetrigger, triggerpony1, triggerpony2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_cmd_ext_map4(self):  # ext mapping, lora with parameters
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1 '0.6:0.8'>inlinetrigger<ppp:/ext>",
+                "",
+            ),
+            PromptPair("<lora:lorapony:0.6:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_cmd_ext_map5(self):  # ext mapping, lora with no parameters
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1>inlinetrigger<ppp:/ext>",
+                "",
+            ),
+            PromptPair("<lora:loraillustrious:0.9:0.8>inlinetrigger, triggerillustrious1, triggerillustrious2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ilxlmodel.safetensors",
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
     # Choices tests
 
     def test_ch_choices(self):  # simple choices with weights
@@ -689,6 +815,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 {**self.defopts, "remove_extranetwork_tags": True},
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -709,6 +836,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -733,6 +861,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -751,6 +880,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -772,6 +902,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
             interrupted=True,
         )
@@ -791,6 +922,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
@@ -1039,6 +1171,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 },
                 self.grammar_content,
                 self.wildcards_obj,
+                self.extranetwork_maps_obj,
             ),
         )
 
