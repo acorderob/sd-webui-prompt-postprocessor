@@ -1080,6 +1080,13 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ppp=self.nocupppp,
         )
 
+    def test_wc_wildcard_optional(self):  # empty wildcard with no error
+        self.process(
+            PromptPair("the choices are: __yaml/empty_wildcard__", ""),
+            PromptPair("the choices are: ", ""),
+            ppp=self.nocupppp,
+        )
+
     def test_wc_wildcard4_yaml(self):  # simple yaml wildcard with one option
         self.process(
             PromptPair("the choices are: __yaml/wildcard4__", ""),

@@ -230,7 +230,7 @@ class PPPWildcards:
             bool: Whether the dictionary is a valid choices options dictionary or not.
         """
         return all(
-            k in ["sampler", "repeating", "count", "from", "to", "prefix", "suffix", "separator"] for k in d.keys()
+            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "separator"] for k in d.keys()
         )
 
     def is_dict_choice_options(self, d: dict) -> bool:

@@ -81,8 +81,6 @@ scheduled: "[" [ content ":" ] content ":" numpar "]"
 // extra network tags
 extranetworktag: "<" /(?!ppp:)\w+:/ inside_content ">"
 
-?commandinnercontent.3: content
-
 // command: stn (send to negative)
 commandstn: "<ppp:stn" [ _WHITESPACE /s|e|p\d/ ] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
 commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ">"
@@ -92,12 +90,12 @@ commandif.2: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
 commandif_if: "<ppp:if" _WHITESPACE condition _WHITESPACE? ">" ifvalue
 commandif_elif: "<ppp:elif" _WHITESPACE condition _WHITESPACE? ">" ifvalue
 commandif_else: "<ppp:else" _WHITESPACE? ">" ifvalue
-ifvalue: commandinnercontent
+ifvalue.3: content
 
 // conditions
 ?condition: grouped_condition | ungrouped_condition
 ?ungrouped_condition: operation | basic_condition
-?grouped_condition: "(" _WHITESPACE? condition _WHITESPACE? ")"
+?grouped_condition.8: "(" _WHITESPACE? condition _WHITESPACE? ")"
 ?basic_condition: comparison_simple_value | comparison_list_value | truthy_operand
 ?operation: operation_not | operation_and | operation_or
 operation_and: condition _WHITESPACE "and" _WHITESPACE condition
@@ -111,11 +109,11 @@ listvalue.9: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLE
 // command: set
 commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ commandsetmodifiers ] _WHITESPACE? ">" commandsetcontent "<ppp:/set>"
 commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
-?commandsetcontent: commandinnercontent
+?commandsetcontent.3: content
 
 // command: echo
 commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ">" [ commandechodefault "<ppp:/echo>" ]
-?commandechodefault: commandinnercontent
+?commandechodefault.3: content
 
 // command: ext
 commandext: "<ppp:ext" _WHITESPACE commandexttype _WHITESPACE commandextid [ _WHITESPACE? commandextparams ] [ _WHITESPACE? commandextif ] _WHITESPACE? ">" [ commandexttriggers "<ppp:/ext>" ]
@@ -123,7 +121,7 @@ commandexttype: [/\$/] IDENTIFIER
 ?commandextid: STRING | CNAME
 ?commandextparams: STRING | SIGNED_NUMBER
 ?commandextif: "if" _WHITESPACE condition
-?commandexttriggers: commandinnercontent
+?commandexttriggers.3: content
 
 // variable set
 variableset.2: "${" _WHITESPACE? IDENTIFIER [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] varvalue "}"
@@ -138,14 +136,14 @@ wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" )
 wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ WILDCARD_NAME ) ) /["']/
 wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
 wc_filter_and: INDEX ( _WHITESPACE? "+" _WHITESPACE? INDEX )*
-wildcardvar: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
+wildcardvar.7: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
 
 // choices
 choices.2: "{" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] choice ( "|" choice )* "}"
 
-choicesoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_rep ] ( ( [ _WHITESPACE? choicesoptions_from ] "-" [ _WHITESPACE? choicesoptions_to ] ) | [ _WHITESPACE? choicesoptions_num ] ) [ _WHITESPACE? choicesoptions_sep ]
+choicesoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] ( ( [ _WHITESPACE? choicesoptions_from ] "-" [ _WHITESPACE? choicesoptions_to ] ) | [ _WHITESPACE? choicesoptions_num ] ) [ _WHITESPACE? choicesoptions_sep ]
 choicesoptions_sampler: /[~@]/ // ~ for random, @ for cyclical
-choicesoptions_rep: /r/
+choicesoptions_flags: /[ro]{1,2}/ // r for repeating, o for optional
 choicesoptions_num: INT
 choicesoptions_from: INT
 choicesoptions_to: INT

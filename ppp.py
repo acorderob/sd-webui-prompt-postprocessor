@@ -1085,7 +1085,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Returns:
                 bool: The result of the condition evaluation.
             """
-            if cond_var.startswith("_"):  # system variable
+            if cond_var.lower() == "false":
+                var_value = "false"
+            elif cond_var.lower() == "true":
+                var_value = "true"
+            elif cond_var.startswith("_"):  # system variable
                 var_value = self.__ppp.system_variables.get(cond_var, None)
                 if var_value is None:
                     var_value = ""
@@ -1704,6 +1708,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 options = {}
             sampler: str = options.get("sampler", "~")
             repeating: bool = options.get("repeating", False)
+            optional: bool = options.get("optional", False)
             if "count" in options:
                 from_value = options["count"]
                 to_value = from_value
@@ -1777,23 +1782,24 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 )
             else:
                 num_choices = 0
-                if from_value != 0:
-                    self.__ppp.logger.warning(
-                        f"No available choices could be selected for {msg_where}!"
-                    )
+                if not optional and from_value > 0:
+                    self.warn_or_stop(f"Not enough choices found for {msg_where}!")
             if num_choices < 2:
                 repeating = False
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
                 self.__ppp.logger.debug(
                     self.__ppp.format_output(
-                        f"Selecting {'repeating ' if repeating else ''}{num_choices} choice"
-                        + (f"s and separating with '{separator}'" if num_choices > 1 else "")
+                        f"Selecting {'optional ' if optional else ''}{'repeating ' if repeating else ''}{num_choices} choice"
+                        + ("s" if num_choices != 1 else "")
+                        + (f" and separating with '{separator}'" if num_choices > 1 else "")
                     )
                 )
             if num_choices > 0:
-                selected_choices: list[dict] = list(
-                    self.__ppp.rng.choice(available_choices, size=num_choices, p=weights, replace=repeating)
-                ) if available_choices else []
+                selected_choices: list[dict] = (
+                    list(self.__ppp.rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
+                    if available_choices
+                    else []
+                )
                 if self.__ppp.wil_keep_choices_order:
                     selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
                 selected_choices_text = []
@@ -1860,7 +1866,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 options_dict["sampler"] = options.children[0].children[0] if options.children[0] is not None else "~"
                 options_dict["repeating"] = (
-                    options.children[1].children[0] == "r" if options.children[1] is not None else False
+                    "r" in options.children[1].children[0] if options.children[1] is not None else False
+                )
+                options_dict["optional"] = (
+                    "o" in options.children[1].children[0] if options.children[1] is not None else False
                 )
                 if len(options.children) == 4:
                     ifrom = 2
@@ -1944,20 +1953,21 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 )
                         n = 1
                 else:
-                    try:
-                        options = self.__convert_choices_options(
-                            self.__ppp.parse_prompt(
-                                "as choices options",
-                                wildcard.unprocessed_choices[0],
-                                self.__ppp.parser_choicesoptions,
-                                True,
+                    if wildcard.unprocessed_choices[0].endswith("$$"):
+                        try:
+                            options = self.__convert_choices_options(
+                                self.__ppp.parse_prompt(
+                                    "as choices options",
+                                    wildcard.unprocessed_choices[0][:-2].strip(),
+                                    self.__ppp.parser_choicesoptions,
+                                    True,
+                                )
                             )
-                        )
-                        n = 1
-                    except lark.exceptions.UnexpectedInput:
-                        options = None
-                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug("Does not have options")
+                            n = 1
+                        except lark.exceptions.UnexpectedInput:
+                            options = None
+                if options is None and self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Does not have options")
                 wildcard.options = options
                 # we process the choices
                 for cv in wildcard.unprocessed_choices[n:]:

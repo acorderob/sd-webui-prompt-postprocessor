@@ -5,7 +5,7 @@ yaml:
     - choice3
 
   wildcard2:
-    - ~r2-3$$-
+    - ~r2-3$$-$$
     - "'label1,label2'4::choice1"
     - "3:: choice2 "
     - { labels: ["label1", "label3"], weight: 2, content: choice3 }
@@ -39,6 +39,7 @@ yaml:
     - {
         sampler: "~",
         repeating: false,
+        optional: false,
         count: 2,
         prefix: "prefix-",
         suffix: "-suffix",
@@ -67,3 +68,11 @@ yaml:
       - { count: 2, prefix: "#" }
       - nine
       - ten
+
+  empty_wildcard:
+    - o$$ # parameters: optional
+    - if false::1
+    - if false::2
+    - if false::3
+    - if _sd in ("test1", "test2")::4
+    - if (false or false)::5

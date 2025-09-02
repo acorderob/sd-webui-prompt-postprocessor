@@ -24,9 +24,12 @@ The construct parameters can be written with the following options (all are opti
 
 * "**~**" or "**@**": sampler (for compatibility with *Dynamic Prompts*), but only "**~**" (random) is supported.
 * "**r**": means it allows repetition of the choices.
+* "**o**": means it is "optional", and no error will be raised if there are no choices to select from.
 * "**n**" or "**n-m**" or "**n-**" or "**-m**": number or range of choices to select. Allows zero as the start of a range. Default is 1.
 * "**$$sep**": separator when multiple choices are selected. Default is set in settings.
 * "**$$**": end of the parameters (not optional if any parameters).
+
+Regarding the "optional" flag, consider this scenario: due to their conditions no choice is available. It will raise an error. If you add the `o` then it will just return an empty string. This is only necessary if all choices have conditions and they could all be false. It is not the same as setting a range starting at 0, because that would be an allowed number of returned choices. If you do this and no choices are available, no error is raised.
 
 The choice options are as follows:
 
@@ -46,6 +49,7 @@ These are examples of formats you can use to insert a choice construct:
 | `{2-3$$2::choice1\|choice2\|choice3}`          | select 2 to 3 choices, one of them has a weight |
 | `{r2-3$$choice1\|choice2\|choice3}`            | select 2 to 3 choices allowing repetition |
 | `{2-3$$ / $$choice1\|choice2\|choice3}`        | select 2 to 3 choices with separator " / " |
+| `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`| select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional |
 
 Notes:
 
@@ -90,7 +94,7 @@ The best format is a yaml file with a dictionary of wildcards inside. An editor 
 
 In a choice, the content after a `#`  is ignored.
 
-If the first choice follows the format of wildcard parameters, it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) in addition to the standard `weight` and `text`/`content`.
+If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) in addition to the standard `weight` and `text`/`content`.
 
 ```yaml
 { labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
@@ -99,8 +103,8 @@ If the first choice follows the format of wildcard parameters, it will be used a
 Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
 
 ```yaml
-{ sampler: "~", repeating: false, count: 2, prefix: "prefix-", suffix: "-suffix", separator: "/" }
-{ sampler: "~", repeating: false, from: 2, to: 3, prefix: "prefix-", suffix: "-suffix", separator: "/" }
+{ sampler: "~", repeating: false, optional: false, count: 2, prefix: "prefix-", suffix: "-suffix", separator: "/" }
+{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, prefix: "prefix-", suffix: "-suffix", separator: "/" }
 ```
 
 The prefix and suffix are added to the result along with the selected choices and separators. They can contain other constructs, but the separator can't.
@@ -262,7 +266,7 @@ Will turn into one of these (or none) depending on the model:
 
 ### Extranetworks mappings
 
-The extranetwork command supports specifying mappings of extranetworks, so a different lora can be used depending on the loaded model.
+The extranetwork command supports specifying mappings of extranetworks (like LoRAs), so, for example, a different one can be used depending on the loaded model.
 
 If the type of extranetwork is prefixed with a `$` the command will look for a mapping.
 
@@ -275,6 +279,7 @@ extnettype:
       name: "<name of the extranetwork>"
       parameters: "<parameters of the extranetwork>"
       triggers: [<list of triggers>]
+      weight: 1.0
     ...
 ```
 
@@ -287,6 +292,8 @@ Used like this:
 
 Each mapping can have any number of elements in its list of mappings. There are no mandatory properties for a mapping. The properties mean the following:
 
+* `extnettype`: the kind of extranetwork, for example `lora`.
+* `mappingname`: the name you want to give to the mapping, to be referenced in the command.
 * `condition`: the condition to check for this mapping to be used (usually it should be one of the `_is_*` variables). If the conditions of multiple mappings evaluate to True, one will be chosen randomly. If the condition is missing it is considered True, to be used in the last mapping to catch as an "else" condition, and will be used if no other mapping applies.
 * `name`: name of the real extranetwork. If it is missing no extranetwork tag will be added.
 * `parameters`: parameters for the real extranetwork. If it is missing it is assumed "1" for loras and hypernets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
