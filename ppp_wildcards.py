@@ -160,9 +160,9 @@ class PPPWildcards:
         last_modified_cached = self.__wildcard_files.get(full_path, None)  # a time or a hash
         if debug and last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
             if full_path == self.LOCALINPUT_FILENAME:
-                self.__logger.debug("Removing wildcards from input")
+                self.__logger.debug("Removing from memory wildcards from input")
             else:
-                self.__logger.debug(f"Removing wildcards from file: {full_path}")
+                self.__logger.debug(f"Removing from memory wildcards from file: {full_path}")
         if full_path in self.__wildcard_files.keys():
             del self.__wildcard_files[full_path]
         for key in list(self.wildcards.keys()):
@@ -177,22 +177,25 @@ class PPPWildcards:
             base (str): The base path for the wildcards.
             full_path (str): The path to the file.
         """
-        last_modified = os.path.getmtime(full_path)
-        last_modified_cached = self.__wildcard_files.get(full_path, None)
-        if last_modified_cached is not None and last_modified == self.__wildcard_files[full_path]:
-            return
-        filename = os.path.basename(full_path)
-        _, extension = os.path.splitext(filename)
-        if extension not in (".txt", ".json", ".yaml", ".yml"):
-            return
-        self.__remove_wildcards_from_path(full_path, False)
-        if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
-            self.__logger.debug(f"Updating wildcards from file: {full_path}")
-        if extension == ".txt":
-            self.__get_wildcards_in_text_file(full_path, base)
-        elif extension in (".json", ".yaml", ".yml"):
-            self.__get_wildcards_in_structured_file(full_path, base)
-        self.__wildcard_files[full_path] = last_modified
+        try:
+            last_modified = os.path.getmtime(full_path)
+            last_modified_cached = self.__wildcard_files.get(full_path, None)
+            if last_modified_cached is not None and last_modified == self.__wildcard_files[full_path]:
+                return
+            filename = os.path.basename(full_path)
+            _, extension = os.path.splitext(filename)
+            if extension not in (".txt", ".json", ".yaml", ".yml"):
+                return
+            self.__remove_wildcards_from_path(full_path, False)
+            if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
+                self.__logger.debug(f"Updating wildcards from file: {full_path}")
+            if extension == ".txt":
+                self.__get_wildcards_in_text_file(full_path, base)
+            elif extension in (".json", ".yaml", ".yml"):
+                self.__get_wildcards_in_structured_file(full_path, base)
+            self.__wildcard_files[full_path] = last_modified
+        except Exception as e:  # pylint: disable=broad-except
+            self.__logger.error(f"Error reading wildcard file '{full_path}': {e}")
 
     def __get_wildcards_in_input(self, wildcards_input: str):
         """
@@ -201,23 +204,26 @@ class PPPWildcards:
         Args:
             wildcards_input (str): The input string containing wildcards in json or yaml format.
         """
-        new_h = hash(wildcards_input)
-        h = self.__wildcard_files.get(self.LOCALINPUT_FILENAME, None)
-        if h == new_h:
-            return
-        self.__remove_wildcards_from_path(self.LOCALINPUT_FILENAME, False)
-        if h is not None and self.__debug_level != DEBUG_LEVEL.none:
-            self.__logger.debug("Updating wildcards from input")
-        wildcards_input = wildcards_input.strip()
-        if wildcards_input != "":
-            try:
-                content = yaml.safe_load(wildcards_input)
-            except yaml.YAMLError as e:
-                self.__logger.warning(f"Invalid format for input wildcards: {e}")
+        try:
+            new_h = hash(wildcards_input)
+            h = self.__wildcard_files.get(self.LOCALINPUT_FILENAME, None)
+            if h == new_h:
                 return
-            if content is not None:
-                self.__add_wildcard(content, self.LOCALINPUT_FILENAME, [self.LOCALINPUT_FILENAME])
-        self.__wildcard_files[self.LOCALINPUT_FILENAME] = new_h
+            self.__remove_wildcards_from_path(self.LOCALINPUT_FILENAME, False)
+            if h is not None and self.__debug_level != DEBUG_LEVEL.none:
+                self.__logger.debug("Updating wildcards from input")
+            wildcards_input = wildcards_input.strip()
+            if wildcards_input != "":
+                try:
+                    content = yaml.safe_load(wildcards_input)
+                except yaml.YAMLError as e:
+                    self.__logger.warning(f"Invalid format for input wildcards: {e}")
+                    return
+                if content is not None:
+                    self.__add_wildcard(content, self.LOCALINPUT_FILENAME, [self.LOCALINPUT_FILENAME])
+            self.__wildcard_files[self.LOCALINPUT_FILENAME] = new_h
+        except Exception as e:  # pylint: disable=broad-except
+            self.__logger.error(f"Error reading wildcards input: {e}")
 
     def is_dict_choices_options(self, d: dict) -> bool:
         """
@@ -230,7 +236,8 @@ class PPPWildcards:
             bool: Whether the dictionary is a valid choices options dictionary or not.
         """
         return all(
-            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "separator"] for k in d.keys()
+            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "separator"]
+            for k in d.keys()
         )
 
     def is_dict_choice_options(self, d: dict) -> bool:
@@ -390,8 +397,13 @@ class PPPWildcards:
         """
         external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
         external_key_parts = external_key.split(os.sep)
-        with open(full_path, "r", encoding="utf-8") as file:
-            content = yaml.safe_load(file)
+        try:
+            with open(full_path, "r", encoding="utf-8") as file:
+                content = yaml.safe_load(file)
+        except:  # pylint: disable=bare-except
+            self.__logger.warning(f"Could not read file '{full_path}' with utf-8 encoding, trying windows-1252...")
+            with open(full_path, "r", encoding="windows-1252") as file:
+                content = yaml.safe_load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
 
     def __get_wildcards_in_text_file(self, full_path, base):
@@ -404,8 +416,13 @@ class PPPWildcards:
         """
         external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
         external_key_parts = external_key.split(os.sep)
-        with open(full_path, "r", encoding="utf-8") as file:
-            text_content = map(lambda x: x.strip("\n\r"), file.readlines())
+        try:
+            with open(full_path, "r", encoding="utf-8") as file:
+                text_content = map(lambda x: x.strip("\n\r"), file.readlines())
+        except:  # pylint: disable=bare-except
+            self.__logger.warning(f"Could not read file '{full_path}' with utf-8 encoding, trying windows-1252...")
+            with open(full_path, "r", encoding="windows-1252") as file:
+                text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
         self.__add_wildcard(text_content, full_path, external_key_parts)

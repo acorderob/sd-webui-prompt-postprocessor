@@ -83,6 +83,8 @@ These are examples of formats you can use to insert a wildcard:
 | `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator " / " |
 | `__path/wildcard(var=value)__`       | select 1 choice using the specified variable value in the evaluation. |
 
+Wildcards cannot be used inside an extranetwork tag (because some lora names contain double underscores). If you need to choose from multiple loras put the whole extranetwork tag inside a wildcard, or use choices.
+
 ### Wildcard definitions
 
 A wildcard definition can be:
@@ -114,6 +116,10 @@ It is recommended to use the object format for the wildcard parameters and for c
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
 A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples.
+
+Note: the files should have UTF-8 encoding. The extension will also try with windows-1252 if that fails.
+
+Wildcard definitions are reloaded automatically on each generation if they change.
 
 ### Detection of remaining wildcards
 

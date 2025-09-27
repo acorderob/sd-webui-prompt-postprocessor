@@ -799,12 +799,12 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
 
     def test_ch_choicesinsidelora(self):  # simple choices inside a lora
         self.process(
-            PromptPair("<lora:test1:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
-            PromptPair("<lora:test1:1><lora:test2:0.7>", ""),
+            PromptPair("<lora:test1:1><lora:test__other__name:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
+            PromptPair("<lora:test1:1><lora:test__other__name:1><lora:test2:0.7>", ""),
             ppp=self.nocupppp,
         )
 
-    def test_ch_removelorawithchoices(self):  # remove lora with choices inside
+    def test_ch_removelorawithchoices(self):
         self.process(
             PromptPair("<lora:test1:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
             PromptPair("", ""),

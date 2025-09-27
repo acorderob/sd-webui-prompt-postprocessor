@@ -31,43 +31,51 @@ promptcomppart: content
 ?old_content.2: ( attention | scheduled | alternate | extranetworktag )+
 //#if ALLOW_NEW_CONTENT
     ?content.2: ( old_content | new_content | plain | specialchars )*
-    ?inside_content.2: ( new_content | plain | specialchars )*
     ?content_choice.2: ( old_content | new_content | plain_choice | specialchars_choice )*
     ?content_var.2: ( old_content | new_content | plain_var | specialchars_var )*
     ?content_negtag.2: ( old_content | new_content_negtag | plain | specialchars_negtag )*
     ?content_alternate.2: ( old_content | new_content | plain_alternate | specialchars_alternate )*
+    ?content_en.2: (new_content_en | plain | specialchars )*
     //#if ALLOW_WILDCARDS ALLOW_CHOICES ALLOW_COMMVARS
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext | wildcard | choices )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext | wildcard | choices )+
+        ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif | choices )+
     //#elif ALLOW_WILDCARDS !ALLOW_CHOICES ALLOW_COMMVARS
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext | wildcard )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext | wildcard )+
+        ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif )+
     //#elif !ALLOW_WILDCARDS ALLOW_CHOICES ALLOW_COMMVARS
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext | choices )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext | choices )+
+        ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif | choices )+
     //#elif ALLOW_WILDCARDS ALLOW_CHOICES !ALLOW_COMMVARS
         ?new_content.3: ( wildcard | choices )+
         ?new_content_negtag.3: ( wildcard | choices )+
+        ?new_content_en.3: ( choices )+
     //#elif ALLOW_WILDCARDS !ALLOW_CHOICES !ALLOW_COMMVARS
         ?new_content.3: ( wildcard )+
         ?new_content_negtag.3: ( wildcard )+
+        ?new_content_en.3: /(?!)./ // never matches
     //#elif !ALLOW_WILDCARDS ALLOW_CHOICES !ALLOW_COMMVARS
         ?new_content.3: ( choices )+
         ?new_content_negtag.3: ( choices )+
+        ?new_content_en.3: ( choices )+
     //#elif !ALLOW_WILDCARDS !ALLOW_CHOICES ALLOW_COMMVARS
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext )+
+        ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif )+
     //#else
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext | wildcard | choices )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | wildcard | commandext | choices )+
+        ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif | choices )+
     //#endif
 //#else
     ?content.2: ( old_content | plain | specialchars )*
-    ?inside_content.2: ( plain | specialchars )*
     ?content_choice.2: ( old_content | plain_choice | specialchars_choice )*
     ?content_var.2: ( old_content | plain_var | specialchars_var )*
     ?content_negtag.2: ( old_content | plain | specialchars_negtag )*
     ?content_alternate.2: ( old_content | plain_alternate | specialchars_alternate )*
+    ?content_en.2: (plain | specialchars )*
 //#endif
 
 // attention modifiers
@@ -79,7 +87,8 @@ alternateoption: content_alternate
 scheduled: "[" [ content ":" ] content ":" numpar "]"
 
 // extra network tags
-extranetworktag: "<" /(?!ppp:)\w+:/ inside_content ">"
+extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
+?encontent.3: content_en
 
 // command: stn (send to negative)
 commandstn: "<ppp:stn" [ _WHITESPACE /s|e|p\d/ ] _WHITESPACE? ">" content_negtag "<ppp:/stn>"

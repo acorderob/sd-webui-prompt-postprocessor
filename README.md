@@ -6,7 +6,6 @@ The Prompt PostProcessor (PPP), formerly known as "sd-webui-sendtonegative", is 
 * [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 * [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
 * [reForge](https://github.com/Panchovix/stable-diffusion-webui-reForge)
-* [SD.Next](https://github.com/vladmandic/automatic)
 * ...and probably other forks
 
 Currently this extension has these functions:
@@ -50,7 +49,7 @@ On *A1111* compatible webuis:
 3. Click the Install button
 4. Restart the webui
 
-On *SD.Next* I recommend you disable the native wildcard processing.
+On *SD.Next* I recommend you to disable the native wildcard processing and use the old UI.
 
 On *ComfyUI*:
 

@@ -297,7 +297,10 @@ class PromptPostProcessorA1111Script(scripts.Script):
         ]
         en_mappings_folders = getattr(opts, "ppp_en_mappingsfolders", "")
         if en_mappings_folders == "":
-            en_mappings_folders = os.getenv("EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER)
+            en_mappings_folders = os.getenv(
+                "EXTRANETWORKMAPPINGS_DIR",
+                PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER,
+            )
         enmappings_folders = [
             (f if os.path.isabs(f) else os.path.abspath(os.path.join(models_path, f)))
             for f in en_mappings_folders.split(",")

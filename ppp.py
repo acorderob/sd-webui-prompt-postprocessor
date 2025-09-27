@@ -716,9 +716,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
 
         var_keys = set(self.user_variables.keys()).union(set(self.echoed_variables.keys()))
-        all_variables.update(
-            {k: self.echoed_variables.get(k, p_processor.get_final_user_variable(k)) for k in var_keys}
-        )
+        for k in var_keys:
+            ev = self.echoed_variables.get(k)
+            if ev is None:
+                ev = p_processor.get_final_user_variable(k)
+            all_variables[k] = ev
+        if self.debug_level == DEBUG_LEVEL.full:
+            self.logger.debug(self.format_output(f"All variables: {all_variables}"))
 
         # Insertions in the negative prompt
         if self.debug_level == DEBUG_LEVEL.full:

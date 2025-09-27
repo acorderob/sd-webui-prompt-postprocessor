@@ -43,7 +43,9 @@ class PPPENMapping:
         self.kind: str = kind
         self.name: str = name
         self.variants: list[PPPENMappingVariant] = [
-            PPPENMappingVariant(**{**{"condition": None, "name": None, "parameters": None, "triggers": None, "weight": 1.0}, **v})
+            PPPENMappingVariant(
+                **{**{"condition": None, "name": None, "parameters": None, "triggers": None, "weight": 1.0}, **v}
+            )
             for v in variants
         ]
 
@@ -78,7 +80,9 @@ class PPPExtraNetworkMappings:
 
     def __sizeof__(self):
         return (
-            self.extranetwork_mappings.__sizeof__() + self.__enmappings_folders.__sizeof__() + self.__enmappings_files.__sizeof__()
+            self.extranetwork_mappings.__sizeof__()
+            + self.__enmappings_folders.__sizeof__()
+            + self.__enmappings_files.__sizeof__()
         )
 
     def refresh_extranetwork_mappings(
@@ -233,9 +237,17 @@ class PPPExtraNetworkMappings:
             full_path (str): The path to the file.
             base (str): The base path for the extra network mappings.
         """
-        with open(full_path, "r", encoding="utf-8") as file:
-            content = yaml.safe_load(file)
-        self.__add_extranetwork_mapping(content, full_path)
+        try:
+            try:
+                with open(full_path, "r", encoding="utf-8") as file:
+                    content = yaml.safe_load(file)
+            except:  # pylint: disable=bare-except
+                self.__logger.warning(f"Could not read file '{full_path}' with utf-8 encoding, trying windows-1252...")
+                with open(full_path, "r", encoding="windows-1252") as file:
+                    content = yaml.safe_load(file)
+            self.__add_extranetwork_mapping(content, full_path)
+        except Exception as e:  # pylint: disable=broad-except
+            self.__logger.error(f"Error reading extra network mappings from file '{full_path}': {e}")
 
     def __get_extranetwork_mappings_in_directory(self, directory: str):
         """

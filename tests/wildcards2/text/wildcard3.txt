@@ -1,2 +1,3 @@
 # wildcard3
 __2$$,$$text/wildcard2__
+0::бьз
