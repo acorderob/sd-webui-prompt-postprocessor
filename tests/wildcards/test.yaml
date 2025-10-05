@@ -76,3 +76,29 @@ yaml:
     - if false::3
     - if _sd in ("test1", "test2")::4
     - if (false or false)::5
+
+  circular1:
+    - 5::__yaml/circular2__
+    - choice1
+    - choice2
+
+  circular2:
+    - choice3
+    - choice4
+    - 5::__yaml/circular1__
+
+  including:
+    - "%0.5::include yaml/wildcard1"
+    - choice4
+    - choice5
+    - "%0.2::include yaml/wildcard7"
+
+  including1:
+    - choice1
+    - choice2
+    - "%5::include yaml/including2"
+
+  including2:
+    - choice3
+    - choice4
+    - "%5::include yaml/including1"

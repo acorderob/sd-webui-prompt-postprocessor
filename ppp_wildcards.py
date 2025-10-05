@@ -250,7 +250,7 @@ class PPPWildcards:
         Returns:
             bool: Whether the dictionary is a valid choice options dictionary or not.
         """
-        return all(k in ["labels", "weight", "if", "content", "text"] for k in d.keys())
+        return all(k in ["command", "labels", "weight", "if", "content", "text"] for k in d.keys())
 
     def __get_choices(self, obj: object, full_path: str, key_parts: list[str]) -> list:
         """

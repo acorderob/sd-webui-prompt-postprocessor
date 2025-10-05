@@ -33,12 +33,15 @@ Regarding the "optional" flag, consider this scenario: due to their conditions n
 
 The choice options are as follows:
 
+* "**%**": indicates that the content of the choice is a command
 * "**'identifiers'**": comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
 * "**n**": weight of the choice (optional, default 1).
 * "**if condition**": filters out the choice if the condition is false (optional; this is an extension to the *Dynamic Prompts* syntax). Same conditions as in the `if` command.
 * "**::**": end of choice options (not optional if any options)
 
 Whitespace is allowed between parameters/options.
+
+The only command available is `include wildcard`, which will include the choices of the specified wildcard in place of this choice. This allows composing choices from multiple wildcards. It also works in the choices of a wildcard, but note that in yaml you cannot start an array element with "%" and you will have to put the full choice in quotes, or use the object format.
 
 These are examples of formats you can use to insert a choice construct:
 
@@ -50,10 +53,11 @@ These are examples of formats you can use to insert a choice construct:
 | `{r2-3$$choice1\|choice2\|choice3}`            | select 2 to 3 choices allowing repetition |
 | `{2-3$$ / $$choice1\|choice2\|choice3}`        | select 2 to 3 choices with separator " / " |
 | `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`| select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional |
+| `{choice1\|choice2\|%0.5::path/wildcard}`      | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
 
 Notes:
 
-* The *Dynamic Prompts* format `{2$$__flavours__}` does not work as expected. It will only output one value. You can write is as `{r2$$__flavours__}` to get two values, but they may repeat since the evaluation of the wildcard is independent of the choices selection.
+* The *Dynamic Prompts* format `{2$$__flavours__}` does not work as expected because the wildcard is considered only one possible choice (it will only output one value). You can write it instead as a wildcard with parameters `__2$$flavours__`.
 * Whitespace around the choices is not ignored like in *Dynamic Prompts*, but will be cleaned up if the appropriate cleaning settings are selected.
 
 ## Wildcards
@@ -96,10 +100,10 @@ The best format is a yaml file with a dictionary of wildcards inside. An editor 
 
 In a choice, the content after a `#`  is ignored.
 
-If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) in addition to the standard `weight` and `text`/`content`.
+If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) and `command` property (a boolean) in addition to the standard `weight` and `text`/`content`.
 
 ```yaml
-{ labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
+{ command: false, labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
 ```
 
 Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
@@ -116,6 +120,8 @@ It is recommended to use the object format for the wildcard parameters and for c
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
 A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples.
+
+Remember you can use the include command on choices to compose a wildcard from other wildcards' choices.
 
 Note: the files should have UTF-8 encoding. The extension will also try with windows-1252 if that fails.
 

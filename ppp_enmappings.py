@@ -74,6 +74,7 @@ class PPPExtraNetworkMappings:
         self.__enmappings_folders = []
         self.__enmappings_files = {}
         self.extranetwork_mappings: dict[str, PPPENMapping] = {}
+        self.cached_mappings = {}
 
     def __hash__(self) -> int:
         return hash(deep_freeze(self.extranetwork_mappings))
@@ -83,6 +84,7 @@ class PPPExtraNetworkMappings:
             self.extranetwork_mappings.__sizeof__()
             + self.__enmappings_folders.__sizeof__()
             + self.__enmappings_files.__sizeof__()
+            + self.cached_mappings.__sizeof__()
         )
 
     def refresh_extranetwork_mappings(
@@ -96,6 +98,7 @@ class PPPExtraNetworkMappings:
         # if self.__debug_level != DEBUG_LEVEL.none:
         #     self.__logger.info("Refreshing extra network mappings...")
         # t1 = time.monotonic_ns()
+        self.cached_mappings = {}
         for fullpath in list(self.__enmappings_files.keys()):
             if fullpath != self.LOCALINPUT_FILENAME:
                 path = os.path.dirname(fullpath)

@@ -906,6 +906,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__already_processed: list[str] = []
             self.__is_negative = False
             self.__wildcard_filters = {}
+            self.__seen_wildcards: list[str] = []
             self.add_at: dict = {"start": [], "insertion_point": [[] for x in range(10)], "end": []}
             self.insertion_at: list[tuple[int, int]] = [None for x in range(10)]
             self.detectedWildcards: list[str] = []
@@ -1580,42 +1581,49 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     extra_triggers = None
                     compiled_extra_triggers = None
                     if is_mapping:
-                        found_mappings: list[PPPENMappingVariant] = []
-                        else_mapping = None
-                        if self.__ppp.extranetwork_mappings_obj:
-                            enmapping = self.__ppp.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
-                            if enmapping:
-                                for v in enmapping.variants:
-                                    if v.condition:
-                                        try:
-                                            cnd = self.__ppp.parse_prompt(
-                                                "condition", v.condition, self.__ppp.parser_condition, True
-                                            )
-                                        except lark.exceptions.UnexpectedInput as e:
-                                            self.warn_or_stop(
-                                                f"Error parsing condition '{v.condition}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
-                                                e,
-                                            )
-                                            cnd = None
-                                    else:
-                                        cnd = "True"
-                                    if cnd is not None and (cnd == "True" or self.__eval_condition(cnd)):
-                                        if v.condition:
-                                            found_mappings.append(v)
-                                        else:
-                                            else_mapping = v
-                        if found_mappings:
-                            found = found_mappings[
-                                self.__ppp.rng.choice(
-                                    len(found_mappings),
-                                    p=[v.weight or 1 for v in found_mappings],
+                        found = self.__ppp.extranetwork_mappings_obj.cached_mappings.get(extnet_id, None)
+                        # we assume the conditions do not change inside the prompt
+                        found_in_cache = found is not None
+                        if found is None:
+                            found_mappings: list[PPPENMappingVariant] = []
+                            else_mapping = None
+                            if self.__ppp.extranetwork_mappings_obj:
+                                enmapping = self.__ppp.extranetwork_mappings_obj.extranetwork_mappings.get(
+                                    extnet_id, None
                                 )
-                            ]
-                        else:
-                            found = else_mapping
+                                if enmapping:
+                                    for v in enmapping.variants:
+                                        if v.condition:
+                                            try:
+                                                cnd = self.__ppp.parse_prompt(
+                                                    "condition", v.condition, self.__ppp.parser_condition, True
+                                                )
+                                            except lark.exceptions.UnexpectedInput as e:
+                                                self.warn_or_stop(
+                                                    f"Error parsing condition '{v.condition}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
+                                                    e,
+                                                )
+                                                cnd = None
+                                        else:
+                                            cnd = "True"
+                                        if cnd is not None and (cnd == "True" or self.__eval_condition(cnd)):
+                                            if v.condition:
+                                                found_mappings.append(v)
+                                            else:
+                                                else_mapping = v
+                            if found_mappings:
+                                found = found_mappings[
+                                    self.__ppp.rng.choice(
+                                        len(found_mappings),
+                                        p=[v.weight or 1 for v in found_mappings],
+                                    )
+                                ]
+                            else:
+                                found = else_mapping
+                            self.__ppp.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                         if found:
                             if found.name:
-                                if self.__ppp.debug_level != DEBUG_LEVEL.none:
+                                if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
                                     self.__ppp.logger.info(
                                         f"Mapping extranetwork '{extnet_id}' to '{extnet_type}:{found.name}'"
                                     )
@@ -1635,10 +1643,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 elif f_parameters is not None and parameters_defaulted:
                                     parameters = f_parameters
                             elif found.triggers:
-                                self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to just triggers")
+                                if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
+                                    self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to just triggers")
                                 extnet_id = None
                             else:
-                                self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to nothing")
+                                if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
+                                    self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to nothing")
                                 extnet_id = None
                             if found.triggers:
                                 extra_triggers = ", ".join(found.triggers)
@@ -1689,41 +1699,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             t2 = time.monotonic_ns()
             self.__debug_end("extranetworktag", start_result, t2 - t1)
 
-        def __get_choices_internal(
+        def __get_choices_internal_get(
             self,
-            options: dict | None,
             choice_values: list[dict],
             filter_specifier: Optional[list[list[str]]] = None,
             wildcard_key: str = None,
-        ) -> tuple[str, list[str], str, str]:
-            """
-            Select choices based on the options.
-
-            Args:
-                options (dict): The object representing the options construct.
-                choice_values (list[dict]): A list of choice objects.
-                filter_specifier (list[list[str]]): The filter specifier.
-                wildcard_key (str): The wildcard key if it is a wildcard.
-
-            Returns:
-                tuple: A tuple containing the prefix, selected choices, separator and suffix
-            """
-            if options is None:
-                options = {}
-            sampler: str = options.get("sampler", "~")
-            repeating: bool = options.get("repeating", False)
-            optional: bool = options.get("optional", False)
-            if "count" in options:
-                from_value = options["count"]
-                to_value = from_value
-            else:
-                from_value: int = options.get("from", 1)
-                to_value: int = options.get("to", 1)
-            separator: str = options.get("separator", self.__ppp.wil_choice_separator)
+        ) -> list[dict]:
             msg_where = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
-            if sampler != "~":
-                self.warn_or_stop(f"Unsupported sampler '{sampler}' in {msg_where} options!")
-                sampler = "~"
             if filter_specifier is not None:
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
@@ -1749,12 +1731,85 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
             else:
                 filtered_choice_values = choice_values.copy()
+            expanded_choice_values = []
+            for i, c in enumerate(filtered_choice_values):
+                if c.get("command", False):
+                    content_text = self.__visit(c.get("content", ""), False, True).strip()
+                    (cmd, cmd_args) = content_text.split()
+                    if cmd == "include":
+                        wcs = self.__ppp.wildcard_obj.get_wildcards(cmd_args)
+                        if not wcs:
+                            self.warn_or_stop(f"Not found included wildcard '{cmd_args}' at {msg_where}!")
+                        c_weight = float(c.get("weight", 1.0))
+                        for wc in wcs:
+                            if wc.key in self.__seen_wildcards:
+                                self.warn_or_stop(
+                                    f"Circular reference detected including wildcard '{wc.key}' at {msg_where} (chain starts at '{self.__seen_wildcards[0]}')!"
+                                )
+                                continue
+                            self.__seen_wildcards.append(wc.key)
+                            if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                                self.__ppp.logger.debug(f"Seen wildcard '{wc.key}'")
+                                self.__ppp.logger.debug(f"Including choices from wildcard '{wc.key}'")
+                            (_, choice_values) = self.__check_wildcard_initialization(wc)
+                            if choice_values is not None:
+                                ch_values = self.__get_choices_internal_get(choice_values, None, wc.key)
+                                for cv in ch_values:
+                                    expanded_choice_values.append(
+                                        {
+                                            **cv,
+                                            "weight": float(cv.get("weight", 1.0) * c_weight),  # we adjust the weight
+                                        }
+                                    )
+                    else:
+                        self.warn_or_stop(f"Unsupported choice command '{cmd}' at {msg_where}!")
+                else:
+                    expanded_choice_values.append(c)
+            return expanded_choice_values
+
+        def __get_choices_internal_select(
+            self,
+            options: dict | None,
+            choice_values: list[dict],
+            filter_specifier: Optional[list[list[str]]] = None,
+            wildcard_key: str = None,
+        ) -> tuple[str, list[str], str, str]:
+            """
+            Select choices based on the options.
+
+            Args:
+                options (dict): The object representing the options construct.
+                choice_values (list[dict]): A list of choice objects.
+                filter_specifier (list[list[str]]): The filter specifier.
+                wildcard_key (str): The wildcard key if it is a wildcard.
+
+            Returns:
+                tuple: A tuple containing the prefix, selected choices, separator and suffix
+            """
+            seen_wildcards_len = len(self.__seen_wildcards)
+            if options is None:
+                options = {}
+            sampler: str = options.get("sampler", "~")
+            repeating: bool = options.get("repeating", False)
+            optional: bool = options.get("optional", False)
+            if "count" in options:
+                from_value = options["count"]
+                to_value = from_value
+            else:
+                from_value: int = options.get("from", 1)
+                to_value: int = options.get("to", 1)
+            separator: str = options.get("separator", self.__ppp.wil_choice_separator)
+            msg_where = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
+            if sampler != "~":
+                self.warn_or_stop(f"Unsupported sampler '{sampler}' at {msg_where} options!")
+                sampler = "~"
+            expanded_choice_values = self.__get_choices_internal_get(choice_values, filter_specifier, wildcard_key)
             available_choices: list[dict] = []
             weights = []
             included_choices = 0
             excluded_choices = 0
             excluded_weights_sum = 0
-            for i, c in enumerate(filtered_choice_values):
+            for i, c in enumerate(expanded_choice_values):
                 c["choice_index"] = i  # we index them to later sort the results
                 weight = float(c.get("weight", 1.0))
                 condition = c.get("if", None)
@@ -1837,8 +1892,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     suffix = " " + suffix
                 # remove comments
                 results = [re.sub(r"\s*#[^\n]*(?:\n|$)", "", r, flags=re.DOTALL) for r in selected_choices_text]
-                return (prefix, results, separator, suffix)
-            return ("", [], separator, "")
+            else:
+                prefix = ""
+                suffix = ""
+                results = []
+            if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                list_unseen = [f"'{x}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
+                self.__ppp.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
+            self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
+            return (prefix, results, separator, suffix)
 
         def __get_choices(
             self,
@@ -1847,7 +1909,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             filter_specifier: Optional[list[list[str]]] = None,
             wildcard_key: str = None,
         ) -> str:
-            r = self.__get_choices_internal(options, choice_values, filter_specifier, wildcard_key)
+            r = self.__get_choices_internal_select(options, choice_values, filter_specifier, wildcard_key)
             if r[1]:
                 return r[0] + r[2].join(r[1]) + r[3]
             return ""
@@ -1905,23 +1967,26 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 dict: The converted choice.
             """
             choice_dict = {}
-            c_label_obj = choice.children[0]
+            choice_dict["command"] = choice.children[0] is not None
+            c_label_obj = choice.children[1]
             choice_dict["labels"] = (
                 [x.value.lower() for x in c_label_obj.children[1:-1]]  # should be a token
                 if c_label_obj is not None
                 else []
             )
-            choice_dict["weight"] = float(choice.children[1].children[0]) if choice.children[1] is not None else 1.0
-            choice_dict["if"] = choice.children[2].children[0] if choice.children[2] is not None else None
-            choice_dict["content"] = choice.children[3]
+            choice_dict["weight"] = float(choice.children[2].children[0]) if choice.children[2] is not None else 1.0
+            choice_dict["if"] = choice.children[3].children[0] if choice.children[3] is not None else None
+            choice_dict["content"] = choice.children[-1]
             return choice_dict
 
-        def __check_wildcard_initialization(self, wildcard: PPPWildcard):
+        def __check_wildcard_initialization(self, wildcard: PPPWildcard) -> tuple[dict | None, list[dict] | None]:
             """
             Initializes a wildcard if it hasn't been yet.
 
             Args:
                 wildcard (PPPWildcard): The wildcard to check.
+            Returns:
+                tuple: A tuple containing the options and choice values of the wildcard.
             """
             choice_values = wildcard.choices
             options = wildcard.options
@@ -2036,6 +2101,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             Process a wildcard construct in the tree.
             """
             t1 = time.monotonic_ns()
+            seen_wildcards_len = len(self.__seen_wildcards)
             start_result = self.result
             applied_options = self.__convert_choices_options(tree.children[0])
             wildcard_key: str = tree.children[1].value  # should be a token
@@ -2097,6 +2163,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         t2 = time.monotonic_ns()
                         self.__debug_end("wildcard", start_result, t2 - t1, wc)
                         return
+                    if wildcard.key in self.__seen_wildcards:
+                        self.warn_or_stop(
+                            f"Circular reference detected with wildcard '{self.__seen_wildcards[-1]}' (chain starts at '{self.__seen_wildcards[0]}')!"
+                        )
+                        continue
+                    self.__seen_wildcards.append(wildcard.key)
+                    if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                        self.__ppp.logger.debug(f"Seen wildcard '{wildcard.key}'")
                     (options, choice_values) = self.__check_wildcard_initialization(wildcard)
                     if options is not None:
                         if applied_options is None:
@@ -2115,6 +2189,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             elif self.__ppp.wil_ifwildcards != self.__ppp.IFWILDCARDS_CHOICES.remove:
                 self.detectedWildcards.append(wc)
                 self.result += wc
+            if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                list_unseen = [f"'{x}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
+                self.__ppp.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
+            self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
             t2 = time.monotonic_ns()
             self.__debug_end("wildcard", start_result, t2 - t1, f"'{wc}'")
 

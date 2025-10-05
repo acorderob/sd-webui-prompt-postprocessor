@@ -819,6 +819,13 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ),
         )
 
+    def test_ch_cmd_includewildcard(self):
+        self.process(
+            PromptPair("{ch_one|ch_two|%0.5::include yaml/wildcard1}", ""),
+            PromptPair("ch_two", ""),
+            ppp=self.nocupppp,
+        )
+
     # Wildcards tests
 
     def test_wc_ignore(self):  # wildcards with ignore option
@@ -1153,6 +1160,29 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             PromptPair("the choices are: __yaml_input/wildcardI__", ""),
             PromptPair("the choices are: choice2", ""),
             ppp=self.nocupppp,
+        )
+
+    def test_wc_circular(self):  # wildcard circular reference
+        self.process(
+            PromptPair("the choices are: __yaml/circular1__", ""),
+            PromptPair("", ""),
+            ppp=self.nocupppp,
+            interrupted=True,
+        )
+
+    def test_wc_including(self):  # wildcard including another wildcard
+        self.process(
+            PromptPair("the choices are: __yaml/including__", ""),
+            PromptPair("the choices are: choice4", ""),
+            ppp=self.nocupppp,
+        )
+
+    def test_wc_circular_including(self):  # wildcard including another wildcard in a circular reference
+        self.process(
+            PromptPair("the choices are: __yaml/including1__", ""),
+            PromptPair("", ""),
+            ppp=self.nocupppp,
+            interrupted=True,
         )
 
     # Model variants tests
