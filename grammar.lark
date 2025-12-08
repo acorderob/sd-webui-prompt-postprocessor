@@ -92,7 +92,7 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
 
 // command: stn (send to negative)
 commandstn: "<ppp:stn" [ _WHITESPACE /s|e|p\d/ ] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
-commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ">"
+commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ( "/>" | ">" )
 
 // command: if
 commandif.2: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
@@ -121,11 +121,11 @@ commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
 ?commandsetcontent.3: content
 
 // command: echo
-commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ">" [ commandechodefault "<ppp:/echo>" ]
+commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ( ">" [ commandechodefault "<ppp:/echo>" ] | "/>" )
 ?commandechodefault.3: content
 
 // command: ext
-commandext: "<ppp:ext" _WHITESPACE commandexttype _WHITESPACE commandextid [ _WHITESPACE? commandextparams ] [ _WHITESPACE? commandextif ] _WHITESPACE? ">" [ commandexttriggers "<ppp:/ext>" ]
+commandext: "<ppp:ext" _WHITESPACE commandexttype _WHITESPACE commandextid [ _WHITESPACE? commandextparams ] [ _WHITESPACE? commandextif ] _WHITESPACE? ( ">" [ commandexttriggers "<ppp:/ext>" ] | "/>" )
 commandexttype: [/\$/] IDENTIFIER
 ?commandextid: STRING | CNAME
 ?commandextparams: STRING | SIGNED_NUMBER

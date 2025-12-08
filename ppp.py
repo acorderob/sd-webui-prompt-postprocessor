@@ -719,6 +719,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         for k in var_keys:
             ev = self.echoed_variables.get(k)
             if ev is None:
+                ev = self.user_variables.get(k)
+            if ev is None or not isinstance(ev, str):
+                if self.debug_level == DEBUG_LEVEL.full:
+                    self.logger.debug(self.format_output(f"Completing variable: {k}"))
                 ev = p_processor.get_final_user_variable(k)
             all_variables[k] = ev
         if self.debug_level == DEBUG_LEVEL.full:
@@ -1517,13 +1521,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a DP use variable command in the tree.
             """
-            self.__varecho("variableuse", str(tree.children[0]), tree.children[1])
+            self.__varecho("variableuse", str(tree.children[0]), tree.children[1] if len(tree.children) > 1 else None)
 
         def commandecho(self, tree: lark.Tree):
             """
             Process an echo command in the tree.
             """
-            self.__varecho("commandecho", str(tree.children[0]), tree.children[1])
+            self.__varecho("commandecho", str(tree.children[0]), tree.children[1] if len(tree.children) > 1 else None)
 
         def commandif(self, tree: lark.Tree):
             """
@@ -2096,6 +2100,32 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
             return (options, choice_values)
 
+        def replace_variables(self, s: str) -> str:
+            """
+            Replace variables in the given string.
+
+            Args:
+                s (str): The input string.
+            Returns:
+                str: The string with variables replaced.
+            """
+            result = ""
+            idx = 0
+            pattern = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([^}]+))?\}")
+            while True:
+                match = pattern.search(s, idx)
+                if not match:
+                    result += s[idx:]
+                    break
+                result += s[idx : match.start()]
+                var_name = match.group(1)
+                var_value = self.__get_user_variable_value(var_name, True, False)
+                if var_value is None:
+                    var_value = match.group(2) if match.group(2) is not None else ""
+                result += str(var_value)
+                idx = match.end()
+            return result
+
         def wildcard(self, tree: lark.Tree):
             """
             Process a wildcard construct in the tree.
@@ -2105,6 +2135,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             start_result = self.result
             applied_options = self.__convert_choices_options(tree.children[0])
             wildcard_key: str = tree.children[1].value  # should be a token
+            # TODO implement proper parsing of variables in the grammar instead of the hack using replace_variables
+            if "${" in wildcard_key:
+                self.__ppp.logger.debug(f"Replacing variables in wildcard key '{wildcard_key}'")
+                wildcard_key = self.replace_variables(wildcard_key)
             wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
             if self.__ppp.wil_process_wildcards:
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:

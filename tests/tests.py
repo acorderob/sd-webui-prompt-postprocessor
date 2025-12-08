@@ -189,7 +189,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "flowers<ppp:stn>red<ppp:/stn>, <ppp:stn s>green<ppp:/stn>, <ppp:stn e>blue<ppp:/stn><ppp:stn p0>yellow<ppp:/stn>, <ppp:stn p1>purple<ppp:/stn><ppp:stn p2>black<ppp:/stn>",
-                "<ppp:stn i0>normal quality<ppp:stn i1>, worse quality<ppp:stn i2>",
+                "<ppp:stn i0/>normal quality<ppp:stn i1>, worse quality<ppp:stn i2/>",
             ),
             PromptPair("flowers", "red, green, yellow, normal quality, purple, worse quality, black, blue"),
         )
@@ -198,7 +198,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
-                "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
+                "normal quality, <ppp:stn i0/>, bad quality<ppp:stn i1/>, worse quality",
             ),
             PromptPair(
                 "flowers",
@@ -210,7 +210,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
-                "normal quality, <ppp:stn i0>, bad quality<ppp:stn i1>, worse quality",
+                "normal quality, <ppp:stn i0/>, bad quality<ppp:stn i1/>, worse quality",
             ),
             PromptPair(
                 " (()), flowers , ,  ",
@@ -264,7 +264,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
-                "normal quality, <ppp:stn i0>",
+                "normal quality, <ppp:stn i0/>",
             ),
             PromptPair(
                 "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
@@ -276,7 +276,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
-                "normal quality, <ppp:stn i0>",
+                "normal quality, <ppp:stn i0/>",
             ),
             PromptPair(
                 "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
@@ -420,7 +420,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
-                "normal quality, <ppp:stn i0>",
+                "normal quality, <ppp:stn i0/>",
             ),
             PromptPair(
                 "this \\(is\\): a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]:0.5 AND loratrigger <lora:xxx:1> AND hypernettrigger <hypernet:yyy>:0.3",
@@ -482,7 +482,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
     def test_cmd_set_if_echo_nested(self):  # nested set, if and echo commands
         self.process(
             PromptPair(
-                "<ppp:set v1>1<ppp:/set><ppp:if v1 gt 0><ppp:set v2>OK<ppp:/set><ppp:/if><ppp:if v2 eq 'OK'><ppp:echo v2><ppp:else>not OK<ppp:/if> <ppp:echo v2>NOK<ppp:/echo> <ppp:echo v3>OK<ppp:/echo>",
+                "<ppp:set v1>1<ppp:/set><ppp:if v1 gt 0><ppp:set v2>OK<ppp:/set><ppp:/if><ppp:if v2 eq 'OK'><ppp:echo v2/><ppp:else>not OK<ppp:/if> <ppp:echo v2>NOK<ppp:/echo> <ppp:echo v3>OK<ppp:/echo>",
                 "",
             ),
             PromptPair("OK OK OK", ""),
@@ -644,6 +644,15 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "<lora:lora1name:1>trigger1,<lora:lora2 name:-0.8>trigger2,<lora:lora3__name:0.5:0.8><lora:lora4name:1>trigger4",
                 "",
             ),
+        )
+
+    def test_cmd_ext_map_notrigger(self):  # ext mapping, no trigger
+        self.process(
+            PromptPair(
+                "<ppp:ext $lora lora1/><ppp:ext $lora lora1>",
+                "",
+            ),
+            PromptPair("triggergeneric1, triggergeneric2, two, triggergeneric1, triggergeneric2, two", ""),
         )
 
     def test_cmd_ext_map1(self):  # ext mapping, no lora
@@ -851,7 +860,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair(
                 "[<ppp:stn>neg5<ppp:/stn>] this is: __bad_wildcard__ a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5] <lora:xxx:1>",
-                "normal quality, <ppp:stn i0> {option1|option2}",
+                "normal quality, <ppp:stn i0/> {option1|option2}",
             ),
             PromptPair(
                 "this is: a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]<lora:xxx:1>",
@@ -1183,6 +1192,13 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=self.nocupppp,
             interrupted=True,
+        )
+
+    def test_wc_dynamicwildcard(self): # wildcard built from variables
+        self.process(
+            PromptPair("the choices are: ${x={1|2|3}} __yaml/wildcard${x}__", ""),
+            PromptPair("the choices are:  choice1-choice3-choice1", ""),
+            ppp=self.nocupppp,
         )
 
     # Model variants tests

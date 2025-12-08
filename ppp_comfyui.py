@@ -2,7 +2,7 @@ import os
 
 # pylint: disable=import-error
 import folder_paths  # type: ignore
-import nodes
+import nodes  # type: ignore
 
 from .ppp import PromptPostProcessor
 from .ppp_hosts import SUPPORTED_APPS

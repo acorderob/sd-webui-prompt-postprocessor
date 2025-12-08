@@ -4,7 +4,7 @@
 
 The extension uses a format for its commands similar to an extranetwork, but it has a "ppp:" prefix followed by the command, and then a space and any parameters (if any).
 
-`<ppp:command parameters>`
+`<ppp:command parameters/>`
 
 When a command is associated with any content, it will be between an opening and a closing command:
 
@@ -66,7 +66,7 @@ The generic format is: `__parameters$$wildcard'filter'(var=value)__`
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-The wildcard identifier can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing).
+The wildcard identifier can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing). You can use variables here, with the `${name:default}` format, to build a dynamic identifier.
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index; zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
 
@@ -169,7 +169,7 @@ The format is:
 
 | Construct                              |
 | ---------                              |
-| `<ppp:echo varname>`                   |
+| `<ppp:echo varname/>`                  |
 | `<ppp:echo varname>default<ppp:/echo>` |
 
 The *Dynamic Prompts* format is:
@@ -244,7 +244,7 @@ This command is a shortcut to add an extranetwork (usually a lora), and its trig
 The full format is:
 
 `<ppp:ext type name [parameters] [if condition]>[triggers]<ppp:/ext>`
-`<ppp:ext type name [parameters] [if condition]>`
+`<ppp:ext type name [parameters] [if condition]/>`
 
 The `type` is the kind of extranetwork, like `lora` or `hypernet`.
 
@@ -265,7 +265,7 @@ If the condition passes (or if there is no condition) the extranetwork tag will 
 ```text
 <ppp:ext lora test_sd1 if _is_sd1>test sd1x<ppp:/ext>
 <ppp:ext lora test_pony 0.5 if _is_pony>test pony<ppp:/ext>
-<ppp:ext lora test_ilxl if _is_illustrious>
+<ppp:ext lora test_ilxl if _is_illustrious/>
 <ppp:ext lora 'test sdxl' '1:0.8' if _is_pure_sdxl>test sdxl<ppp:/ext>
 ```
 
@@ -298,7 +298,7 @@ extnettype:
 Used like this:
 
 ```text
-<ppp:ext $lora mappingname>
+<ppp:ext $lora mappingname/>
 <ppp:ext $lora mappingname>inline triggers<ppp:/ext>
 ```
 
@@ -321,7 +321,7 @@ The new format for this command is like this:
 | Construct                             | Meaning |
 | ---------                             | ------- |
 | `<ppp:stn position>content<ppp:/stn>` | send to negative prompt |
-| `<ppp:stn iN>`                        | insertion point to be used in the negative prompt as destination for the pN position |
+| `<ppp:stn iN/>`                       | insertion point to be used in the negative prompt as destination for the pN position |
 
 Where position is optional (defaults to the start) and can be:
 
