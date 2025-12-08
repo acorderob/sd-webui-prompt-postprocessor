@@ -66,7 +66,7 @@ The generic format is: `__parameters$$wildcard'filter'(var=value)__`
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-The wildcard identifier can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing). You can use variables here, with the `${name:default}` format, to build a dynamic identifier.
+The wildcard identifier can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing). You can use variables here, with the `${name:default}`, `<ppp:echo name/>` or `<ppp:echo name>default<ppp:/>echo>` formats, to build a dynamic identifier.
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index; zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
 
@@ -74,18 +74,18 @@ The variable value only applies during the evaluation of the selected choices an
 
 These are examples of formats you can use to insert a wildcard:
 
-| Construct                            | Result |
-| ---------                            | ------ |
-| `__wildcard__`                       | select 1 choice |
-| `__path/wildcard'0'__`               | select the first choice |
-| `__path/wildcard'label'__`           | select the choices with label "label" |
-| `__path/wildcard'0,label1,label2'__` | select the first choice and those with labels "label1" or "label2" |
+| Construct                            | Result                                                                   |
+| ---------                            | ------                                                                   |
+| `__wildcard__`                       | select 1 choice                                                          |
+| `__path/wildcard'0'__`               | select the first choice                                                  |
+| `__path/wildcard'label'__`           | select the choices with label "label"                                    |
+| `__path/wildcard'0,label1,label2'__` | select the first choice and those with labels "label1" or "label2"       |
 | `__path/wildcard'0,label1+label2'__` | select the first choice and those with both labels "label1" and "label2" |
-| `__3$$path/wildcard__`               | select 3 choices |
-| `__2-3$$path/wildcard__`             | select 2 to 3 choices |
-| `__r2-3$$path/wildcard__`            | select 2 to 3 choices allowing repetition |
-| `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator " / " |
-| `__path/wildcard(var=value)__`       | select 1 choice using the specified variable value in the evaluation. |
+| `__3$$path/wildcard__`               | select 3 choices                                                         |
+| `__2-3$$path/wildcard__`             | select 2 to 3 choices                                                    |
+| `__r2-3$$path/wildcard__`            | select 2 to 3 choices allowing repetition                                |
+| `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator " / "                               |
+| `__path/wildcard(var=value)__`       | select 1 choice using the specified variable value in the evaluation.    |
 
 Wildcards cannot be used inside an extranetwork tag (because some lora names contain double underscores). If you need to choose from multiple loras put the whole extranetwork tag inside a wildcard, or use choices.
 
@@ -147,18 +147,18 @@ The `add` and `ifundefined` modifiers are mutually exclusive and cannot be used 
 
 The *Dynamic Prompts* format also works:
 
-| Construct       | Meaning |
-| ---------       | ------- |
-| `${var=value}`  | regular evaluation |
+| Construct       | Meaning              |
+| ---------       | -------              |
+| `${var=value}`  | regular evaluation   |
 | `${var=!value}` | immediate evaluation |
 
 If also supports the addition and undefined check as an extension of the *Dynamic Prompts* format:
 
-| Construct        | Meaning |
-| ---------        | ------- |
-| `${var+=value}`  | equivalent to "add" |
-| `${var+=!value}` | equivalent to "evaluate add" |
-| `${var?=value}`  | equivalent to "ifundefined" |
+| Construct        | Meaning                              |
+| ---------        | -------                              |
+| `${var+=value}`  | equivalent to "add"                  |
+| `${var+=!value}` | equivalent to "evaluate add"         |
+| `${var?=value}`  | equivalent to "ifundefined"          |
 | `${var?=!value}` | equivalent to "evaluate ifundefined" |
 
 ## Echo command
@@ -191,10 +191,10 @@ Any `elif`s (there can be multiple) and the `else` are optional.
 
 The `conditionN` can be:
 
-| Construct                                      | Meaning |
-| ---------                                      | ------- |
-| `variable`                                     | check truthyness of the variable |
-| `variable [not] operation value`               | check the variable against a value |
+| Construct                                      | Meaning                                     |
+| ---------                                      | -------                                     |
+| `variable`                                     | check truthyness of the variable            |
+| `variable [not] operation value`               | check the variable against a value          |
 | `variable [not] operation (value1,value2,...)` | check the variable against a list of values |
 
 For a simple value the allowed operations are `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `contains` and the value can be a quoted string or an integer. For a list of values the allowed operations are `contains`, `in` and the value of the variable is checked against all the elements of the list until one matches. The operation can be preceded by `not` for readability, instead of using it in the front.
@@ -318,9 +318,9 @@ See the file in the tests folder as an example.
 
 The new format for this command is like this:
 
-| Construct                             | Meaning |
-| ---------                             | ------- |
-| `<ppp:stn position>content<ppp:/stn>` | send to negative prompt |
+| Construct                             | Meaning                                                                              |
+| ---------                             | -------                                                                              |
+| `<ppp:stn position>content<ppp:/stn>` | send to negative prompt                                                              |
 | `<ppp:stn iN/>`                       | insertion point to be used in the negative prompt as destination for the pN position |
 
 Where position is optional (defaults to the start) and can be:

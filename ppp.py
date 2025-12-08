@@ -2100,32 +2100,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
             return (options, choice_values)
 
-        def replace_variables(self, s: str) -> str:
-            """
-            Replace variables in the given string.
-
-            Args:
-                s (str): The input string.
-            Returns:
-                str: The string with variables replaced.
-            """
-            result = ""
-            idx = 0
-            pattern = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([^}]+))?\}")
-            while True:
-                match = pattern.search(s, idx)
-                if not match:
-                    result += s[idx:]
-                    break
-                result += s[idx : match.start()]
-                var_name = match.group(1)
-                var_value = self.__get_user_variable_value(var_name, True, False)
-                if var_value is None:
-                    var_value = match.group(2) if match.group(2) is not None else ""
-                result += str(var_value)
-                idx = match.end()
-            return result
-
         def wildcard(self, tree: lark.Tree):
             """
             Process a wildcard construct in the tree.
@@ -2134,11 +2108,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             seen_wildcards_len = len(self.__seen_wildcards)
             start_result = self.result
             applied_options = self.__convert_choices_options(tree.children[0])
-            wildcard_key: str = tree.children[1].value  # should be a token
-            # TODO implement proper parsing of variables in the grammar instead of the hack using replace_variables
-            if "${" in wildcard_key:
-                self.__ppp.logger.debug(f"Replacing variables in wildcard key '{wildcard_key}'")
-                wildcard_key = self.replace_variables(wildcard_key)
+            wildcard_key: str = self.__visit(tree.children[1], False, True)
             wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
             if self.__ppp.wil_process_wildcards:
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -2158,7 +2128,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         and filter_object.children[1] is not None
                         and "^" in filter_object.children[1]
                     ):
-                        filter_specifier = self.__wildcard_filters.get(filter_object.children[2].value, None)
+                        filter_wildcard_key = self.__visit(filter_object.children[2], False, True)
+                        filter_specifier = self.__wildcard_filters.get(filter_wildcard_key, None)
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices with inherited filter")
                     else:

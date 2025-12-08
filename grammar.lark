@@ -3,7 +3,7 @@
 _WHITESPACE:   /\s+/
 STRING:        /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
 BOOLEAN:       /true|false/i
-WILDCARD_NAME: /(?:(?!__|\$\$|[('"])\S)+/
+WC_NAME_PLAIN: /(?:(?!__|\$\$|\$\{|<ppp:|[('"])\S)+/
 INDEX:         INT | IDENTIFIER
 IDENTIFIER:    CNAME
 SIMPLEVALUE:   STRING | SIGNED_NUMBER | BOOLEAN
@@ -141,8 +141,9 @@ variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ ":" varvalue ] "}"
 varvalue: content_var
 
 // wildcards
-wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] WILDCARD_NAME [ wc_filter ] [ wildcardvar ] "__"
-wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ WILDCARD_NAME ) ) /["']/
+wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
+wildcard_name: ( WC_NAME_PLAIN | variableuse | commandecho )+
+wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /["']/
 wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
 wc_filter_and: INDEX ( _WHITESPACE? "+" _WHITESPACE? INDEX )*
 wildcardvar.7: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"

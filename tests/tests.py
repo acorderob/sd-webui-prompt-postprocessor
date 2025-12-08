@@ -1196,8 +1196,8 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
 
     def test_wc_dynamicwildcard(self): # wildcard built from variables
         self.process(
-            PromptPair("the choices are: ${x={1|2|3}} __yaml/wildcard${x}__", ""),
-            PromptPair("the choices are:  choice1-choice3-choice1", ""),
+            PromptPair("the choices are: ${x={1|2|3}}${w=yaml/wildcard${x}}__yaml/wildcard${x}__ __${w}__ __<ppp:echo w/>__", ""),
+            PromptPair("the choices are: choice1-choice3-choice1 choice3- choice2 - choice2  choice3", ""),
             ppp=self.nocupppp,
         )
 
