@@ -53,13 +53,14 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
-    def __init__(self, app: SUPPORTED_APPS = None):  # pylint: disable=unused-argument
+    def __init__(self, filename = None, app: SUPPORTED_APPS = None):  # pylint: disable=unused-argument
         """
         Initializes the PromptPostProcessor class.
 
         This method sets up the logger for the PromptPostProcessor class and configures its log level and handlers.
 
         Args:
+            filename (str, optional): The name of the file to log to. Defaults to None.
             app (SUPPORTED_APPS): The application for which the logger is being created.
 
         Returns:
@@ -71,6 +72,10 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             handler = logging.StreamHandler(sys.stdout)
             handler.setFormatter(self.ColoredFormatter("%(asctime)s %(levelname)s %(message)s"))
             ppplog.addHandler(handler)
+            if filename is not None:
+                file_handler = logging.FileHandler(filename, encoding="utf-8")
+                file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                ppplog.addHandler(file_handler)
         ppplog.setLevel(logging.DEBUG)
         self.log = PromptPostProcessorLogCustomAdapter(ppplog)
 

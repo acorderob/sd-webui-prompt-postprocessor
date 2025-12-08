@@ -1,12 +1,13 @@
 %import common (LETTER, DIGIT, INT, CNAME, SIGNED_NUMBER, NUMBER)
 
-_WHITESPACE:   /\s+/
-STRING:        /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
-BOOLEAN:       /true|false/i
-WC_NAME_PLAIN: /(?:(?!__|\$\$|\$\{|<ppp:|[('"])\S)+/
-INDEX:         INT | IDENTIFIER
-IDENTIFIER:    CNAME
-SIMPLEVALUE:   STRING | SIGNED_NUMBER | BOOLEAN
+_WHITESPACE:         /\s+/
+STRING:              /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i // string with single or double quotes
+BOOLEAN:             /true|false/i
+WC_NAME_PLAIN_START: /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/])+/u // starting characters, excluding end and other inside constructs
+WC_NAME_PLAIN:       /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/_#\*\?\[!\]])+/u // continuing characters, including globbing characters and anonymous wildcard mark, excluding end and other inside constructs
+INDEX:               INT | IDENTIFIER
+IDENTIFIER:          CNAME
+SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
 
 // plain text and weights
 ?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
@@ -142,7 +143,7 @@ varvalue: content_var
 
 // wildcards
 wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
-wildcard_name: ( WC_NAME_PLAIN | variableuse | commandecho )+
+wildcard_name.2: ( WC_NAME_PLAIN_START | variableuse | commandecho ) ( WC_NAME_PLAIN | variableuse | commandecho )*
 wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /["']/
 wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
 wc_filter_and: INDEX ( _WHITESPACE? "+" _WHITESPACE? INDEX )*

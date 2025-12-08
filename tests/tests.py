@@ -2,6 +2,7 @@ import os
 import logging
 from typing import NamedTuple, Optional
 import unittest
+import datetime
 
 from ppp_enmappings import PPPExtraNetworkMappings  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
@@ -19,11 +20,23 @@ class TestPromptPostProcessorBase(unittest.TestCase):
     A test case class for testing the PromptPostProcessor class.
     """
 
-    def setUp(self):
+    def setUp(self, enable_file_logging=False):
         """
         Set up the test case by initializing the necessary objects and configurations.
+
+        Args:
+            enable_file_logging (bool): Whether to enable logging to a file. Defaults to True.
         """
-        self.lf = PromptPostProcessorLogFactory()
+        self.enable_file_logging = enable_file_logging
+        test_name = self.id().split(".")[-1]  # Extract the test method name
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if self.enable_file_logging:
+            log_filename = f"tests/logs/{test_name}_{timestamp}.log"
+        else:
+            log_filename = None  # Disable file logging
+
+        self.lf = PromptPostProcessorLogFactory(log_filename, app=None)
         self.ppp_logger = self.lf.log
         self.ppp_logger.setLevel(logging.DEBUG)
         self.grammar_content = None
@@ -182,6 +195,9 @@ class TestPromptPostProcessorBase(unittest.TestCase):
 
 
 class TestPromptPostProcessor(TestPromptPostProcessorBase):
+
+    def setUp(self):  # pylint: disable=arguments-differ
+        super().setUp(enable_file_logging=False)
 
     # Send To Negative tests
 
@@ -942,6 +958,13 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ),
         )
 
+    def test_wc_invalid_name(self):
+        self.process(
+            PromptPair("the choices are: ___invalid__", ""),
+            PromptPair("the choices are: ___invalid__", ""),
+            ppp=self.nocupppp,
+        )
+
     def test_wc_wildcard1a_text(self):  # simple text wildcard
         self.process(
             PromptPair("the choices are: __text/wildcard1__", ""),
@@ -1194,9 +1217,12 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             interrupted=True,
         )
 
-    def test_wc_dynamicwildcard(self): # wildcard built from variables
+    def test_wc_dynamicwildcard(self):  # wildcard built from variables
         self.process(
-            PromptPair("the choices are: ${x={1|2|3}}${w=yaml/wildcard${x}}__yaml/wildcard${x}__ __${w}__ __<ppp:echo w/>__", ""),
+            PromptPair(
+                "the choices are: ${x={1|2|3}}${w=yaml/wildcard${x}}__yaml/wildcard${x}__ __${w}__ __<ppp:echo w/>__",
+                "",
+            ),
             PromptPair("the choices are: choice1-choice3-choice1 choice3- choice2 - choice2  choice3", ""),
             ppp=self.nocupppp,
         )

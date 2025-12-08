@@ -1267,7 +1267,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.result += ":"
             self.__visit(after)
             self.__shell.pop()
-            if self.__ppp.cup_emptyconstructs and self.result == start_result + "[:":
+            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[:\s*", self.result):
                 self.result = start_result
             else:
                 self.result += f":{pos_str}]"
@@ -1294,7 +1294,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.__visit(opt)
                 self.__shell.pop()
             self.result += "]"
-            if self.__ppp.cup_emptyconstructs and self.result == start_result + "[]":
+            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[\s*\]", self.result):
                 self.result = start_result
             # self.__shell.pop()
             t2 = time.monotonic_ns()
@@ -1362,7 +1362,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
-            if self.__ppp.cup_emptyconstructs and self.result == start_result + starttag:
+            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result + starttag) + r"\s*", self.result):
                 self.result = start_result
             else:
                 self.result += endtag

@@ -66,7 +66,10 @@ class PPPWildcards:
         return self.wildcards.__sizeof__() + self.__wildcards_folders.__sizeof__() + self.__wildcard_files.__sizeof__()
 
     def refresh_wildcards(
-        self, debug_level: DEBUG_LEVEL, wildcards_folders: Optional[list[str]], wildcards_input: str = None
+        self,
+        debug_level: DEBUG_LEVEL,
+        wildcards_folders: Optional[list[str]],
+        wildcards_input: str = None,
     ):
         """
         Initialize the wildcards.
@@ -79,10 +82,19 @@ class PPPWildcards:
         for fullpath in list(self.__wildcard_files.keys()):
             if fullpath != self.LOCALINPUT_FILENAME:
                 path = os.path.dirname(fullpath)
-                if not os.path.exists(fullpath) or not any(
-                    os.path.commonpath([path, folder]) == folder for folder in self.__wildcards_folders
-                ):
+                if not os.path.exists(fullpath):
                     self.__remove_wildcards_from_path(fullpath)
+                else:
+                    a = False
+                    for folder in self.__wildcards_folders:
+                        try:
+                            if os.path.commonpath([folder, path]) == folder:
+                                a = True
+                                break
+                        except ValueError:
+                            pass
+                    if not a:
+                        self.__remove_wildcards_from_path(fullpath)
             elif wildcards_input is None:
                 self.__remove_wildcards_from_path(fullpath)
         if wildcards_folders is not None or wildcards_input is not None:
@@ -365,6 +377,8 @@ class PPPWildcards:
                     choices = self.__get_choices(obj, full_path, tmp_key_parts)
                     if choices is None:
                         self.__logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
+                    elif fullkey.startswith("_"):
+                        self.__logger.warning(f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)")
                     else:
                         self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
             return
@@ -384,6 +398,8 @@ class PPPWildcards:
             choices = self.__get_choices(content, full_path, key_parts)
             if choices is None:
                 self.__logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
+            elif fullkey.startswith("_"):
+                self.__logger.warning(f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)")
             else:
                 self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 

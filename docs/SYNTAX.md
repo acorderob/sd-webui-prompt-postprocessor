@@ -66,11 +66,25 @@ The generic format is: `__parameters$$wildcard'filter'(var=value)__`
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-The wildcard identifier can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing). You can use variables here, with the `${name:default}`, `<ppp:echo name/>` or `<ppp:echo name>default<ppp:/>echo>` formats, to build a dynamic identifier.
+Wildcards cannot be used inside an extranetwork tag (because some lora names contain double underscores). If you need to choose from multiple loras put the whole extranetwork tag inside a wildcard, or use choices.
 
-The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double. The filter is a comma separated list of an integer (positional choice index; zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
+### Identifier
+
+* Allowed characters are letters, numbers, underscore (`_`), dash (`-`), dot (`.`), and the path separators (`/` and `\`). It cannot start with an underscore because it would be ambiguous whether it's part of the name or just precedes the wildcard.
+* Can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing).
+* You can use variables, with the `${name}`, `${name:default}`, `<ppp:echo name/>` or `<ppp:echo name>default<ppp:/>echo>` formats, to build a dynamic identifier.
+
+### Filter
+
+The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double.
+
+The filter is a comma separated list of an integer (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
+
+### Variable
 
 The variable value only applies during the evaluation of the selected choices and is discarded afterward (the variable keeps its original value if there was one).
+
+### Examples
 
 These are examples of formats you can use to insert a wildcard:
 
@@ -86,8 +100,6 @@ These are examples of formats you can use to insert a wildcard:
 | `__r2-3$$path/wildcard__`            | select 2 to 3 choices allowing repetition                                |
 | `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator " / "                               |
 | `__path/wildcard(var=value)__`       | select 1 choice using the specified variable value in the evaluation.    |
-
-Wildcards cannot be used inside an extranetwork tag (because some lora names contain double underscores). If you need to choose from multiple loras put the whole extranetwork tag inside a wildcard, or use choices.
 
 ### Wildcard definitions
 
