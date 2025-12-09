@@ -36,7 +36,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         else:
             log_filename = None  # Disable file logging
 
-        self.lf = PromptPostProcessorLogFactory(log_filename, app=None)
+        self.lf = PromptPostProcessorLogFactory(None, log_filename)
         self.ppp_logger = self.lf.log
         self.ppp_logger.setLevel(logging.DEBUG)
         self.grammar_content = None

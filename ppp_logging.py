@@ -53,7 +53,7 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
-    def __init__(self, filename = None, app: SUPPORTED_APPS = None):  # pylint: disable=unused-argument
+    def __init__(self, app: SUPPORTED_APPS = None, filename = None):  # pylint: disable=unused-argument
         """
         Initializes the PromptPostProcessor class.
 
