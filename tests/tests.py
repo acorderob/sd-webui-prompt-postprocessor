@@ -40,14 +40,10 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.ppp_logger = self.lf.log
         self.ppp_logger.setLevel(logging.DEBUG)
         self.grammar_content = None
-        self.defppp = None
-        self.nocupppp = None
-        self.comfyuippp = None
         self.interrupted = False
         self.defopts = {
             "debug_level": DEBUG_LEVEL.full.value,
             "on_warning": PromptPostProcessor.ONWARNING_CHOICES.stop.value,
-            "variants_definitions": PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
             "process_wildcards": True,
             "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
             "choice_separator": ", ",
@@ -69,6 +65,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         }
         self.def_env_info = {
             "app": "tests",
+            "ppp_config": None,
             "is_sd1": False,
             "is_sd2": False,
             "is_sdxl": True,
@@ -106,50 +103,6 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
-        self.defppp = PromptPostProcessor(
-            self.ppp_logger,
-            self.interrupt,
-            self.def_env_info,
-            self.defopts,
-            self.grammar_content,
-            self.wildcards_obj,
-            self.extranetwork_maps_obj,
-        )
-        self.nocupppp = PromptPostProcessor(
-            self.ppp_logger,
-            self.interrupt,
-            self.def_env_info,
-            {
-                **self.defopts,
-                "cleanup_empty_constructs": False,
-                "cleanup_extra_separators": False,
-                "cleanup_extra_separators2": False,
-                "cleanup_extra_separators_include_eol": False,
-                "cleanup_extra_spaces": False,
-                "cleanup_breaks": False,
-                "cleanup_breaks_eol": False,
-                "cleanup_ands": False,
-                "cleanup_ands_eol": False,
-                "cleanup_extranetwork_tags": False,
-                "cleanup_merge_attention": False,
-            },
-            self.grammar_content,
-            self.wildcards_obj,
-            self.extranetwork_maps_obj,
-        )
-        self.comfyuippp = PromptPostProcessor(
-            self.ppp_logger,
-            self.interrupt,
-            {
-                **self.def_env_info,
-                "app": "comfyui",
-                "model_class": "SDXL",
-            },
-            self.defopts,
-            self.grammar_content,
-            self.wildcards_obj,
-            self.extranetwork_maps_obj,
-        )
 
     def interrupt(self):
         self.interrupted = True
@@ -159,7 +112,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         input_prompts: PromptPair,
         expected_output_prompts: Optional[PromptPair | list[PromptPair]] = None,
         seed: int = 1,
-        ppp: Optional[PromptPostProcessor] = None,
+        ppp: Optional[str | PromptPostProcessor] = None,
         interrupted: bool = False,
     ):
         """
@@ -169,13 +122,62 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             input_prompts (PromptPair): The input prompts.
             expected_output_prompts (PromptPair | list[PromptPair], optional): The expected prompts.
             seed (int, optional): The seed value. Defaults to 1.
-            ppp (object, optional): The post-processor object. Defaults to None.
+            ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
             interrupted (bool, optional): The interrupted flag. Defaults to False.
 
         Returns:
             None
         """
-        the_obj = ppp or self.defppp
+        if isinstance(ppp, str):
+            if ppp == "nocup":
+                the_obj = PromptPostProcessor(
+                    self.ppp_logger,
+                    self.interrupt,
+                    self.def_env_info,
+                    {
+                        **self.defopts,
+                        "cleanup_empty_constructs": False,
+                        "cleanup_extra_separators": False,
+                        "cleanup_extra_separators2": False,
+                        "cleanup_extra_separators_include_eol": False,
+                        "cleanup_extra_spaces": False,
+                        "cleanup_breaks": False,
+                        "cleanup_breaks_eol": False,
+                        "cleanup_ands": False,
+                        "cleanup_ands_eol": False,
+                        "cleanup_extranetwork_tags": False,
+                        "cleanup_merge_attention": False,
+                    },
+                    self.grammar_content,
+                    self.wildcards_obj,
+                    self.extranetwork_maps_obj,
+                )
+            elif ppp == "comfyui":
+                the_obj = PromptPostProcessor(
+                    self.ppp_logger,
+                    self.interrupt,
+                    {
+                        **self.def_env_info,
+                        "app": "comfyui",
+                        "model_class": "SDXL",
+                    },
+                    self.defopts,
+                    self.grammar_content,
+                    self.wildcards_obj,
+                    self.extranetwork_maps_obj,
+                )
+        else:
+            the_obj = ppp
+        if not the_obj:
+            the_obj = PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                self.def_env_info,
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            )
         out = (
             [PromptPair("", "")]
             if expected_output_prompts is None
@@ -232,7 +234,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 " (()), flowers , ,  ",
                 "red, ((pink)), normal quality, mauve, yellow, bad quality, green, worse quality, purple, blue",
             ),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_stn_inside_attention(self):  # negtag inside attention
@@ -427,7 +429,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "this is (a test:0.9) of not (attention (merging:1.2)) where ((this)) ((is not joined:1.2)) and neither is ([this]:1.3)",
                 "",
             ),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     # Command tests
@@ -598,7 +600,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("the choices are: choice2, choice2, default, choice3, choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_cmd_set_mixeval(self):  # set and add (DP format) with mixed evaluation
@@ -611,7 +613,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "the choices are: choice2, choice3, choice1, choice1- choice2 -choice3, choice2,  choice2 -choice1-choice3, choice2, choice3-choice1- choice2 , choice1, choice2 , choice2, choice3-choice1- choice2 , choice1, choice2 ",
                 "",
             ),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_cmd_set_ifundefined_if(self):  # set, ifundefined and if commands
@@ -770,14 +772,14 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("the choices are: {3::choice1|2::choice2|choice3}", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_unsupportedsampler(self):  # unsupported sampler
         self.process(
             PromptPair("the choices are: {@choice1|choice2|choice3}", ""),
             PromptPair("", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
             interrupted=True,
         )
 
@@ -788,28 +790,28 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_choices_multiple(self):  # choices with multiple selection
         self.process(
             PromptPair("the choices are: {~2$$, $$3::choice1|2:: choice2 |choice3}", ""),
             PromptPair("the choices are:  choice2 , choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_choices_if_multiple(self):  # choices with if and multiple selection
         self.process(
             PromptPair("the choices are: {2$$, $$3::choice1|2 if _is_sd1::choice2|choice3}", ""),
             PromptPair("the choices are: choice1, choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_choices_set_if_multiple(self):  # choices with if user variable and multiple selection
         self.process(
             PromptPair("${var=test}the choices are: {2$$, $$3::choice1|2 if not var eq 'test'::choice2|choice3}", ""),
             PromptPair("the choices are: choice1, choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_choices_set_if_nested(self):  # nested choices with if user variable and multiple selection
@@ -819,14 +821,14 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("the choices are: choice1 choice11, choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_choicesinsidelora(self):  # simple choices inside a lora
         self.process(
             PromptPair("<lora:test1:1><lora:test__other__name:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
             PromptPair("<lora:test1:1><lora:test__other__name:1><lora:test2:0.7>", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_ch_removelorawithchoices(self):
@@ -848,7 +850,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("{ch_one|ch_two|%0.5::include yaml/wildcard1}", ""),
             PromptPair("ch_two", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     # Wildcards tests
@@ -962,182 +964,182 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("the choices are: ___invalid__", ""),
             PromptPair("the choices are: ___invalid__", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1a_text(self):  # simple text wildcard
         self.process(
             PromptPair("the choices are: __text/wildcard1__", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1a_json(self):  # simple json wildcard
         self.process(
             PromptPair("the choices are: __json/wildcard1__", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1a_yaml(self):  # simple yaml wildcard
         self.process(
             PromptPair("the choices are: __yaml/wildcard1__", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1b_text(self):  # simple text wildcard with multiple choices
         self.process(
             PromptPair("the choices are: __2-$$text/wildcard1__", ""),
             PromptPair("the choices are: choice3, choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1b_json(self):  # simple json wildcard with multiple choices
         self.process(
             PromptPair("the choices are: __2-$$json/wildcard1__", ""),
             PromptPair("the choices are: choice3, choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard1b_yaml(self):  # simple yaml wildcard with multiple choices
         self.process(
             PromptPair("the choices are: __2-$$yaml/wildcard1__", ""),
             PromptPair("the choices are: choice3, choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard2_text(self):  # simple text wildcard with default options
         self.process(
             PromptPair("the choices are: __text/wildcard2__", ""),
             PromptPair("the choices are: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard2_json(self):  # simple json wildcard with default options
         self.process(
             PromptPair("the choices are: __json/wildcard2__", ""),
             PromptPair("the choices are: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard2_yaml(self):  # simple yaml wildcard with default options
         self.process(
             PromptPair("the choices are: __yaml/wildcard2__", ""),
             PromptPair("the choices are: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_test2_yaml(self):  # simple yaml wildcard
         self.process(
             PromptPair("the choice is: __testwc/test2__", ""),
             PromptPair("the choice is: 2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_test3_yaml(self):  # simple yaml wildcard
         self.process(
             PromptPair("the choice is: __testwc/test3__", ""),
             PromptPair("the choice is: one choice", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_index(self):  # wildcard with positional index filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'2'__", ""),
             PromptPair("the choice is: choice3-choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_label(self):  # wildcard with label filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'label1'__", ""),
             PromptPair("the choice is: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_label2(self):  # wildcard with label filter in multiple choices
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'label2'__", ""),
             PromptPair("the choice is: choice1-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_label3(self):  # wildcard with multiple label filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'label1,label2'__", ""),
             PromptPair("the choice is: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_indexlabel(self):  # wildcard with mixed index and label filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'2,label2'__", ""),
             PromptPair("the choice is: choice3-choice1", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_compound(self):  # wildcard with compound filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'label1+label3'__", ""),
             PromptPair("the choice is: choice3-choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_compound2(self):  # wildcard with inherited compound filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2bis'#label1+label3'__", ""),
             PromptPair("the choice is: choice3bis", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_filter_compound3(self):  # wildcard with doubly inherited compound filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2bisbis'#label1+label3'__", ""),
             PromptPair("the choice is: choice3bisbis", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_nested_wildcard_text(self):  # nested text wildcard with repeating multiple choices
         self.process(
             PromptPair("the choices are: __r3$$-$$text/wildcard3__", ""),
             PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_nested_wildcard_json(self):  # nested json wildcard with repeating multiple choices
         self.process(
             PromptPair("the choices are: __r3$$-$$json/wildcard3__", ""),
             PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_nested_wildcard_yaml(self):  # nested yaml wildcard with repeating multiple choices
         self.process(
             PromptPair("the choices are: __r3$$-$$yaml/wildcard3__", ""),
             PromptPair("the choices are: choice3,choice1- choice2 ,choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_optional(self):  # empty wildcard with no error
         self.process(
             PromptPair("the choices are: __yaml/empty_wildcard__", ""),
             PromptPair("the choices are: ", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard4_yaml(self):  # simple yaml wildcard with one option
         self.process(
             PromptPair("the choices are: __yaml/wildcard4__", ""),
             PromptPair("the choices are: inline text", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard6_yaml(self):  # simple yaml wildcard with object formatted choices
         self.process(
             PromptPair("the choices are: __yaml/wildcard6__", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_choice_wildcard_mix(self):  # choices with wildcard mix
@@ -1148,14 +1150,14 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 PromptPair("the choices are: choice1, choice3", ""),
                 PromptPair("the choices are: choice1, choice3", ""),
             ],
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_unsupportedsampler(self):  # unsupported sampler
         self.process(
             PromptPair("the choices are: __@yaml/wildcard2__", ""),
             PromptPair("", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
             interrupted=True,
         )
 
@@ -1163,42 +1165,42 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("the choices are: __yaml/wildcard[12]__, __yaml/wildcard?__", ""),
             PromptPair("the choices are: choice3-choice2, <lora:test2:1>- choice2 -choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcardwithvar(self):  # wildcard with inline variable
         self.process(
             PromptPair("the choices are: __yaml/wildcard5(var=test)__, __yaml/wildcard5__", ""),
             PromptPair("the choices are: inline test, inline default", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcardPS_yaml(self):  # yaml wildcard with object formatted choices and options and prefix and suffix
         self.process(
             PromptPair("the choices are: __yaml/wildcardPS__", ""),
             PromptPair("the choices are: prefix-choice2/choice3-suffix", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_anonymouswildcard_yaml(self):  # yaml anonymous wildcard
         self.process(
             PromptPair("the choices are: __yaml/anonwildcards__", ""),
             PromptPair("the choices are: six", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_wildcard_input(self):  # simple yaml wildcard input
         self.process(
             PromptPair("the choices are: __yaml_input/wildcardI__", ""),
             PromptPair("the choices are: choice2", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_circular(self):  # wildcard circular reference
         self.process(
             PromptPair("the choices are: __yaml/circular1__", ""),
             PromptPair("", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
             interrupted=True,
         )
 
@@ -1206,14 +1208,14 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("the choices are: __yaml/including__", ""),
             PromptPair("the choices are: choice4", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_wc_circular_including(self):  # wildcard including another wildcard in a circular reference
         self.process(
             PromptPair("the choices are: __yaml/including1__", ""),
             PromptPair("", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
             interrupted=True,
         )
 
@@ -1224,7 +1226,392 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("the choices are: choice1-choice3-choice1 choice3- choice2 - choice2  choice3", ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
+        )
+
+    # Hosts tests
+
+    def test_host_attention_parentheses(self):
+        self.process(
+            PromptPair(
+                "[test1] (test2) (test3:1.5)",
+                "",
+            ),
+            PromptPair("(test1:0.9) (test2) (test3:1.5)", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"attention": "parentheses"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_attention_disable(self):
+        self.process(
+            PromptPair(
+                "[test1] (test2) (test3:1.5)",
+                "",
+            ),
+            PromptPair("test1 test2 test3", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"attention": "disable"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_attention_remove(self):
+        self.process(
+            PromptPair(
+                "[test1] (test2) (test3:1.5)",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"attention": "remove"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_attention_error(self):
+        self.process(
+            PromptPair(
+                "[test1] (test2) (test3:1.5)",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"attention": "error"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+            interrupted=True,
+        )
+
+    def test_host_scheduling_before(self):
+        self.process(
+            PromptPair(
+                "[test1:test2:0.5]",
+                "",
+            ),
+            PromptPair("test1", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"scheduling": "before"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_scheduling_after(self):
+        self.process(
+            PromptPair(
+                "[test1:test2:0.5]",
+                "",
+            ),
+            PromptPair("test2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"scheduling": "after"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_scheduling_first(self):
+        self.process(
+            PromptPair(
+                "[test1::0.5] [:test2:0.5] [test3:test4:0.5]",
+                "",
+            ),
+            PromptPair("test1 test3", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"scheduling": "first"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_scheduling_remove(self):
+        self.process(
+            PromptPair(
+                "[test1:test2:0.5]",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"scheduling": "remove"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_scheduling_error(self):
+        self.process(
+            PromptPair(
+                "[test1:test2:0.5]",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"scheduling": "error"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+            interrupted=True,
+        )
+
+    def test_host_alternation_first(self):
+        self.process(
+            PromptPair(
+                "[test1|test2|test3]",
+                "",
+            ),
+            PromptPair("test1", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"alternation": "first"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_alternation_remove(self):
+        self.process(
+            PromptPair(
+                "[test1|test2|test3]",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"alternation": "remove"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_alternation_error(self):
+        self.process(
+            PromptPair(
+                "[test1|test2|test3]",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"alternation": "error"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+            interrupted=True,
+        )
+
+    def test_host_and_eol(self):
+        self.process(
+            PromptPair(
+                "test1 AND test2:2",
+                "",
+            ),
+            PromptPair("test1\ntest2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"and": "eol"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_and_remove(self):
+        self.process(
+            PromptPair(
+                "test1 AND test2:2",
+                "",
+            ),
+            PromptPair("test1 test2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"and": "remove"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_and_error(self):
+        self.process(
+            PromptPair(
+                "test1 AND test2:2",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"and": "error"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+            interrupted=True,
+        )
+
+    def test_host_break_eol(self):
+        self.process(
+            PromptPair(
+                "test1 BREAK test2",
+                "",
+            ),
+            PromptPair("test1\ntest2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"break": "eol"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_break_remove(self):
+        self.process(
+            PromptPair(
+                "test1 BREAK test2",
+                "",
+            ),
+            PromptPair("test1 test2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"break": "remove"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_break_error(self):
+        self.process(
+            PromptPair(
+                "test1 BREAK test2",
+                "",
+            ),
+            PromptPair("", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"break": "error"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+            interrupted=True,
         )
 
     # Model variants tests
@@ -1242,11 +1629,31 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
+                    "ppp_config": {
+                        "models": {
+                            "sd1": {
+                                "variants": {
+                                    "test3": {"find_in_filename": "testmodel"},
+                                    "sdxl": {"find_in_filename": "testmodel"},
+                                }
+                            },
+                            "sdxl": {
+                                "variants": {
+                                    "test1": {"find_in_filename": "testmodel"},
+                                    "test2": {"find_in_filename": "testmodel"},
+                                }
+                            },
+                            "invalid": {
+                                "variants": {
+                                    "test4": {"find_in_filename": "testmodel"},
+                                }
+                            },
+                        }
+                    },
                 },
                 {
                     **self.defopts,
                     "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value,
-                    "variants_definitions": "test1(sdxl)=testmodel\ntest2=testmodel\ntest3(sd1)=testmodel\ntest4(invalid)=testmodel\nsdxl()=testmodel",
                 },
                 self.grammar_content,
                 self.wildcards_obj,
@@ -1260,7 +1667,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         self.process(
             PromptPair("(test1) (test2:1.5) [test3] [(test4)]", ""),
             PromptPair("(test1) (test2:1.5) (test3:0.9) (test4:0.99)", ""),
-            ppp=self.comfyuippp,
+            ppp="comfyui",
         )
 
     # Performance tests
@@ -1273,7 +1680,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         )
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_parser_performance_simple_fullparser(
@@ -1285,7 +1692,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         )
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_parser_performance_complex_fullparser(
@@ -1294,7 +1701,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         large_prompt = ", ".join(["__yaml/wildcard1__, (__yaml/wildcard2__), __yaml/wildcard3__, {one|two|three}"] * 15)
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     # the following tests are performance tests with only one kind of the old constructs
@@ -1304,28 +1711,28 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
         large_prompt = ", ".join(["(one:1.2) two (three) four [five] six"] * 20)
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_parser_performance_simple_schedules(self):  # performance test with only schedules
         large_prompt = ", ".join(["[one:1:0.5] two [three:0.8] four [five:5:0.2] six"] * 20)
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_parser_performance_simple_alternation(self):  # performance test with only alternation
         large_prompt = ", ".join(["[one|1] two [three|3] four [five|5] six"] * 20)
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     def test_parser_performance_simple_extranetwork(self):  # performance test with only extra networks
         large_prompt = ", ".join(["<lora:one:1> two <lora:three:1> four <lora:five:1> six"] * 20)
         self.process(
             PromptPair(large_prompt, ""),
-            ppp=self.nocupppp,
+            ppp="nocup",
         )
 
     # Variable-vs-variable comparison tests

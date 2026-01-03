@@ -1,0 +1,82 @@
+# If you want to change any of these options make first a copy of this file as "ppp_config.yaml" and edit that file.
+# This file will be overwritten when updating the extension, but your custom "ppp_config.yaml" should not be affected.
+
+hosts: # Options for supported host applications
+
+    # For each host define how to handle some operations:
+    #   attention: how to handle attention operators
+    #     - ok: leave as is
+    #     - parentheses: convert to parentheses-based attention
+    #     - disable: remove attention operators
+    #     - remove: remove the whole block, including the text inside
+    #     - error: raise an error
+    #   scheduling: how to handle scheduling operators
+    #     - ok: leave as is
+    #     - before: replace with the first scheduling text
+    #     - after: replace with the second scheduling text
+    #     - first: replace with the first scheduling text if present, otherwise with the second scheduling text
+    #     - remove: remove the whole block, including the text inside
+    #     - error: raise an error
+    #   alternation: how to handle alternation operators
+    #     - ok: leave as is
+    #     - first: replace with the first alternation text
+    #     - remove: remove the whole block, including the text inside
+    #     - error: raise an error
+    #   and: how to handle "AND" operators
+    #     - ok: leave as is
+    #     - eol: replace with end-of-line (newline)
+    #     - remove: remove the operator
+    #     - error: raise an error
+    #   break: how to handle "BREAK" operators
+    #     - ok: leave as is
+    #     - eol: replace with end-of-line (newline)
+    #     - remove: remove the operator
+    #     - error: raise an error
+
+    a1111:
+        attention: ok
+        scheduling: ok
+        alternation: ok
+        and: ok
+        break: ok
+    forge:
+        attention: ok
+        scheduling: ok
+        alternation: ok
+        and: ok
+        break: ok
+    reforge:
+        attention: ok
+        scheduling: ok
+        alternation: ok
+        and: ok
+        break: ok
+    sdnext:
+        attention: ok
+        scheduling: ok
+        alternation: ok
+        and: ok
+        break: ok
+    comfyui:
+        # comfyui only supports parentheses-based attention
+        attention: parentheses
+        # by default comfyui does not support scheduling, alternation, AND or BREAK operators, but you may be able to use them with a custom text encoder node
+        scheduling: error
+        alternation: error
+        and: remove
+        break: eol
+
+models: # Options for supported base models and variants
+    sd1:
+    sd2:
+    sdxl:
+        variants:
+            # At this level goes the name of the defined variants
+            pony:
+                # find_in_filename: regex patterns as a string or list of strings to identify the variant in the model filename (ignores case)
+                find_in_filename: "(?:pony|pny|pdxl)"
+            illustrious:
+                find_in_filename: "(?:illustrious|illust|ilxl)"
+    sd3:
+    flux:
+    auraflow:

@@ -309,9 +309,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
         options = {
             "debug_level": getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL),
             "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ONWARNING),
-            "variants_definitions": getattr(
-                opts, "ppp_gen_variantsdefinitions", PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS
-            ),
             "process_wildcards": getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_WC_PROCESS),
             "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
@@ -579,19 +576,6 @@ def on_ui_settings():
                     ("Stop the generation", PromptPostProcessor.ONWARNING_CHOICES.stop.value),
                 )
             },
-            section=section,
-        ),
-    )
-    shared.opts.add_option(
-        key="ppp_gen_variantsdefinitions",
-        info=shared.OptionInfo(
-            PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
-            label="Definitions for variant models",
-            comment_after="Recognized based on strings found in the full filename. Format for each line is: 'name(kind)=comma separated list of substrings (case insensitive)' with kind being one of the base model types ("
-            + ",".join(PromptPostProcessor.SUPPORTED_MODELS)
-            + ") or not specified.",
-            component=gr.Textbox,
-            component_args={"lines": 7},
             section=section,
         ),
     )

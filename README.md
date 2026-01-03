@@ -36,7 +36,7 @@ Notes:
 
     Does not recognize tokenizer separators like `TE2:` and `TE3:`, so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
 
-    *ComfyUI* only supports natively the attention using parenthesis, so the ones with the braces will be converted. The other constructs are not natively supported but some custom nodes implement them.
+    *ComfyUI* only supports natively the attention using parentheses, so the ones with the braces will be converted. The other constructs are not natively supported but some custom nodes implement them.
 2. It recognizes wildcards in the `__wildcard__` and {choice|choice} formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
 3. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 

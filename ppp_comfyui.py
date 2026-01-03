@@ -115,16 +115,6 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
-                "variants_definitions": (
-                    "STRING",
-                    {
-                        "default": PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS,
-                        "multiline": True,
-                        "placeholder": "",
-                        "tooltip": "Definitions for variant models to be recognized based on strings found in the full filename. Format for each line is: 'name(kind)=comma separated list of substrings (case insensitive)' with kind being one of the base model types or not specified",
-                        "dynamicPrompts": False,
-                    },
-                ),
                 "wc_options": (
                     "PPP_OPTIONS_WC",
                     {
@@ -192,37 +182,16 @@ class PromptPostProcessorComfyUINode:
         pos_prompt,
         neg_prompt,
         seed,
-        debug_level,  # pylint: disable=unused-argument
+        debug_level,
         on_warnings,
         process_wildcards,
         do_cleanup,
-        variants_definitions,
         wc_options,
         stn_options,
         cup_options,
         en_options,
-    ):
-        if process_wildcards:
-            return float(
-                "NaN"
-            )  # since we can't detect changes in wildcards we assume they are always changed when enabled
-        new_run = {  # everything except debug_level
-            "model": model,
-            "modelname": modelname,
-            "pos_prompt": pos_prompt,
-            "neg_prompt": neg_prompt,
-            "seed": seed,
-            "on_warnings": on_warnings,
-            "process_wildcards": process_wildcards,
-            "do_cleanup": do_cleanup,
-            "variants_definitions": variants_definitions,
-            "wc_options": wc_options,
-            "stn_options": stn_options,
-            "cup_options": cup_options,
-            "en_options": en_options,
-        }
-        return new_run.__hash__
-        # return float("NaN")
+    ):  # pylint: disable=unused-argument
+        return float("NaN")  # always process because we don't control the content of wildcards and the config file
 
     def process(
         self,
@@ -235,7 +204,6 @@ class PromptPostProcessorComfyUINode:
         on_warnings,
         process_wildcards,
         do_cleanup,
-        variants_definitions,
         wc_options,
         stn_options,
         cup_options,
@@ -311,12 +279,9 @@ class PromptPostProcessorComfyUINode:
             if f.strip() != ""
         ]
 
-        if variants_definitions != "" and not "=" in variants_definitions:  # mainly to warn about the old format
-            raise ValueError("Invalid variants_definitions format")
         options = {
             "debug_level": debug_level,
             "on_warnings": on_warnings,
-            "variants_definitions": variants_definitions,
             "process_wildcards": process_wildcards,
             "if_wildcards": (
                 wc_options["wc_if_wildcards"] if wc_options else PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value

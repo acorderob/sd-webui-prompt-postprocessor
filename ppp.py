@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, Callable, Optional
 import lark
 import numpy as np
+import yaml
 
 from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
@@ -72,7 +73,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_ONWARNING = ONWARNING_CHOICES.warn.value
     DEFAULT_STN_SEPARATOR = ", "
     DEFAULT_STN_IGNORE_REPEATS = True
-    DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,illust,ilxl"
     DEFAULT_WC_PROCESS = True
     DEFAULT_IF_WILDCARDS = IFWILDCARDS_CHOICES.stop.value
     DEFAULT_CHOICE_SEPARATOR = ", "
@@ -133,29 +133,50 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.env_info = env_info
         self.wildcard_obj = wildcards_obj
         self.extranetwork_mappings_obj = extranetwork_mappings_obj
+        default_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml.defaults")
+        with open(default_config_file, "r", encoding="utf-8") as f:
+            self.config: dict[str, Any] = yaml.safe_load(f)
+        user_config_file = self.env_info.get("ppp_config", "")
+        if isinstance(user_config_file, dict):
+            user_config = user_config_file
+        else:
+            user_config = {}
+            if user_config_file == "":
+                if self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
+                    try:
+                        import folder_paths  # pylint: disable=import-error # type: ignore
 
+                        user_dir = folder_paths.get_user_directory()
+                        if user_dir and os.path.isdir(user_dir):
+                            user_config_file = os.path.join(user_dir, "default", "ppp_config.yaml")
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+                if not user_config_file or not os.path.exists(user_config_file):
+                    user_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml")
+            if user_config_file and os.path.exists(user_config_file):
+
+                with open(user_config_file, "r", encoding="utf-8") as f:
+                    user_config = yaml.safe_load(f)
+        # Merge user config into default config
+        if len(user_config):
+            for k in ("hosts", "models"):
+                if k in user_config:
+                    for key, value in user_config[k].items():
+                        if key in self.config[k] and isinstance(self.config[k][key], list):
+                            self.config[k][key].extend(value)
+                        else:
+                            self.config[k][key] = value
+        self.host_config: dict[str, Any] = (self.config.get("hosts") or {}).get(self.env_info.get("app", "")) or {}
         # General options
         self.debug_level = DEBUG_LEVEL(options.get("debug_level", self.DEFAULT_DEBUG_LEVEL))
         self.gen_onwarning = self.ONWARNING_CHOICES(options.get("on_warning", self.DEFAULT_ONWARNING))
-        variants_definitions_option = str(options.get("variants_definitions", self.DEFAULT_VARIANTS_DEFINITIONS))
-        self.variants_definitions = {}
-        if variants_definitions_option:
-            lines = variants_definitions_option.splitlines()
-            for line in lines:
-                if "=" in line:
-                    model_tag, elements = line.split("=", 1)
-                    model_name, model_type = re.match(r"(\w+)(?:\((\w+)\))?", model_tag).groups()
-                    if model_type is not None and model_type not in self.SUPPORTED_MODELS:
-                        self.logger.warning(
-                            f"Unsupported model type '{model_type}' in definition for variant '{model_name}'."
-                        )
-                    elif model_name in self.SUPPORTED_MODELS:
-                        self.logger.warning(f"Invalid model name in definition for variant '{model_name}'.")
-                    else:
-                        self.variants_definitions[model_name.strip()] = (
-                            model_type or "",
-                            [element.strip() for element in elements.split(",")],
-                        )
+        self.variants_definitions = {
+            v: (m, [vo["find_in_filename"]] if isinstance(vo["find_in_filename"], str) else vo["find_in_filename"])
+            for m in self.SUPPORTED_MODELS
+            for v, vo in (((self.config.get("models") or {}).get(m) or {}).get("variants") or {}).items()
+        }
+        if self.debug_level != DEBUG_LEVEL.none:
+            self.logger.debug(self.format_output(f"Host configuration: {self.host_config}"))
         # Wildcards options
         self.wil_process_wildcards = options.get("process_wildcards", self.DEFAULT_WC_PROCESS)
         self.wil_keep_choices_order = options.get("keep_choices_order", self.DEFAULT_KEEP_CHOICES_ORDER)
@@ -430,15 +451,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         return text.encode("unicode_escape").decode("utf-8")
 
-    def is_comfy_ui(self) -> bool:
-        """
-        Checks if the current environment is ComfyUI.
-
-        Returns:
-            bool: True if the environment is ComfyUI, False otherwise.
-        """
-        return self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value
-
     def __init_sysvars(self):
         """
         Initializes the system variables.
@@ -456,7 +468,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.system_variables["_modelclass"] = self.env_info.get("model_class", "")
         is_models = {
             model_name: (model_type_and_substrings[0] == "" or sdchecks.get(model_type_and_substrings[0], False))
-            and any(s in model_filename.lower() for s in model_type_and_substrings[1])
+            and any((re.search(s, model_filename, re.IGNORECASE) is not None) for s in model_type_and_substrings[1])
             for model_name, model_type_and_substrings in self.variants_definitions.items()
             if model_name not in self.SUPPORTED_MODELS
         }
@@ -558,12 +570,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = self.stn_separator.join(add_at_end)
         return negative_prompt
 
-    def __cleanup(self, text: str) -> str:
+    def __cleanup(self, text: str, is_negative: bool) -> str:
         """
         Trims the given text based on the specified cleanup options.
 
         Args:
             text (str): The text to be cleaned up.
+            is_negative (bool): Indicates if the text is a negative prompt.
 
         Returns:
             str: The resulting text.
@@ -575,6 +588,43 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         sep_options = [(optwhitespace_separator, self.stn_separator)]  # sendtonegative separator
         if optwhitespace_comma != optwhitespace_separator:
             sep_options.append((optwhitespace_comma, ", "))  # regular comma separator
+        break_processing = self.host_config.get("break", "ok")
+        # break_processing == "ok" (and always)
+        if self.cup_breaks_eol:
+            # replace spaces before break with EOL
+            text = re.sub(r"[, ]+BREAK\b", "\nBREAK", text)
+        if self.cup_breaks:
+            # collapse separators and commas before BREAK
+            text = re.sub(r"[, ]+BREAK\b", " BREAK", text)
+            # collapse separators and commas after BREAK
+            text = re.sub(r"\bBREAK[, ]+", "BREAK ", text)
+            # collapse separators and commas around BREAK
+            text = re.sub(r"[, ]+BREAK[, ]+", " BREAK ", text)
+            # collapse BREAKs
+            text = re.sub(r"\bBREAK(?:\s+BREAK)+\b", " BREAK ", text)
+            # remove spaces between start of line and BREAK
+            text = re.sub(r"^[ ]+BREAK\b", "BREAK", text, flags=re.MULTILINE)
+            # remove spaces between BREAK and end of line
+            text = re.sub(r"\bBREAK[ ]+$", "BREAK", text, flags=re.MULTILINE)
+            # remove at start of prompt
+            text = re.sub(r"\A(?:\s*BREAK\b\s*)+", "", text)
+            # remove at end of prompt
+            text = re.sub(r"(?:\s*\bBREAK\s*)+\Z", "", text)        
+        if break_processing == "eol":
+            text2 = re.sub(r"\b\s*BREAK\s*\b", "\n", text)
+            if text2 != text:
+                text = text2
+                if self.debug_level == DEBUG_LEVEL.full:
+                    self.logger.debug("BREAK construct replaced with EOL")
+        elif break_processing == "remove":
+            text2 = re.sub(r"\b\s*BREAK\s*\b", " ", text)
+            if text2 != text:
+                text = text2
+                if self.debug_level == DEBUG_LEVEL.full:
+                    self.logger.debug("BREAK construct removed")
+        elif break_processing == "error":
+            if re.search(r"\bBREAK\b", text):
+                self.warn_or_stop(is_negative, "BREAK constructs are not allowed!")
         for sep, replacement in sep_options:
             if self.cup_extraseparators:
                 # collapse separators
@@ -596,26 +646,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 text = re.sub(r"^(?:" + sep + r")+", "", text, flags=re.MULTILINE)
                 # remove at end of prompt or line
                 text = re.sub(r"(?:" + sep + r")+$", "", text, flags=re.MULTILINE)
-        if self.cup_breaks_eol:
-            # replace spaces before break with EOL
-            text = re.sub(r"[, ]+BREAK\b", "\nBREAK", text)
-        if self.cup_breaks:
-            # collapse separators and commas before BREAK
-            text = re.sub(r"[, ]+BREAK\b", " BREAK", text)
-            # collapse separators and commas after BREAK
-            text = re.sub(r"\bBREAK[, ]+", "BREAK ", text)
-            # collapse separators and commas around BREAK
-            text = re.sub(r"[, ]+BREAK[, ]+", " BREAK ", text)
-            # collapse BREAKs
-            text = re.sub(r"\bBREAK(?:\s+BREAK)+\b", " BREAK ", text)
-            # remove spaces between start of line and BREAK
-            text = re.sub(r"^[ ]+BREAK\b", "BREAK", text, flags=re.MULTILINE)
-            # remove spaces between BREAK and end of line
-            text = re.sub(r"\bBREAK[ ]+$", "BREAK", text, flags=re.MULTILINE)
-            # remove at start of prompt
-            text = re.sub(r"\A(?:\s*BREAK\b\s*)+", "", text)
-            # remove at end of prompt
-            text = re.sub(r"(?:\s*\bBREAK\s*)+\Z", "", text)
         if self.cup_ands:
             # collapse ANDs with space after
             text = re.sub(r"\bAND(?:\s+AND)+\s+", "AND ", text)
@@ -774,8 +804,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             negative_prompt = self.__add_to_end(negative_prompt, p_processor.add_at["end"])
 
         # Clean up
-        prompt = self.__cleanup(prompt)
-        negative_prompt = self.__cleanup(negative_prompt)
+        prompt = self.__cleanup(prompt, False)
+        negative_prompt = self.__cleanup(negative_prompt, True)
 
         # Check for wildcards not processed
         foundP = bool(p_processor.detectedWildcards)
@@ -919,6 +949,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 )
         return parsed_prompt
 
+    def warn_or_stop(self, is_negative: bool, message: str, e: Exception = None):
+        if self.gen_onwarning == self.ONWARNING_CHOICES.stop:
+            raise PPPInterrupt(
+                message,
+                self.INVALID_CONTENT_STOP.format(message) if not is_negative else "",
+                self.INVALID_CONTENT_STOP.format(message) if is_negative else "",
+            ) from e
+        self.logger.warning(message)
+
     class TreeProcessor(lark.visitors.Interpreter):
         """
         A class for interpreting and processing a tree generated by the prompt parser.
@@ -950,13 +989,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.result = ""
 
         def warn_or_stop(self, message: str, e: Exception = None):
-            if self.__ppp.gen_onwarning == self.__ppp.ONWARNING_CHOICES.stop:
-                raise PPPInterrupt(
-                    message,
-                    self.__ppp.INVALID_CONTENT_STOP.format(message) if not self.__is_negative else "",
-                    self.__ppp.INVALID_CONTENT_STOP.format(message) if self.__is_negative else "",
-                ) from e
-            self.__ppp.logger.warning(message)
+            self.__ppp.warn_or_stop(self.__is_negative, message, e)
 
         def start_visit(self, prompt_description: str, parsed_prompt: lark.Tree, is_negative: bool = False) -> str:
             """
@@ -1266,28 +1299,40 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a prompt composition construct in the tree.
             """
-            # if self.__ppp.is_comfy_ui():
-            #     self.__ppp.logger.warning("Prompt composition is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.monotonic_ns()
             self.__visit(tree.children[0])
+            and_processing = self.__ppp.host_config.get("and", "ok")
             if len(tree.children) > 1:
                 if tree.children[1] is not None:
                     self.result += f":{tree.children[1]}"
                 for i in range(2, len(tree.children), 3):
-                    if self.__ppp.cup_ands:
-                        self.result = re.sub(r"[, ]+$", "\n" if self.__ppp.cup_ands_eol else " ", self.result)
-                    if self.result[-1:].isalnum():  # add space if needed
-                        self.result += " "
-                    self.result += "AND"
-                    added_result = self.__visit(tree.children[i + 1], False, True)
-                    if self.__ppp.cup_ands:
-                        added_result = re.sub(r"^[, ]+", " ", added_result)
-                    if added_result[0:1].isalnum():  # add space if needed
-                        added_result = " " + added_result
-                    self.result += added_result
-                    if tree.children[i + 2] is not None:
-                        self.result += f":{tree.children[i+2]}"
+                    if and_processing == "eol":
+                        self.result = (
+                            self.result.rstrip() + "\n" + self.__visit(tree.children[i + 1], False, True).lstrip()
+                        )
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug("AND construct replaced with EOL")
+                    elif and_processing == "remove":
+                        self.result += self.__visit(tree.children[i + 1], False, True)
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug("AND construct removed")
+                    elif and_processing == "error":
+                        self.warn_or_stop("AND constructs are not allowed!")
+                    else:  # and_processing == "ok":
+                        if self.__ppp.cup_ands:
+                            self.result = re.sub(r"[, ]+$", "\n" if self.__ppp.cup_ands_eol else " ", self.result)
+                        if self.result[-1:].isalnum():  # add space if needed
+                            self.result += " "
+                        self.result += "AND"
+                        added_result = self.__visit(tree.children[i + 1], False, True)
+                        if self.__ppp.cup_ands:
+                            added_result = re.sub(r"^[, ]+", " ", added_result)
+                        if added_result[0:1].isalnum():  # add space if needed
+                            added_result = " " + added_result
+                        self.result += added_result
+                        if tree.children[i + 2] is not None:
+                            self.result += f":{tree.children[i+2]}"
             t2 = time.monotonic_ns()
             self.__debug_end("promptcomp", start_result, t2 - t1)
 
@@ -1295,8 +1340,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process a scheduling construct in the tree and add it to the accumulated shell.
             """
-            # if self.__ppp.is_comfy_ui():
-            #     self.__ppp.logger.warning("Prompt scheduling is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.monotonic_ns()
             before = tree.children[0]
@@ -1305,25 +1348,49 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             pos = float(pos_str)
             if pos >= 1:
                 pos = int(pos)
-            # self.__shell.append(self.AccumulatedShell("sc", pos))
-            self.result += "["
-            if before is not None:
+            scheduling_processing = self.__ppp.host_config.get("scheduling", "ok")
+            if scheduling_processing == "before":
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                    self.__ppp.logger.debug(f"Shell scheduled before with position {pos}")
-                self.__shell.append(self.AccumulatedShell("scb", pos))
-                self.__visit(before)
+                    self.__ppp.logger.debug("Scheduling construct removed, taking before option")
+                if before is not None:
+                    self.__visit(before)
+            elif scheduling_processing == "after":
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Scheduling construct removed, taking after option")
+                if after is not None:
+                    self.__visit(after)
+            elif scheduling_processing == "first":
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Scheduling construct removed, taking first option")
+                if before is not None:
+                    self.__visit(before)
+                elif after is not None:
+                    self.__visit(after)
+            elif scheduling_processing == "remove":
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Scheduling construct removed")
+            elif scheduling_processing == "error":
+                self.warn_or_stop("Scheduling constructs are not allowed!")
+            else:  # scheduling_processing == "ok"
+                # self.__shell.append(self.AccumulatedShell("sc", pos))
+                self.result += "["
+                if before is not None:
+                    if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                        self.__ppp.logger.debug(f"Shell scheduled before with position {pos}")
+                    self.__shell.append(self.AccumulatedShell("scb", pos))
+                    self.__visit(before)
+                    self.__shell.pop()
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug(f"Shell scheduled after with position {pos}")
+                self.__shell.append(self.AccumulatedShell("sca", pos))
+                self.result += ":"
+                self.__visit(after)
                 self.__shell.pop()
-            if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                self.__ppp.logger.debug(f"Shell scheduled after with position {pos}")
-            self.__shell.append(self.AccumulatedShell("sca", pos))
-            self.result += ":"
-            self.__visit(after)
-            self.__shell.pop()
-            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[:\s*", self.result):
-                self.result = start_result
-            else:
-                self.result += f":{pos_str}]"
-            # self.__shell.pop()
+                if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[:\s*", self.result):
+                    self.result = start_result
+                else:
+                    self.result += f":{pos_str}]"
+                # self.__shell.pop()
             t2 = time.monotonic_ns()
             self.__debug_end("scheduled", start_result, t2 - t1, pos_str)
 
@@ -1331,24 +1398,33 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             Process an alternation construct in the tree and add it to the accumulated shell.
             """
-            # if self.__ppp.is_comfy_ui():
-            #     self.__ppp.logger.warning("Prompt alternation is not supported in ComfyUI.")
             start_result = self.result
             t1 = time.monotonic_ns()
-            # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
-            self.result += "["
-            for i, opt in enumerate(tree.children):
+            alternation_processing = self.__ppp.host_config.get("alternation", "ok")
+            if alternation_processing == "first":
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                    self.__ppp.logger.debug(f"Shell alternate option {i+1}")
-                self.__shell.append(self.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}))
-                if i > 0:
-                    self.result += "|"
-                self.__visit(opt)
-                self.__shell.pop()
-            self.result += "]"
-            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[\s*\]", self.result):
-                self.result = start_result
-            # self.__shell.pop()
+                    self.__ppp.logger.debug("Alternation construct removed, taking first option")
+                self.__visit(tree.children[0])
+            elif alternation_processing == "remove":
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Alternation construct removed")
+            elif alternation_processing == "error":
+                self.warn_or_stop("Alternation constructs are not allowed!")
+            else:  # alternation_processing == "ok"
+                # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
+                self.result += "["
+                for i, opt in enumerate(tree.children):
+                    if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                        self.__ppp.logger.debug(f"Shell alternate option {i+1}")
+                    self.__shell.append(self.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}))
+                    if i > 0:
+                        self.result += "|"
+                    self.__visit(opt)
+                    self.__shell.pop()
+                self.result += "]"
+                if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result) + r"\[\s*\]", self.result):
+                    self.result = start_result
+                # self.__shell.pop()
             t2 = time.monotonic_ns()
             self.__debug_end("alternate", start_result, t2 - t1)
 
@@ -1358,17 +1434,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             start_result = self.result
             t1 = time.monotonic_ns()
+            # weight_kind: -1: remove, 0=none, 1=decrease, 2=increase, 3=specific
             if len(tree.children) == 2:
                 weight_str = tree.children[-1]
                 if weight_str is not None:
-                    weight_kind = 2  # specific weight
+                    weight_kind = 3  # specific weight
                     weight = float(weight_str)
                 else:
-                    weight_kind = 1  # increase attention
+                    weight_kind = 2  # increase attention
                     weight = 1.1
                     weight_str = "1.1"
             else:
-                weight_kind = 0  # decrease attention
+                weight_kind = 1  # decrease attention
                 weight = 0.9
                 weight_str = "0.9"
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
@@ -1390,37 +1467,59 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 weight = math.floor(weight * 100) / 100  # we round to 2 decimals
                 weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
                 if weight_str == "0.9":
-                    weight_kind = 0
-                elif weight_str == "1.1":
                     weight_kind = 1
-                else:
+                elif weight_str == "1.1":
                     weight_kind = 2
-            if weight_kind == 0 and self.__ppp.is_comfy_ui():
-                weight_kind = 2
-                weight_str = "0.9"
-            self.__shell.append(self.AccumulatedShell("at", (weight_kind, weight_str)))
-            if weight_kind == 0:
-                starttag = "["
-                self.result += starttag
+                else:
+                    weight_kind = 3
+            attention_processing = self.__ppp.host_config.get("attention", "ok")
+            if attention_processing == "parentheses":
+                if weight_kind == 1:
+                    weight_kind = 3
+                    weight_str = "0.9"
+                    if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                        self.__ppp.logger.debug("Converted to parentheses format")
+            elif attention_processing == "disable":
+                weight_kind = 0
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Attention construct disabled")
+            elif attention_processing == "remove":
+                weight_kind = -1
+                if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                    self.__ppp.logger.debug("Attention construct removed")
+            elif attention_processing == "error":
+                self.warn_or_stop("Attention constructs are not allowed!")
+            # else: attention_processing == "ok":
+            if weight_kind == -1:
+                # we just ignore the attention construct
+                pass
+            elif weight_kind == 0:
+                # we just visit the content without adding any attention
                 self.__visit(current_tree)
-                endtag = "]"
-            elif weight_kind == 1:
-                starttag = "("
-                self.result += starttag
-                self.__visit(current_tree)
-                endtag = ")"
             else:
-                starttag = "("
-                self.result += starttag
-                self.__visit(current_tree)
-                endtag = f":{weight_str})"
-            if self.__ppp.cup_emptyconstructs and re.fullmatch(
-                re.escape(start_result + starttag) + r"\s*", self.result
-            ):
-                self.result = start_result
-            else:
-                self.result += endtag
-            self.__shell.pop()
+                self.__shell.append(self.AccumulatedShell("at", (weight_kind, weight_str)))
+                if weight_kind == 1:
+                    starttag = "["
+                    self.result += starttag
+                    self.__visit(current_tree)
+                    endtag = "]"
+                elif weight_kind == 2:
+                    starttag = "("
+                    self.result += starttag
+                    self.__visit(current_tree)
+                    endtag = ")"
+                else:  # weight_kind == 3
+                    starttag = "("
+                    self.result += starttag
+                    self.__visit(current_tree)
+                    endtag = f":{weight_str})"
+                if self.__ppp.cup_emptyconstructs and re.fullmatch(
+                    re.escape(start_result + starttag) + r"\s*", self.result
+                ):
+                    self.result = start_result
+                else:
+                    self.result += endtag
+                self.__shell.pop()
             t2 = time.monotonic_ns()
             self.__debug_end("attention", start_result, t2 - t1, weight_str)
 
@@ -2285,6 +2384,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.result = ""
             t1 = time.monotonic_ns()
             self.__visit(tree.children)
+            attention_processing = self.__ppp.host_config.get("attention", "ok")
             # process the found negative tags
             for negtag in self.__negtags:
                 if self.__ppp.cup_mergeattention:
@@ -2296,12 +2396,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 / 100
                             )
                             new_weight_str = f"{new_weight:.2f}".rstrip("0").rstrip(".")
-                            if new_weight_str == "0.9" and not self.__ppp.is_comfy_ui():
-                                new_kind = 0
-                            elif new_weight_str == "1.1":
+                            if new_weight_str == "0.9" and attention_processing != "parentheses":
                                 new_kind = 1
-                            else:
+                            elif new_weight_str == "1.1":
                                 new_kind = 2
+                            else:
+                                new_kind = 3
                             negtag.shell[i - 1] = self.AccumulatedShell(
                                 "at",
                                 (new_kind, new_weight_str),
@@ -2312,13 +2412,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 for s in negtag.shell:
                     match s.type:
                         case "at":
-                            if s.data[0] == 0:
+                            if s.data[0] == 1:
                                 start += "["
                                 end = "]" + end
-                            elif s.data[0] == 1:
+                            elif s.data[0] == 2:
                                 start += "("
                                 end = ")" + end
-                            else:
+                            else:  # 3
                                 start += "("
                                 end = f":{s.data[1]})" + end
                         # case "sc":
