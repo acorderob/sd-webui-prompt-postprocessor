@@ -10,14 +10,29 @@ import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from .ppp_comfyui import PromptPostProcessorComfyUINode, PromptPostProcessorSelectVariableComfyUINode
+from .ppp_comfyui import (
+    PromptPostProcessorComfyUINode,
+    PromptPostProcessorWildcardOptionsComfyUINode,
+    PromptPostProcessorENMappingOptionsComfyUINode,
+    PromptPostProcessorSTNOptionsComfyUINode,
+    PromptPostProcessorCleanupOptionsComfyUINode,
+    PromptPostProcessorSelectVariableComfyUINode,
+)
 
 NODE_CLASS_MAPPINGS = {
     "ACBPromptPostProcessor": PromptPostProcessorComfyUINode,
+    "ACBPPPWildcardOptions": PromptPostProcessorWildcardOptionsComfyUINode,
+    "ACBPPPENMappingOptions": PromptPostProcessorENMappingOptionsComfyUINode,
+    "ACBPPPSendToNegativeOptions": PromptPostProcessorSTNOptionsComfyUINode,
+    "ACBPPPCleanupOptions": PromptPostProcessorCleanupOptionsComfyUINode,
     "ACBPPPSelectVariable": PromptPostProcessorSelectVariableComfyUINode,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ACBPromptPostProcessor": "ACB Prompt Post Processor",
+    "ACBPPPWildcardOptions": "ACB PPP Wildcard Options",
+    "ACBPPPENMappingOptions": "ACB PPP ExtraNetwork Mapping Options",
+    "ACBPPPSendToNegativeOptions": "ACB PPP Send-To-Negative Options",
+    "ACBPPPCleanupOptions": "ACB PPP Cleanup Options",
     "ACBPPPSelectVariable": "ACB PPP Select Variable",
 }
 

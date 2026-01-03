@@ -68,9 +68,28 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         warn = "warn"
         stop = "stop"
 
+    DEFAULT_DEBUG_LEVEL = DEBUG_LEVEL.minimal.value
+    DEFAULT_ONWARNING = ONWARNING_CHOICES.warn.value
     DEFAULT_STN_SEPARATOR = ", "
+    DEFAULT_STN_IGNORE_REPEATS = True
     DEFAULT_VARIANTS_DEFINITIONS = "pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,illust,ilxl"
+    DEFAULT_WC_PROCESS = True
+    DEFAULT_IF_WILDCARDS = IFWILDCARDS_CHOICES.stop.value
     DEFAULT_CHOICE_SEPARATOR = ", "
+    DEFAULT_KEEP_CHOICES_ORDER = True
+    DEFAULT_DO_CLEANUP = (True,)
+    DEFAULT_CUP_EXTRA_SPACES = True
+    DEFAULT_CUP_EMPTY_CONSTRUCTS = True
+    DEFAULT_CUP_EXTRA_SEPARATORS = True
+    DEFAULT_CUP_EXTRA_SEPARATORS2 = True
+    DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL = False
+    DEFAULT_CUP_BREAKS = False
+    DEFAULT_CUP_BREAKS_EOL = False
+    DEFAULT_CUP_ANDS = False
+    DEFAULT_CUP_ANDS_EOL = False
+    DEFAULT_CUP_EXTRANETWORK_TAGS = False
+    DEFAULT_CUP_MERGE_ATTENTION = True
+    DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS = False
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
@@ -116,8 +135,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.extranetwork_mappings_obj = extranetwork_mappings_obj
 
         # General options
-        self.debug_level = DEBUG_LEVEL(options.get("debug_level", DEBUG_LEVEL.none.value))
-        self.gen_onwarning = self.ONWARNING_CHOICES(options.get("on_warning", self.ONWARNING_CHOICES.warn.value))
+        self.debug_level = DEBUG_LEVEL(options.get("debug_level", self.DEFAULT_DEBUG_LEVEL))
+        self.gen_onwarning = self.ONWARNING_CHOICES(options.get("on_warning", self.DEFAULT_ONWARNING))
         variants_definitions_option = str(options.get("variants_definitions", self.DEFAULT_VARIANTS_DEFINITIONS))
         self.variants_definitions = {}
         if variants_definitions_option:
@@ -138,29 +157,43 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             [element.strip() for element in elements.split(",")],
                         )
         # Wildcards options
-        self.wil_process_wildcards = options.get("process_wildcards", True)
-        self.wil_keep_choices_order = options.get("keep_choices_order", False)
+        self.wil_process_wildcards = options.get("process_wildcards", self.DEFAULT_WC_PROCESS)
+        self.wil_keep_choices_order = options.get("keep_choices_order", self.DEFAULT_KEEP_CHOICES_ORDER)
         self.wil_choice_separator = options.get("choice_separator", self.DEFAULT_CHOICE_SEPARATOR)
-        self.wil_ifwildcards = self.IFWILDCARDS_CHOICES(
-            options.get("if_wildcards", self.IFWILDCARDS_CHOICES.stop.value)
-        )
+        self.wil_ifwildcards = self.IFWILDCARDS_CHOICES(options.get("if_wildcards", self.DEFAULT_IF_WILDCARDS))
         # Send to negative options
-        self.stn_ignore_repeats = options.get("stn_ignore_repeats", True)
+        self.stn_ignore_repeats = options.get("stn_ignore_repeats", self.DEFAULT_STN_IGNORE_REPEATS)
         self.stn_separator = options.get("stn_separator", self.DEFAULT_STN_SEPARATOR)
-        # Cleanup options
-        self.cup_extraspaces = options.get("cleanup_extra_spaces", True)
-        self.cup_emptyconstructs = options.get("cleanup_empty_constructs", True)
-        self.cup_extraseparators = options.get("cleanup_extra_separators", True)
-        self.cup_extraseparators2 = options.get("cleanup_extra_separators2", True)
-        self.cup_extraseparators_include_eol = options.get("cleanup_extra_separators_include_eol", False)
-        self.cup_breaks = options.get("cleanup_breaks", True)
-        self.cup_breaks_eol = options.get("cleanup_breaks_eol", False)
-        self.cup_ands = options.get("cleanup_ands", True)
-        self.cup_ands_eol = options.get("cleanup_ands_eol", False)
-        self.cup_extranetworktags = options.get("cleanup_extranetwork_tags", False)
-        self.cup_mergeattention = options.get("cleanup_merge_attention", True)
-        # Remove options
-        self.rem_removeextranetworktags = options.get("remove_extranetwork_tags", False)
+        # Cleanup and remove options
+        self.cup_do_cleanup = options.get("do_cleanup", self.DEFAULT_DO_CLEANUP)
+        self.cup_extraspaces = self.cup_do_cleanup and options.get(
+            "cleanup_extra_spaces", self.DEFAULT_CUP_EXTRA_SPACES
+        )
+        self.cup_emptyconstructs = self.cup_do_cleanup and options.get(
+            "cleanup_empty_constructs", self.DEFAULT_CUP_EMPTY_CONSTRUCTS
+        )
+        self.cup_extraseparators = self.cup_do_cleanup and options.get(
+            "cleanup_extra_separators", self.DEFAULT_CUP_EXTRA_SEPARATORS
+        )
+        self.cup_extraseparators2 = self.cup_do_cleanup and options.get(
+            "cleanup_extra_separators2", self.DEFAULT_CUP_EXTRA_SEPARATORS2
+        )
+        self.cup_extraseparators_include_eol = self.cup_do_cleanup and options.get(
+            "cleanup_extra_separators_include_eol", self.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL
+        )
+        self.cup_breaks = self.cup_do_cleanup and options.get("cleanup_breaks", self.DEFAULT_CUP_BREAKS)
+        self.cup_breaks_eol = self.cup_do_cleanup and options.get("cleanup_breaks_eol", self.DEFAULT_CUP_BREAKS_EOL)
+        self.cup_ands = self.cup_do_cleanup and options.get("cleanup_ands", self.DEFAULT_CUP_ANDS)
+        self.cup_ands_eol = self.cup_do_cleanup and options.get("cleanup_ands_eol", self.DEFAULT_CUP_ANDS_EOL)
+        self.cup_extranetworktags = self.cup_do_cleanup and options.get(
+            "cleanup_extranetwork_tags", self.DEFAULT_CUP_EXTRANETWORK_TAGS
+        )
+        self.cup_mergeattention = self.cup_do_cleanup and options.get(
+            "cleanup_merge_attention", self.DEFAULT_CUP_MERGE_ATTENTION
+        )
+        self.rem_removeextranetworktags = self.cup_do_cleanup and options.get(
+            "remove_extranetwork_tags", self.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
+        )
 
         # if self.debug_level != DEBUG_LEVEL.none:
         #    self.logger.info(f"Detected environment info: {env_info}")
@@ -1381,7 +1414,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
-            if self.__ppp.cup_emptyconstructs and re.fullmatch(re.escape(start_result + starttag) + r"\s*", self.result):
+            if self.__ppp.cup_emptyconstructs and re.fullmatch(
+                re.escape(start_result + starttag) + r"\s*", self.result
+            ):
                 self.result = start_result
             else:
                 self.result += endtag

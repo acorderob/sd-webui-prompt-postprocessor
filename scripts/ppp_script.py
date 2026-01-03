@@ -307,29 +307,50 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if f.strip() != ""
         ]
         options = {
-            "debug_level": getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value),
-            "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.ONWARNING_CHOICES.warn.value),
+            "debug_level": getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL),
+            "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ONWARNING),
             "variants_definitions": getattr(
                 opts, "ppp_gen_variantsdefinitions", PromptPostProcessor.DEFAULT_VARIANTS_DEFINITIONS
             ),
-            "process_wildcards": getattr(opts, "ppp_wil_processwildcards", True),
-            "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value),
+            "process_wildcards": getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_WC_PROCESS),
+            "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS),
             "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
-            "keep_choices_order": getattr(opts, "ppp_wil_keep_choices_order", False),
+            "keep_choices_order": getattr(
+                opts, "ppp_wil_keep_choices_order", PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
+            ),
             "stn_separator": getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),
-            "stn_ignore_repeats": getattr(opts, "ppp_stn_ignorerepeats", True),
-            "cleanup_extra_spaces": getattr(opts, "ppp_cup_extraspaces", True),
-            "cleanup_empty_constructs": getattr(opts, "ppp_cup_emptyconstructs", True),
-            "cleanup_extra_separators": getattr(opts, "ppp_cup_extraseparators", True),
-            "cleanup_extra_separators2": getattr(opts, "ppp_cup_extraseparators2", True),
-            "cleanup_extra_separators_include_eol": getattr(opts, "ppp_cup_extraseparators_include_eol", True),
-            "cleanup_breaks": getattr(opts, "ppp_cup_breaks", True),
-            "cleanup_breaks_eol": getattr(opts, "ppp_cup_breaks_eol", False),
-            "cleanup_ands": getattr(opts, "ppp_cup_ands", True),
-            "cleanup_ands_eol": getattr(opts, "ppp_cup_ands_eol", False),
-            "cleanup_extranetwork_tags": getattr(opts, "ppp_cup_extranetworktags", False),
-            "cleanup_merge_attention": getattr(opts, "ppp_cup_mergeattention", True),
-            "remove_extranetwork_tags": getattr(opts, "ppp_rem_removeextranetworktags", False),
+            "stn_ignore_repeats": getattr(
+                opts, "ppp_stn_ignorerepeats", PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS
+            ),
+            "do_cleanup": True,
+            "cleanup_extra_spaces": getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
+            "cleanup_empty_constructs": getattr(
+                opts, "ppp_cup_emptyconstructs", PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
+            ),
+            "cleanup_extra_separators": getattr(
+                opts, "ppp_cup_extraseparators", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
+            ),
+            "cleanup_extra_separators2": getattr(
+                opts, "ppp_cup_extraseparators2", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
+            ),
+            "cleanup_extra_separators_include_eol": getattr(
+                opts,
+                "ppp_cup_extraseparators_include_eol",
+                PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL,
+            ),
+            "cleanup_breaks": getattr(opts, "ppp_cup_breaks", PromptPostProcessor.DEFAULT_CUP_BREAKS),
+            "cleanup_breaks_eol": getattr(opts, "ppp_cup_breaks_eol", PromptPostProcessor.DEFAULT_CUP_BREAKS_EOL),
+            "cleanup_ands": getattr(opts, "ppp_cup_ands", PromptPostProcessor.DEFAULT_CUP_ANDS),
+            "cleanup_ands_eol": getattr(opts, "ppp_cup_ands_eol", PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
+            "cleanup_extranetwork_tags": getattr(
+                opts, "ppp_cup_extranetworktags", PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
+            ),
+            "cleanup_merge_attention": getattr(
+                opts, "ppp_cup_mergeattention", PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION
+            ),
+            "remove_extranetwork_tags": getattr(
+                opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
+            ),
         }
         hash_options = hash(tuple(sorted(options.items())))
         self.wildcards_obj.refresh_wildcards(
