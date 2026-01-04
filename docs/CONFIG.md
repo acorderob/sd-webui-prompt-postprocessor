@@ -23,6 +23,7 @@ The model variants now support regular expressions instead of a list of strings 
 * **on_warnings**: Warn on the console or stop the generation.
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
+* **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.

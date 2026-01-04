@@ -320,6 +320,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 opts, "ppp_stn_ignorerepeats", PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS
             ),
             "do_cleanup": True,
+            "cleanup_variables": True,
             "cleanup_extra_spaces": getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
             "cleanup_empty_constructs": getattr(
                 opts, "ppp_cup_emptyconstructs", PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS

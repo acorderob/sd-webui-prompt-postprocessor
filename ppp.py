@@ -77,7 +77,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_IF_WILDCARDS = IFWILDCARDS_CHOICES.stop.value
     DEFAULT_CHOICE_SEPARATOR = ", "
     DEFAULT_KEEP_CHOICES_ORDER = True
-    DEFAULT_DO_CLEANUP = (True,)
+    DEFAULT_DO_CLEANUP = True
+    DEFAULT_CLEANUP_VARIABLES = True
     DEFAULT_CUP_EXTRA_SPACES = True
     DEFAULT_CUP_EMPTY_CONSTRUCTS = True
     DEFAULT_CUP_EXTRA_SEPARATORS = True
@@ -187,6 +188,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.stn_separator = options.get("stn_separator", self.DEFAULT_STN_SEPARATOR)
         # Cleanup and remove options
         self.cup_do_cleanup = options.get("do_cleanup", self.DEFAULT_DO_CLEANUP)
+        self.cup_cleanup_variables = options.get("cleanup_variables", self.DEFAULT_CLEANUP_VARIABLES)
         self.cup_extraspaces = self.cup_do_cleanup and options.get(
             "cleanup_extra_spaces", self.DEFAULT_CUP_EXTRA_SPACES
         )
@@ -570,24 +572,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = self.stn_separator.join(add_at_end)
         return negative_prompt
 
-    def __cleanup(self, text: str, is_negative: bool) -> str:
+    def __cleanup(self, text: str, where: int = 0) -> str:
         """
         Trims the given text based on the specified cleanup options.
 
         Args:
             text (str): The text to be cleaned up.
-            is_negative (bool): Indicates if the text is a negative prompt.
+            where (int): Indicates the context or position for cleanup (0=generic, -1=negative prompt, 1=positive prompt).
 
         Returns:
             str: The resulting text.
         """
-        escapedSeparator = re.escape(self.stn_separator)
-        optwhitespace = r"\s*" if self.cup_extraseparators_include_eol else r"[ \t\v\f]*"
-        optwhitespace_separator = optwhitespace + escapedSeparator + optwhitespace
-        optwhitespace_comma = optwhitespace + "," + optwhitespace
-        sep_options = [(optwhitespace_separator, self.stn_separator)]  # sendtonegative separator
-        if optwhitespace_comma != optwhitespace_separator:
-            sep_options.append((optwhitespace_comma, ", "))  # regular comma separator
         break_processing = self.host_config.get("break", "ok")
         # break_processing == "ok" (and always)
         if self.cup_breaks_eol:
@@ -609,7 +604,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             # remove at start of prompt
             text = re.sub(r"\A(?:\s*BREAK\b\s*)+", "", text)
             # remove at end of prompt
-            text = re.sub(r"(?:\s*\bBREAK\s*)+\Z", "", text)        
+            text = re.sub(r"(?:\s*\bBREAK\s*)+\Z", "", text)
         if break_processing == "eol":
             text2 = re.sub(r"\b\s*BREAK\s*\b", "\n", text)
             if text2 != text:
@@ -624,7 +619,29 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.logger.debug("BREAK construct removed")
         elif break_processing == "error":
             if re.search(r"\bBREAK\b", text):
-                self.warn_or_stop(is_negative, "BREAK constructs are not allowed!")
+                self.warn_or_stop(where == -1, "BREAK constructs are not allowed!")
+
+        if self.cup_ands:
+            # collapse ANDs with space after
+            text = re.sub(r"\bAND(?:\s+AND)+\s+", "AND ", text)
+            # collapse ANDs without space after
+            text = re.sub(r"\bAND(?:\s+AND)+\b", "AND", text)
+            # collapse separators and spaces before ANDs
+            text = re.sub(r"[, ]+AND\b", " AND", text)
+            # collapse separators and spaces after ANDs
+            text = re.sub(r"\bAND[, ]+", "AND ", text)
+            # remove at start of prompt
+            text = re.sub(r"\A(?:AND\b\s*)+", "", text)
+            # remove at end of prompt
+            text = re.sub(r"(\s*\bAND)+\Z", "", text)
+
+        escapedSeparator = re.escape(self.stn_separator)
+        optwhitespace = r"\s*" if self.cup_extraseparators_include_eol else r"[ \t\v\f]*"
+        optwhitespace_separator = optwhitespace + escapedSeparator + optwhitespace
+        optwhitespace_comma = optwhitespace + "," + optwhitespace
+        sep_options = [(optwhitespace_separator, self.stn_separator)]  # sendtonegative separator
+        if optwhitespace_comma != optwhitespace_separator:
+            sep_options.append((optwhitespace_comma, ", "))  # regular comma separator
         for sep, replacement in sep_options:
             if self.cup_extraseparators:
                 # collapse separators
@@ -646,19 +663,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 text = re.sub(r"^(?:" + sep + r")+", "", text, flags=re.MULTILINE)
                 # remove at end of prompt or line
                 text = re.sub(r"(?:" + sep + r")+$", "", text, flags=re.MULTILINE)
-        if self.cup_ands:
-            # collapse ANDs with space after
-            text = re.sub(r"\bAND(?:\s+AND)+\s+", "AND ", text)
-            # collapse ANDs without space after
-            text = re.sub(r"\bAND(?:\s+AND)+\b", "AND", text)
-            # collapse separators and spaces before ANDs
-            text = re.sub(r"[, ]+AND\b", " AND", text)
-            # collapse separators and spaces after ANDs
-            text = re.sub(r"\bAND[, ]+", "AND ", text)
-            # remove at start of prompt
-            text = re.sub(r"\A(?:AND\b\s*)+", "", text)
-            # remove at end of prompt
-            text = re.sub(r"(\s*\bAND)+\Z", "", text)
         if self.cup_extranetworktags:
             # remove spaces before <
             text = re.sub(r"\B\s+<(?!!)", "<", text)
@@ -682,6 +686,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = re.sub(r"[ ]{2,}", " ", text)
             # remove spaces at start and end
             text = text.strip()
+
         return text
 
     def __get_best_parser(self, prompt: str) -> tuple[lark.Lark, str]:
@@ -778,6 +783,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
         negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
 
+        # Complete variables
         var_keys = set(self.user_variables.keys()).union(set(self.echoed_variables.keys()))
         for k in var_keys:
             ev = self.echoed_variables.get(k)
@@ -787,7 +793,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if self.debug_level == DEBUG_LEVEL.full:
                     self.logger.debug(self.format_output(f"Completing variable: {k}"))
                 ev = p_processor.get_final_user_variable(k)
-            all_variables[k] = ev
+            all_variables[k] = self.__cleanup(ev, 0) if self.cup_cleanup_variables else ev
         if self.debug_level == DEBUG_LEVEL.full:
             self.logger.debug(self.format_output(f"All variables: {all_variables}"))
 
@@ -804,8 +810,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             negative_prompt = self.__add_to_end(negative_prompt, p_processor.add_at["end"])
 
         # Clean up
-        prompt = self.__cleanup(prompt, False)
-        negative_prompt = self.__cleanup(negative_prompt, True)
+        prompt = self.__cleanup(prompt, 1)
+        negative_prompt = self.__cleanup(negative_prompt, -1)
 
         # Check for wildcards not processed
         foundP = bool(p_processor.detectedWildcards)

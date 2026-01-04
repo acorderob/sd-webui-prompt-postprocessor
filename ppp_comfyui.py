@@ -115,6 +115,15 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "cleanup_variables": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_CLEANUP_VARIABLES,
+                        "tooltip": "Do a cleanup of the output variables",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "wc_options": (
                     "PPP_OPTIONS_WC",
                     {
@@ -186,6 +195,7 @@ class PromptPostProcessorComfyUINode:
         on_warnings,
         process_wildcards,
         do_cleanup,
+        cleanup_variables,
         wc_options,
         stn_options,
         cup_options,
@@ -204,6 +214,7 @@ class PromptPostProcessorComfyUINode:
         on_warnings,
         process_wildcards,
         do_cleanup,
+        cleanup_variables,
         wc_options,
         stn_options,
         cup_options,
@@ -297,6 +308,7 @@ class PromptPostProcessorComfyUINode:
                 stn_options["stn_ignore_repeats"] if stn_options else PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS
             ),
             "do_cleanup": do_cleanup,
+            "cleanup_variables": cleanup_variables,
             "cleanup_extra_spaces": (
                 cup_options["cup_extra_spaces"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES
             ),
