@@ -96,13 +96,31 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
     INVALID_CONTENT_STOP = "INVALID CONTENT! {0}\nBREAK "
 
-    SUPPORTED_MODELS = [
-        "sd1",
-        "sd2",
-        "sdxl",
-        "sd3",
-        "flux",
-        "auraflow",
+    KNOWN_MODELS = [
+        "sd1",  # Stable Diffusion 1
+        "sd2",  # Stable Diffusion 2
+        "ssd",  # Segmind Stable Diffusion 1B
+        "sdxl",  # Stable Diffusion XL
+        "sd3",  # Stable Diffusion 3
+        "flux",  # Flux 1
+        "auraflow",  # AuraFlow
+        "pixart",  # PixArt
+        "lumina2",  # Lumina2 & ZImage
+        "ltxv",  # LTXV
+        "cosmos",  # Cosmos
+        "cosmospredict2",  # CosmosPredict2
+        "genmomochi",  # GenmoMochi
+        "hunyuan",  # Hunyuan
+        "hunyuanvideo",  # HunyuanVideo
+        "hunyuan3d",  # Hunyuan3D
+        "wan",  # Wan21 & Wan22
+        "hidream",  # HiDream
+        "qwenimage",  # QwenImage & QwenImageEdit
+        "chroma",  # Chroma
+        "omnigen2",  # Omnigen 2
+        "flux2",  # Flux 2
+        "kandinsky5",  # Kandinsky 5
+        "anima",  # Anima
     ]
 
     def __init__(
@@ -173,7 +191,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.gen_onwarning = self.ONWARNING_CHOICES(options.get("on_warning", self.DEFAULT_ONWARNING))
         self.variants_definitions = {
             v: (m, [vo["find_in_filename"]] if isinstance(vo["find_in_filename"], str) else vo["find_in_filename"])
-            for m in self.SUPPORTED_MODELS
+            for m in self.KNOWN_MODELS
             for v, vo in (((self.config.get("models") or {}).get(m) or {}).get("variants") or {}).items()
         }
         if self.debug_level != DEBUG_LEVEL.none:
@@ -458,9 +476,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Initializes the system variables.
         """
         self.system_variables = {}
-        sdchecks = {x: self.env_info.get("is_" + x, False) for x in self.SUPPORTED_MODELS}
+        sdchecks = {x: self.env_info.get("is_" + x, False) for x in self.KNOWN_MODELS}
         sdchecks.update({"": True})
-        self.system_variables["_model"] = [k for k, v in sdchecks.items() if v][0]
+        self.system_variables["_model"] = next((k for k, v in sdchecks.items() if v), "")
         self.system_variables["_sd"] = self.system_variables["_model"]  # deprecated
         model_filename = self.env_info.get("model_filename", "")
         self.system_variables["_sdfullname"] = model_filename  # deprecated
@@ -472,7 +490,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             model_name: (model_type_and_substrings[0] == "" or sdchecks.get(model_type_and_substrings[0], False))
             and any((re.search(s, model_filename, re.IGNORECASE) is not None) for s in model_type_and_substrings[1])
             for model_name, model_type_and_substrings in self.variants_definitions.items()
-            if model_name not in self.SUPPORTED_MODELS
+            if model_name not in self.KNOWN_MODELS
         }
         is_models_true = [k for k, v in is_models.items() if v]
         if len(is_models_true) > 1:
@@ -605,18 +623,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = re.sub(r"\A(?:\s*BREAK\b\s*)+", "", text)
             # remove at end of prompt
             text = re.sub(r"(?:\s*\bBREAK\s*)+\Z", "", text)
-        if break_processing == "eol":
-            text2 = re.sub(r"\b\s*BREAK\s*\b", "\n", text)
+        break_replacements = {
+            "eol": ("replaced with EOL", "\n"),
+            "comma": ("replaced with COMMA", ", "),
+            "remove": ("removed", " "),
+        }
+        if break_processing in break_replacements.keys():
+            text2 = re.sub(r"\b\s*BREAK\s*\b", break_replacements[break_processing][1], text)
             if text2 != text:
                 text = text2
                 if self.debug_level == DEBUG_LEVEL.full:
-                    self.logger.debug("BREAK construct replaced with EOL")
-        elif break_processing == "remove":
-            text2 = re.sub(r"\b\s*BREAK\s*\b", " ", text)
-            if text2 != text:
-                text = text2
-                if self.debug_level == DEBUG_LEVEL.full:
-                    self.logger.debug("BREAK construct removed")
+                    self.logger.debug(f"BREAK construct {break_replacements[break_processing][0]}")
         elif break_processing == "error":
             if re.search(r"\bBREAK\b", text):
                 self.warn_or_stop(where == -1, "BREAK constructs are not allowed!")
@@ -646,15 +663,23 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.cup_extraseparators:
                 # collapse separators
                 text = re.sub(r"(?:" + sep + r"){2,}", replacement, text)
-                # remove separator after starting parenthesis or bracket
+                # remove separator after starting parenthesis, starting bracket
                 text = re.sub(
-                    r"(" + sep + r"[([])(?:" + sep + r")+",
+                    # r"(" + sep + r"[([]\s*)(?:" + sep + r")+",
+                    r"([([]\s*)(?:" + sep + r")+",
                     r"\1",
                     text,
                 )
-                # remove before colon or ending parenthesis or bracket
+                # remove separator before ending parenthesis, ending bracket
                 text = re.sub(
-                    r"(?:" + sep + r")+([:)\]]" + sep + r")",
+                    # r"(?:" + sep + r")+(\s*[:)\]]" + sep + r")",
+                    r"(?:" + sep + r")+(\s*[)\]])",
+                    r"\1",
+                    text,
+                )
+                # remove separator before colon
+                text = re.sub(
+                    r"(?:" + sep + r")+(\s*:" + sep + r")",
                     r"\1",
                     text,
                 )
@@ -1310,19 +1335,22 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__visit(tree.children[0])
             and_processing = self.__ppp.host_config.get("and", "ok")
             if len(tree.children) > 1:
+                and_replacements = {
+                    "eol": ("replaced with EOL", "\n"),
+                    "comma": ("replaced with COMMA", ", "),
+                    "remove": ("removed", " "),
+                }
                 if tree.children[1] is not None:
                     self.result += f":{tree.children[1]}"
                 for i in range(2, len(tree.children), 3):
-                    if and_processing == "eol":
+                    if and_processing in and_replacements.keys():
                         self.result = (
-                            self.result.rstrip() + "\n" + self.__visit(tree.children[i + 1], False, True).lstrip()
+                            self.result.rstrip()
+                            + and_replacements[and_processing][1]
+                            + self.__visit(tree.children[i + 1], False, True).lstrip()
                         )
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug("AND construct replaced with EOL")
-                    elif and_processing == "remove":
-                        self.result += self.__visit(tree.children[i + 1], False, True)
-                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug("AND construct removed")
+                            self.__ppp.logger.debug(f"AND construct {and_replacements[and_processing][0]}")
                     elif and_processing == "error":
                         self.warn_or_stop("AND constructs are not allowed!")
                     else:  # and_processing == "ok":
@@ -1670,6 +1698,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.result += v
                 else:
                     self.warn_or_stop(f"Unknown variable {variable}")
+            else:
+                self.__ppp.echoed_variables[variable] = value
             t2 = time.monotonic_ns()
             info = variable
             if default is not None:
@@ -1848,6 +1878,34 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         self.result += ", "
             t2 = time.monotonic_ns()
             self.__debug_end("commandext", start_result, t2 - t1, extnet)
+
+        def commandsetwcdeffilter(self, tree: lark.Tree):
+            """
+            Process a setwcdeffilter (Set Wildcard Default Filter) command in the tree.
+            """
+            t1 = time.monotonic_ns()
+            start_result = self.result
+            wildcard_key: str = self.__visit(tree.children[0].children[1], False, True)
+            selected_wildcards = [x.key for x in self.__ppp.wildcard_obj.get_wildcards(wildcard_key)]
+            if not selected_wildcards:
+                self.warn_or_stop(f"Wildcard '{wildcard_key}' not found for default filter setting!")
+            else:
+                filter_object = tree.children[1].children[1] if tree.children[1] is not None else None
+                if filter_object is None:
+                    for wc in selected_wildcards:
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug(f"Removed default filter for wildcard '{wc}'")
+                        self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, None)
+                else:
+                    filter_specifier: list[list[str]] = [
+                        [str(label) for label in option.children] for option in filter_object.children
+                    ]
+                    for wc in selected_wildcards:
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug(f"Set default filter for wildcard '{wc}'")
+                        self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, filter_specifier)
+            t2 = time.monotonic_ns()
+            self.__debug_end("commandsetwcdeffilter", start_result, t2 - t1)
 
         def extranetworktag(self, tree: lark.Tree):
             """
@@ -2302,6 +2360,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Ignoring filter")
                         filter_specifier = None
+                else:
+                    filter_specifier = self.__ppp.wildcard_obj.get_wildcard_default_filter(wildcard_key)
+                    if filter_specifier is not None:
+                        self.__wildcard_filters[wildcard_key] = filter_specifier
+                        if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                            self.__ppp.logger.debug("Applying default filter")
                 if (
                     len(selected_wildcards) > 1
                     and filter_specifier is not None

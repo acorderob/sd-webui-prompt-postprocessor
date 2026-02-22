@@ -12,6 +12,21 @@ When a command is associated with any content, it will be between an opening and
 
 For wildcards and choices it uses the formats from the *Dynamic Prompts* extension, but sometimes with some additional options for extra functionality.
 
+## Special characters
+
+Remember that to use any special character (like parentheses, brackets or braces) as-is in the prompt (not as part of a construct), you need to escape them with a backslash. Like:
+
+```text
+velma \(from scooby doo\)
+```
+
+And inside a yaml/json file that backslash must be itself escaped again to be preserved.
+
+```yaml
+characters:
+  - velma \\(from scooby doo\\)
+```
+
 ## Choices
 
 The generic format is: `{parameters$$opt1::choice1|opt2::choice2|opt3::choice3}`
@@ -78,7 +93,12 @@ Wildcards cannot be used inside an extranetwork tag (because some lora names con
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double.
 
-The filter is a comma separated list of an integer (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). There are some additional formats when using filters. You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain. You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
+The filter is a comma separated list of an integer (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice).
+
+There are some additional formats when using filters.
+
+* You can specify `^wildcard` as a filter to use the filter of a previous wildcard in the chain.
+* You can start the filter (regular or inherited) with `#` and it will not be applied to the current wildcard choices, but the filter will remain in memory to use by other descendant wildcards. You use `#` and `^` when you want to pass a filter to inner wildcards (see the test files).
 
 ### Variable
 
@@ -131,7 +151,7 @@ It is recommended to use the object format for the wildcard parameters and for c
 
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
-A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples.
+A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples. Use an anonymous wildcard to group options inside a wildcard, and attach a label to it to be able to choose only from that group.
 
 Remember you can use the include command on choices to compose a wildcard from other wildcards' choices.
 
@@ -142,6 +162,19 @@ Wildcard definitions are reloaded automatically on each generation if they chang
 ### Detection of remaining wildcards
 
 This extension should run after any other wildcard extensions, so if you don't use the internal wildcards processing, any remaining wildcards present in the prompt or negative_prompt at this point must be invalid. Usually you might not notice this problem until you check the image metadata, so this option gives you some ways to detect and treat the problem.
+
+## Set Wildcard Default Filter command
+
+This command can be used to set a default filter for a wildcard, before it is used.
+
+The format is:
+
+| Construct                                     | Meaning            |
+| ---------                                     | -------            |
+| `<ppp:setwcdeffilter 'identifier' 'filter'/>` | Sets a filter      |
+| `<ppp:setwcdeffilter 'identifier'/>`          | Removes the filter |
+
+The wildcard identifier supports globbing. The filter does not allow the `^` or `#` flags.
 
 ## Set command
 
@@ -296,6 +329,8 @@ The extranetwork command supports specifying mappings of extranetworks (like LoR
 
 If the type of extranetwork is prefixed with a `$` the command will look for a mapping.
 
+If you have loras that do the same but for different models, create a mapping to group them, configuring there the weight and triggers for each one.
+
 The mappings are configured in yaml files in any of the configured extranetwork mappings folders. The format is like this:
 
 ```yaml
@@ -311,10 +346,10 @@ extnettype:
 
 Used like this:
 
-```text
-<ppp:ext $lora mappingname/>
-<ppp:ext $lora mappingname>inline triggers<ppp:/ext>
-```
+| Construct                                              | Meaning                              |
+| ---------                                              | -------                              |
+| `<ppp:ext $lora mappingname/>`                         | Mapping without additional triggers  |
+| `<ppp:ext $lora mappingname>inline triggers<ppp:/ext>` | Mapping with additional triggers     |
 
 Each mapping can have any number of elements in its list of mappings. There are no mandatory properties for a mapping. The properties mean the following:
 

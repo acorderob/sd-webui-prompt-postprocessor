@@ -127,28 +127,28 @@ class PromptPostProcessorComfyUINode:
                 "wc_options": (
                     "PPP_OPTIONS_WC",
                     {
-                        "forceInput": True,
+                        "default": None,
                         "tooltip": "Wildcard processing options",
                     },
                 ),
                 "stn_options": (
                     "PPP_OPTIONS_STN",
                     {
-                        "forceInput": True,
+                        "default": None,
                         "tooltip": "Send-To-Negative options",
                     },
                 ),
                 "cup_options": (
                     "PPP_OPTIONS_CUP",
                     {
-                        "forceInput": True,
+                        "default": None,
                         "tooltip": "Cleanup options",
                     },
                 ),
                 "en_options": (
                     "PPP_OPTIONS_EN",
                     {
-                        "forceInput": True,
+                        "default": None,
                         "tooltip": "ExtraNetworks mapping options",
                     },
                 ),
@@ -184,23 +184,7 @@ class PromptPostProcessorComfyUINode:
     CATEGORY = "ACB"
 
     @classmethod
-    def IS_CHANGED(
-        cls,
-        model,
-        modelname,
-        pos_prompt,
-        neg_prompt,
-        seed,
-        debug_level,
-        on_warnings,
-        process_wildcards,
-        do_cleanup,
-        cleanup_variables,
-        wc_options,
-        stn_options,
-        cup_options,
-        en_options,
-    ):  # pylint: disable=unused-argument
+    def IS_CHANGED(cls, **kwargs):  # pylint: disable=unused-argument
         return float("NaN")  # always process because we don't control the content of wildcards and the config file
 
     def process(
@@ -215,10 +199,10 @@ class PromptPostProcessorComfyUINode:
         process_wildcards,
         do_cleanup,
         cleanup_variables,
-        wc_options,
-        stn_options,
-        cup_options,
-        en_options,
+        wc_options=None,
+        stn_options=None,
+        cup_options=None,
+        en_options=None,
     ):
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
@@ -233,26 +217,60 @@ class PromptPostProcessorComfyUINode:
             "models_path": folder_paths.models_dir,
             "model_filename": modelname or "",  # path is relative to checkpoints folder
             "model_class": modelclass,
-            "is_sd1": modelclass in ("SD15", "SD15_instructpix2pix"),
-            "is_sd2": modelclass in ("SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"),
-            "is_sdxl": (
-                modelclass in ("SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B")
-            ),
-            "is_ssd": modelclass in ("SSD1B",),
-            "is_sd3": modelclass in ("SD3",),
-            "is_flux": modelclass in ("Flux", "FluxInpaint", "FluxSchnell"),
-            "is_auraflow": modelclass in ("AuraFlow",),
-            "is_pixart": modelclass in ("PixArtAlpha", "PixArtSigma"),
-            "is_lumina2": modelclass in ("Lumina2",),
-            "is_ltxv": modelclass in ("LTXV",),
-            "is_cosmos": modelclass in ("CosmosT2V", "CosmosI2V"),
-            "is_genmomochi": modelclass in ("GenmoMochi",),
-            "is_hunyuan": modelclass in ("HunyuanDiT", "HunyuanDiT1"),
-            "is_hunyuanvideo": modelclass in ("HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V"),
-            "is_hunyuan3d": modelclass in ("Hunyuan3Dv2", "Hunyuan3Dv2mini"),
-            "is_wanvideo": modelclass in ("WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V"),
-            "is_hidream": modelclass in ("HiDream",),
         }
+        env_info.update({"is_" + k: False for k in PromptPostProcessor.KNOWN_MODELS})
+        env_info.update(
+            {
+                "is_sd1": modelclass in ("SD15", "SD15_instructpix2pix"),
+                "is_sd2": modelclass in ("SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"),
+                "is_sdxl": (
+                    modelclass
+                    in ("SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B")
+                ),
+                "is_ssd": modelclass in ("SSD1B",),
+                "is_sd3": modelclass in ("SD3",),
+                "is_flux": modelclass in ("Flux", "FluxInpaint", "FluxSchnell"),
+                "is_auraflow": modelclass in ("AuraFlow",),
+                "is_pixart": modelclass in ("PixArtAlpha", "PixArtSigma"),
+                "is_lumina2": modelclass in ("Lumina2", "ZImage"),
+                "is_ltxv": modelclass in ("LTXV", "LTXAV"),
+                "is_cosmos": modelclass in ("CosmosT2V", "CosmosI2V"),
+                "is_cosmospredict2": modelclass in ("CosmosT2IPredict2", "CosmosI2VPredict2"),
+                "is_genmomochi": modelclass in ("GenmoMochi",),
+                "is_hunyuan": modelclass in ("HunyuanDiT", "HunyuanDiT1"),
+                "is_hunyuanvideo": modelclass
+                in (
+                    "HunyuanVideo",
+                    "HunyuanVideoI2V",
+                    "HunyuanVideoSkyreelsI2V",
+                    "HunyuanImage21",
+                    "HunyuanImage21Refiner",
+                    "HunyuanVideo15",
+                    "HunyuanVideo15_SR_Distilled",
+                ),
+                "is_hunyuan3d": modelclass in ("Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"),
+                "is_wan": modelclass
+                in (
+                    "WAN21_T2V",
+                    "WAN21_I2V",
+                    "WAN21_FunControl2V",
+                    "WAN21_Camera",
+                    "WAN22_Camera",
+                    "WAN21_Vace",
+                    "WAN21_HuMo",
+                    "WAN22_S2V",
+                    "WAN22_Animate",
+                    "WAN22_T2V",
+                ),
+                "is_hidream": modelclass in ("HiDream",),
+                "is_chroma": modelclass in ("Chroma", "ChromaRadiance"),
+                "is_omnigen2": modelclass in ("Omnigen2",),
+                "is_kandinsky5": modelclass in ("Kandinsky5", "Kandinsky5Image"),
+                "is_qwenimage": modelclass in ("QwenImage",),
+                "is_flux2": modelclass in ("Flux2"),
+                "is_anima": modelclass in ("Anima",),
+            }
+        )
         # Also supported: SVD_img2vid, SVD3D_u, SVD3_p, Stable_Zero123, SD_X4Upscaler, Stable_Cascade_C, Stable_Cascade_B, StableAudio
 
         wc_wildcards_folders = wc_options["wc_wildcards_folders"] if wc_options else ""

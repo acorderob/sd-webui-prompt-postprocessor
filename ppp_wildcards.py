@@ -57,6 +57,7 @@ class PPPWildcards:
         self.__debug_level = DEBUG_LEVEL.none
         self.__wildcards_folders = []
         self.__wildcard_files = {}
+        self.__wildcard_default_filters: dict[str, list[list[str]]] = {}
         self.wildcards: dict[str, PPPWildcard] = {}
 
     def __hash__(self) -> int:
@@ -378,7 +379,9 @@ class PPPWildcards:
                     if choices is None:
                         self.__logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
                     elif fullkey.startswith("_"):
-                        self.__logger.warning(f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)")
+                        self.__logger.warning(
+                            f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)"
+                        )
                     else:
                         self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
             return
@@ -399,7 +402,9 @@ class PPPWildcards:
             if choices is None:
                 self.__logger.warning(f"Invalid wildcard '{fullkey}' in file '{full_path}'!")
             elif fullkey.startswith("_"):
-                self.__logger.warning(f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)")
+                self.__logger.warning(
+                    f"Invalid wildcard name '{fullkey}' in file '{full_path}'! (cannot start with underscore)"
+                )
             else:
                 self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 
@@ -462,3 +467,28 @@ class PPPWildcards:
                 self.__get_wildcards_in_directory(base, full_path)
             elif os.path.isfile(full_path):
                 self.__get_wildcards_in_file(base, full_path)
+
+    def set_wildcard_default_filter(self, wildcard_key: str, filter_options: Optional[list[list[str]]]):
+        """
+        Set the default filter for a wildcard.
+
+        Args:
+            wildcard_key (str): The key of the wildcard.
+            filter_options (list[list[str]]): The filter options.
+        """
+        if filter_options is None:
+            if wildcard_key in self.__wildcard_default_filters:
+                del self.__wildcard_default_filters[wildcard_key]
+        else:
+            self.__wildcard_default_filters[wildcard_key] = filter_options
+
+    def get_wildcard_default_filter(self, wildcard_key: str) -> Optional[list[list[str]]]:
+        """
+        Get the default filter for a wildcard.
+
+        Args:
+            wildcard_key (str): The key of the wildcard.
+        Returns:
+            Optional[list[list[str]]]: The filter options or None if not set.
+        """
+        return self.__wildcard_default_filters.get(wildcard_key, None)

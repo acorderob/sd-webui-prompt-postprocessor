@@ -1,6 +1,6 @@
 # Prompt PostProcessor for Stable Diffusion WebUI and ComfyUI
 
-The Prompt PostProcessor (PPP), formerly known as "sd-webui-sendtonegative", is an extension designed to process the prompt, possibly after other extensions have modified it. This extension is compatible with:
+The Prompt PostProcessor (or PPP, formerly known as "sd-webui-sendtonegative"), is an extension designed to process the prompt in several ways. This extension is compatible with:
 
 * [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
 * [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
@@ -8,39 +8,51 @@ The Prompt PostProcessor (PPP), formerly known as "sd-webui-sendtonegative", is 
 * [reForge](https://github.com/Panchovix/stable-diffusion-webui-reForge)
 * ...and probably other forks
 
-Currently this extension has these functions:
+These are some features:
 
-* Sending parts of the prompt to the negative prompt. This allows for useful tricks when using wildcards since you can add negative content from choices made in the positive prompt.
+* Process wildcards. Compatible with the Dynamic Prompts extension.
+* Sending parts of the prompt to the negative prompt (the original function of the extension). This allows for useful tricks when using wildcards since you can add negative content from choices made in the positive prompt.
 * Set and modify local variables.
-* Filter content based on the loaded SD model or a variable.
-* Process wildcards. Compatible with Dynamic Prompts formats. Can also detect invalid wildcards and act as you choose.
-* Map extranetworks (LoRAs) depending on conditions (like the loaded model variant).
-* Clean up the prompt and negative prompt.
+* Define model variants (pony, illustrious, ...).
+* Filter content based on the loaded SD model/variant or a variable.
+* Map extranetworks (LoRAs) depending on conditions (like the loaded model variant). This allows you to add "virtual" loras to the prompt that will be translated to the correct one.
+* Clean up the prompt of unnecessary separators or spaces.
 
 Note: when used in an *A1111* compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension). Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out. When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
-If the extension runs before others, like Dynamic Prompts, and the "Process wildcards" is enabled, the wildcards will be processed by PPP and those extensions will not get them. If you disable processing the wildcards, and intend another extension to process them, you should keep the "What to do with remaining wildcards?" option as "ignore".
+If the extension runs before others, like Dynamic Prompts, and the "Process wildcards" option is enabled, the wildcards will be processed by PPP and those extensions will not get them. If you disable processing the wildcards, and you intend another extension to process them, you should keep the "What to do with remaining wildcards?" option as "ignore".
 
 Notes:
 
 1. Other than its own commands, it only recognizes regular *A1111* prompt formats. So:
 
+    * **Extra networks**: `<kind:model...>`
     * **Attention**: `[prompt] (prompt) (prompt:weight)`
     * **Alternation**: `[prompt1|prompt2|...]`
     * **Scheduling**: `[prompt1:prompt2:step]`
-    * **Extra networks**: `<kind:model...>`
     * **BREAK**: `prompt1 BREAK prompt2`
     * **Composable Diffusion**: `prompt1:weight1 AND prompt2:weight2`
+
+    *ComfyUI* only supports natively the attention using parentheses, so the ones with the brackets will be converted. The other constructs are not natively supported but some custom nodes implement them. For example:
+        [ComfyUI_smZNodes](https://github.com/shiimizu/ComfyUI_smZNodes)
+
+    I also recommend a node to add loras from the prompt, like:
+        [LoRA Tag Loader for ComfyUI](https://github.com/badjeff/comfyui_lora_tag_loader)
 
     In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
 
     Does not recognize tokenizer separators like `TE2:` and `TE3:`, so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
 
-    *ComfyUI* only supports natively the attention using parentheses, so the ones with the braces will be converted. The other constructs are not natively supported but some custom nodes implement them.
 2. It recognizes wildcards in the `__wildcard__` and {choice|choice} formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
 3. It does not create *AND/BREAK* constructs when moving content to the negative prompt.
 
 ## Installation
+
+On *ComfyUI*:
+
+1. Go to Manager > Custom Nodes Manager
+2. Search for "Prompt PostProcessor" and install or click Install via Git URL and enter <https://github.com/acorderob/sd-webui-prompt-postprocessor>
+3. Restart
 
 On *A1111* compatible webuis:
 
@@ -51,19 +63,13 @@ On *A1111* compatible webuis:
 
 On *SD.Next* I recommend you to disable the native wildcard processing and use the old UI.
 
-On *ComfyUI*:
+## Configuration
 
-1. Go to Manager > Custom Nodes Manager
-2. Search for "Prompt PostProcessor" and install or click Install via Git URL and enter <https://github.com/acorderob/sd-webui-prompt-postprocessor>
-3. Restart
+See the [configuration documentation](docs/CONFIG.md).
 
 ## Usage
 
 See the [syntax documentation](docs/SYNTAX.md).
-
-## Configuration
-
-See the [configuration documentation](docs/CONFIG.md).
 
 ## License
 
@@ -71,4 +77,4 @@ MIT
 
 ## Contact
 
-If you have any questions or concerns, please leave an issue, or start a thread in the discussions.
+If you have any questions or concerns, please start a thread in the discussions.

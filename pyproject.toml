@@ -8,8 +8,11 @@ dependencies = ["lark", "numpy", "pyyaml"]
 [project.urls]
 Repository = "https://github.com/acorderob/sd-webui-prompt-postprocessor"
 #  Used by Comfy Registry https://comfyregistry.org
+Documentation = "https://github.com/acorderob/sd-webui-prompt-postprocessor/main/README.md"
+"Bug Tracker" = "https://github.com/acorderob/sd-webui-prompt-postprocessor/issues"
 
 [tool.comfy]
 PublisherId = "acorderob"
-DisplayName = "sd-webui-prompt-postprocessor"
-Icon = "ppp_icon.png"
+#DisplayName = "sd-webui-prompt-postprocessor"
+DisplayName = "ACB Prompt PostProcessor"
+Icon = "https://raw.githubusercontent.com/acorderob/sd-webui-prompt-postprocessor/main/images/prompt-postprocessor-icon.png"

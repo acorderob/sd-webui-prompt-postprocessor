@@ -25,11 +25,13 @@ hosts: # Options for supported host applications
     #   and: how to handle "AND" operators
     #     - ok: leave as is
     #     - eol: replace with end-of-line (newline)
+    #     - comma: replace with comma
     #     - remove: remove the operator
     #     - error: raise an error
     #   break: how to handle "BREAK" operators
     #     - ok: leave as is
     #     - eol: replace with end-of-line (newline)
+    #     - comma: replace with comma
     #     - remove: remove the operator
     #     - error: raise an error
 
@@ -63,8 +65,8 @@ hosts: # Options for supported host applications
         # by default comfyui does not support scheduling, alternation, AND or BREAK operators, but you may be able to use them with a custom text encoder node
         scheduling: error
         alternation: error
-        and: remove
-        break: eol
+        and: comma
+        break: comma
 
 models: # Options for supported base models and variants
     sd1:

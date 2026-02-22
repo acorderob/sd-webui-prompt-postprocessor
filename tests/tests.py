@@ -50,6 +50,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             "keep_choices_order": False,
             "stn_separator": ", ",
             "stn_ignore_repeats": True,
+            "do_cleanup": True,
+            "cleanup_variables": True,
             "cleanup_empty_constructs": True,
             "cleanup_extra_separators": True,
             "cleanup_extra_separators2": True,
@@ -66,13 +68,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.def_env_info = {
             "app": "tests",
             "ppp_config": None,
-            "is_sd1": False,
-            "is_sd2": False,
             "is_sdxl": True,
-            "is_ssd": False,
-            "is_sd3": False,
-            "is_flux": False,
-            "is_auraflow": False,
             "model_class": "DiffusionEngine",
             "models_path": "./webui/models",
             "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
@@ -114,6 +110,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         seed: int = 1,
         ppp: Optional[str | PromptPostProcessor] = None,
         interrupted: bool = False,
+        variables: dict[str, str] | None = None,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
@@ -124,6 +121,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             seed (int, optional): The seed value. Defaults to 1.
             ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
             interrupted (bool, optional): The interrupted flag. Defaults to False.
+            variables (dict[str,str]|None, optional): Output variables to check. Defaults to None.
 
         Returns:
             None
@@ -136,6 +134,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     self.def_env_info,
                     {
                         **self.defopts,
+                        "do_cleanup": False,
+                        "cleanup_variables": False,
                         "cleanup_empty_constructs": False,
                         "cleanup_extra_separators": False,
                         "cleanup_extra_separators2": False,
@@ -184,15 +184,24 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             else expected_output_prompts if isinstance(expected_output_prompts, list) else [expected_output_prompts]
         )
         for eo in out:
-            result_prompt, result_negative_prompt, _ = the_obj.process_prompt(
+            result_prompt, result_negative_prompt, output_variables = the_obj.process_prompt(
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
             )
             self.assertEqual(self.interrupted, interrupted, "Interrupted flag is incorrect")
-            if not self.interrupted and expected_output_prompts is not None:
-                self.assertEqual(result_prompt, eo.prompt, "Incorrect prompt")
-                self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
+            if not self.interrupted:
+                if expected_output_prompts is not None:
+                    self.assertEqual(result_prompt, eo.prompt, "Incorrect prompt")
+                    self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
+                if variables is not None:
+                    for var_name, var_value in variables.items():
+                        self.assertIn(var_name, output_variables, f"Variable '{var_name}' not found in output variables")
+                        self.assertEqual(
+                            output_variables[var_name],
+                            var_value,
+                            f"Variable '{var_name}' has incorrect value",
+                        )
             seed += 1
 
 
@@ -566,6 +575,36 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             PromptPair("this test is OK", ""),
         )
 
+    def test_var_nested_1(self):  # variable default nested in variable set
+        self.process(
+            PromptPair(
+                "${v1=test ${v2:OK}}${v1}",
+                "",
+            ),
+            PromptPair("test OK", ""),
+            variables={"v1": "test OK", "v2": "OK"},
+        )
+
+    def test_var_nested_2(self):  # variable set nested in variable default
+        self.process(
+            PromptPair(
+                "${v1:test ${v2=OK}${v2}}",
+                "",
+            ),
+            PromptPair("test OK", ""),
+            variables={"v1": "test OK", "v2": "OK"},
+        )
+
+    def test_var_nested_3(self):  # variable default nested in variable default
+        self.process(
+            PromptPair(
+                "${v1:test ${v2:OK}}",
+                "",
+            ),
+            PromptPair("test OK", ""),
+            variables={"v1": "test OK", "v2": "OK"},
+        )
+
     def test_cmd_set_if2(self):  # set and more complex if commands
         self.process(
             PromptPair(
@@ -655,11 +694,11 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
     def test_cmd_ext(self):  # ext
         self.process(
             PromptPair(
-                "<ppp:ext lora lora1name if not _is_pony>trigger1<ppp:/ext><ppp:ext lora 'lora2 name' -0.8 if not _is_pony>trigger2<ppp:/ext><ppp:ext lora lora3__name '0.5:0.8' if not _is_pony><ppp:ext lora lora4name>trigger4<ppp:/ext>",
+                "<ppp:ext lora lora1name if not _is_pony>trigger1<ppp:/ext><ppp:ext lora 'lora2 name' -0.8 if not _is_pony>trigger2<ppp:/ext><ppp:ext lora lora3__name '0.5:0.8' if not _is_pony><ppp:ext lora lora4name>trigger4<ppp:/ext><ppp:ext lora \"lora5 (name)\" 1/>trigger5",
                 "",
             ),
             PromptPair(
-                "<lora:lora1name:1>trigger1,<lora:lora2 name:-0.8>trigger2,<lora:lora3__name:0.5:0.8><lora:lora4name:1>trigger4",
+                "<lora:lora1name:1>trigger1,<lora:lora2 name:-0.8>trigger2,<lora:lora3__name:0.5:0.8><lora:lora4name:1>trigger4,<lora:lora5 (name):1>trigger5",
                 "",
             ),
         )
@@ -1100,6 +1139,13 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
+    def test_wc_wildcard_default_filter(self):  # wildcard with default filter
+        self.process(
+            PromptPair("<ppp:setwcdeffilter 'yaml/wildcard2' 'label1+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__", ""),
+            PromptPair("the choice is: choice3-choice3, choice3-choice1- choice2 ", ""),
+            ppp="nocup",
+        )
+
     def test_wc_nested_wildcard_text(self):  # nested text wildcard with repeating multiple choices
         self.process(
             PromptPair("the choices are: __r3$$-$$text/wildcard3__", ""),
@@ -1507,6 +1553,27 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ),
         )
 
+    def test_host_and_comma(self):
+        self.process(
+            PromptPair(
+                "test1 AND test2:2",
+                "",
+            ),
+            PromptPair("test1, test2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"and": "comma"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
     def test_host_and_remove(self):
         self.process(
             PromptPair(
@@ -1563,6 +1630,27 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"break": "eol"}}},
+                },
+                self.defopts,
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_host_break_comma(self):
+        self.process(
+            PromptPair(
+                "test1 BREAK test2",
+                "",
+            ),
+            PromptPair("test1, test2", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                {
+                    **self.def_env_info,
+                    "ppp_config": {"hosts": {"tests": {"break": "comma"}}},
                 },
                 self.defopts,
                 self.grammar_content,

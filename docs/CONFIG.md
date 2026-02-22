@@ -15,7 +15,7 @@ The model variants now support regular expressions instead of a list of strings 
 ### ACB Prompt Post Processor node inputs
 
 * **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
-* **modelname**: Name of the model. Needed for the model name system variables and detection of pony (this also requieres for the model to be SDXL).
+* **modelname**: Name of the model. Needed for the detection of model variants.
 * **seed**: Connect here the seed used. By default it is -1 (random).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
@@ -37,7 +37,7 @@ The outputs are the final positive and negative prompt and a variables dictionar
 
 You can use the "**ACB PPP Select Variable**" node to choose one and output its value. You can use this to send only part of the prompt to, for example, a detailer node. For example:
 
-With this prompt: `__quality__, 1girl, ${head=!__eyes__, __hair__, __expression__}${head}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use `${head}` as prompt for the head/face detailer.
+With this prompt: `__quality__, 1girl, ${head:!__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use `${head}` as prompt for the head/face detailer.
 
 ### ACB PPP Wildcard Options node
 

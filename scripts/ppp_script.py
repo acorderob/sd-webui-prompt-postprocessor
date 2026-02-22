@@ -209,65 +209,37 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         if self.ppp_debug_level != DEBUG_LEVEL.none:
             self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})")
-        models_supported = {x: True for x in PromptPostProcessor.SUPPORTED_MODELS}
-        if app == SUPPORTED_APPS.sdnext:
-            models_supported["ssd"] = False
-        elif app == SUPPORTED_APPS.forge:
-            models_supported["ssd"] = False
-            models_supported["auraflow"] = False
-        elif app == SUPPORTED_APPS.reforge:
-            models_supported["flux"] = False
-            models_supported["auraflow"] = False
-        else:  # assume A1111 compatible
-            models_supported["flux"] = False
-            models_supported["auraflow"] = False
         env_info = {
             "app": app.value,
             "models_path": models_path,
             "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
             "model_class": "",
-            "is_sd1": False,  # Stable Diffusion 1
-            "is_sd2": False,  # Stable Diffusion 2
-            "is_sdxl": False,  # Stable Diffusion XL
-            "is_ssd": False,  # Segmind Stable Diffusion 1B
-            "is_sd3": False,  # Stable Diffusion 3
-            "is_flux": False,  # Flux
-            "is_auraflow": False,  # AuraFlow
-            "is_pixart": False,  # PixArt
-            "is_lumina2": False,  # Lumina2
-            "is_ltxv": False,  # LTXV
-            "is_cosmos": False,  # Cosmos
-            "is_genmomochi": False,  # GenmoMochi
-            "is_hunyuan": False,  # Hunyuan
-            "is_hunyuanvideo": False,  # HunyuanVideo
-            "is_hunyuan3d": False,  # Hunyuan3D
-            "is_wanvideo": False,  # WanVideo
-            "is_hidream": False,  # HiDream
         }
+        env_info.update({"is_" + k: False for k in PromptPostProcessor.KNOWN_MODELS})
         if app == SUPPORTED_APPS.sdnext:
-            # cannot differentiate SD1 and SD2, we set True to both
+            # cannot differentiate SD1 and SD2, we set both to True
             # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
             env_info["is_sd2"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
             env_info["is_sdxl"] = p.sd_model.__class__.__name__ == "StableDiffusionXLPipeline"
-            env_info["is_ssd"] = False  # ?
             env_info["is_sd3"] = p.sd_model.__class__.__name__ == "StableDiffusion3Pipeline"
             env_info["is_flux"] = p.sd_model.__class__.__name__ == "FluxPipeline"
             env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
-            # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'PixArt-Alpha': 'PixArtAlphaPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'AuraFlow': 'AuraFlowPipeline', 'CogView': 'CogView3PlusPipeline'
+            env_info["is_pixart"] = p.sd_model.__class__.__name__ == "PixArtAlphaPipeline"
+            # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'CogView': 'CogView3PlusPipeline'
         elif app == SUPPORTED_APPS.forge:
             # from repositories\huggingface_guess\huggingface_guess\model_list.py
             env_info["model_class"] = p.sd_model.model_config.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
             env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
             env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            env_info["is_ssd"] = False  # ?
+            # env_info["is_ssd"] = False  # ?
             env_info["is_sd3"] = getattr(
                 p.sd_model, "is_sd3", False
             )  # p.sd_model.model_config.__class__.__name__ == "SD3" # not actually supported?
             env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ in ("Flux", "FluxSchnell")
-            env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
+            # env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
         elif app == SUPPORTED_APPS.reforge:
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -275,8 +247,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
             env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-            env_info["is_flux"] = False
-            env_info["is_auraflow"] = False
         else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
             env_info["model_class"] = p.sd_model.__class__.__name__
             env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
@@ -284,8 +254,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
             env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
             env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
             env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-            env_info["is_flux"] = False
-            env_info["is_auraflow"] = False
         hash_envinfo = hash(tuple(sorted(env_info.items())))
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
