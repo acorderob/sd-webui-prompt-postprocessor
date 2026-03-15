@@ -66,7 +66,6 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": "",
                         "placeholder": "internal model class name",
-                        "forceInput": True,
                     },
                 ),
                 "modelname": (
