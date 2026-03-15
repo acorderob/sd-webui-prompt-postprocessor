@@ -80,6 +80,7 @@ class PromptPostProcessorComfyUINode:
                     "INT",
                     {
                         "default": -1,
+                        "min": -1,
                         "tooltip": "Seed value for the prompt processing (use -1 for random)",
                     },
                 ),
