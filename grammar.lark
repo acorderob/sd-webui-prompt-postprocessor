@@ -112,7 +112,7 @@ operation_and: condition _WHITESPACE "and" _WHITESPACE condition
 operation_or: condition _WHITESPACE "or" _WHITESPACE condition
 operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
 truthy_operand: IDENTIFIER
-comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE SIMPLEVALUE
+comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE ( SIMPLEVALUE | IDENTIFIER )
 comparison_list_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
 listvalue.9: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLEVALUE )* _WHITESPACE? ")"
 

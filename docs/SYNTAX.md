@@ -209,7 +209,7 @@ The `conditionN` can be:
 | `variable [not] operation value`               | check the variable against a value          |
 | `variable [not] operation (value1,value2,...)` | check the variable against a list of values |
 
-For a simple value the allowed operations are `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `contains` and the value can be a quoted string or an integer. For a list of values the allowed operations are `contains`, `in` and the value of the variable is checked against all the elements of the list until one matches. The operation can be preceded by `not` for readability, instead of using it in the front.
+For a simple value the allowed operations are `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `contains` and the value can be a quoted string, an integer, or another variable name (e.g., `<ppp:if var1 contains var2>`). When the value is a variable name, it is resolved to the variable's current value before comparison. For a list of values the allowed operations are `contains`, `in` and the value of the variable is checked against all the elements of the list until one matches. The operation can be preceded by `not` for readability, instead of using it in the front.
 
 You can also build complex conditions joining them with boolean operators and/or/not and parentheses.
 

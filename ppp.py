@@ -1082,6 +1082,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
                 )
 
+        def __resolve_cond_value(self, c: str):
+            """Resolve a condition value: try int first, fall back to variable lookup."""
+            try:
+                return int(c)
+            except ValueError:
+                # Bare identifier — resolve as variable reference
+                if c.startswith("_"):
+                    val = self.__ppp.system_variables.get(c, "")
+                else:
+                    val = self.__get_user_variable_value(c)
+                    if val is None:
+                        val = ""
+                return val.lower() if isinstance(val, str) else val
+
         def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
             """
             Evaluate a condition based on the given variable, comparison, and value.
@@ -1133,7 +1147,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 (
                     c[1:-1].lower()
                     if c.startswith('"') or c.startswith("'")
-                    else True if c.lower() == "true" else False if c.lower() == "false" or c == "" else int(c)
+                    else True if c.lower() == "true" else False if c.lower() == "false" or c == "" else self.__resolve_cond_value(c)
                 )
                 for c in cond_value
             )
