@@ -34,7 +34,7 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 ### General settings
 
 * **Debug level**: what to write to the console. Note: in *SD.Next* debug messages only show if you launch it with the `--debug` argument.
-* **What to do on invalid content warnings?**: warn on the console or stop the generation.
+* **What to do on invalid content warnings?**: warn on the console or stop the generation. This also affects integer comparisons with undefined or non-numeric variables: in *warn* mode the comparison evaluates to false, in *stop* mode the generation is stopped with an error.
 * **Model variant definitions**: definitions for model variants to be recognized based on strings found in the full filename.
 
     The format for each line is (with *kind* being one of the base model identifiers or not defined):
