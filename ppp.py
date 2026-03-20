@@ -1089,11 +1089,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             except ValueError:
                 # Bare identifier — resolve as variable reference
                 if c.startswith("_"):
-                    val = self.__ppp.system_variables.get(c, "")
+                    val = self.__ppp.system_variables.get(c, None)
+                    if val is None:
+                        val = ""
+                        self.warn_or_stop(f"Unknown system variable {c}")
                 else:
                     val = self.__get_user_variable_value(c)
                     if val is None:
                         val = ""
+                        self.warn_or_stop(f"Unknown user variable {c}")
                 return val.lower() if isinstance(val, str) else val
 
         def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
