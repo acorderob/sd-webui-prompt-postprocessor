@@ -211,6 +211,8 @@ The `conditionN` can be:
 
 For a simple value the allowed operations are `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `contains` and the value can be a quoted string, an integer, or another variable name (e.g., `<ppp:if var1 contains var2>`). When the value is a variable name, it is resolved to the variable's current value before comparison. For a list of values the allowed operations are `contains`, `in` and the value of the variable is checked against all the elements of the list until one matches. The operation can be preceded by `not` for readability, instead of using it in the front.
 
+When a variable used in an integer comparison is undefined or cannot be converted to an integer (e.g. it contains non-numeric text or is an empty string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised.
+
 You can also build complex conditions joining them with boolean operators and/or/not and parentheses.
 
 The variable can be one set with the `set` or `add` commands (user variables) or you can use system variables like these (names starting with an underscore are reserved for system variables):

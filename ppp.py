@@ -1157,19 +1157,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             )
             result = False
             for c in cond_value_adjusted:
-                var_value_adjusted = (
-                    var_value
-                    if isinstance(c, str)
-                    else (
-                        True
-                        if isinstance(c, bool) and var_value != "false" and var_value != "" and var_value is not False
-                        else (
-                            False
-                            if isinstance(c, bool) and (var_value != "true" or var_value is False)
-                            else int(var_value)
+                if isinstance(c, str):
+                    var_value_adjusted = var_value
+                elif isinstance(c, bool) and var_value != "false" and var_value != "" and var_value is not False:
+                    var_value_adjusted = True
+                elif isinstance(c, bool) and (var_value != "true" or var_value is False):
+                    var_value_adjusted = False
+                else:
+                    try:
+                        var_value_adjusted = int(var_value)
+                    except (ValueError, TypeError):
+                        self.warn_or_stop(
+                            f"Cannot convert variable value '{var_value}' to integer for comparison"
                         )
-                    )
-                )
+                        return False
                 result = comp_ops[cond_comp](var_value_adjusted, c)
                 if result:
                     break
