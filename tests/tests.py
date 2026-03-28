@@ -1328,6 +1328,44 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ppp=self.nocupppp,
         )
 
+    # Variable-vs-variable comparison tests
+
+    def test_cmd_if_var_vs_var_eq(self):  # var eq var: both set to same value, if-branch taken
+        self.process(
+            PromptPair(
+                "<ppp:set v1>hello<ppp:/set><ppp:set v2>hello<ppp:/set><ppp:if v1 eq v2>YES<ppp:else>NO<ppp:/if>",
+                "",
+            ),
+            PromptPair("YES", ""),
+        )
+
+    def test_cmd_if_var_vs_var_ne(self):  # var ne var: different values, ne condition true
+        self.process(
+            PromptPair(
+                "<ppp:set v1>apple<ppp:/set><ppp:set v2>orange<ppp:/set><ppp:if v1 ne v2>YES<ppp:else>NO<ppp:/if>",
+                "",
+            ),
+            PromptPair("YES", ""),
+        )
+
+    def test_cmd_if_var_vs_var_contains(self):  # var contains var: var1 contains var2's value
+        self.process(
+            PromptPair(
+                "<ppp:set v1>hello world<ppp:/set><ppp:set v2>hello<ppp:/set><ppp:if v1 contains v2>YES<ppp:else>NO<ppp:/if>",
+                "",
+            ),
+            PromptPair("YES", ""),
+        )
+
+    def test_cmd_if_var_vs_var_not_contains(self):  # var not contains var: var1 does not contain var2's value
+        self.process(
+            PromptPair(
+                "<ppp:set v1>hello world<ppp:/set><ppp:set v2>goodbye<ppp:/set><ppp:if v1 not contains v2>YES<ppp:else>NO<ppp:/if>",
+                "",
+            ),
+            PromptPair("YES", ""),
+        )
+    
     # NaN/undefined variable integer comparison tests
 
     def test_cmd_if_undefined_var_int_compare_warn(self):  # undefined var integer compare with on_warning=warn
