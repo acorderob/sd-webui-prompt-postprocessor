@@ -213,48 +213,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "app": app.value,
             "models_path": models_path,
             "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
-            "model_class": "",
+            "model_class": p.sd_model.__class__.__name__,
+            "property_base": p.sd_model,
         }
-        env_info.update({"is_" + k: False for k in PromptPostProcessor.KNOWN_MODELS})
-        if app == SUPPORTED_APPS.sdnext:
-            # cannot differentiate SD1 and SD2, we set both to True
-            # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
-            env_info["model_class"] = p.sd_model.__class__.__name__
-            env_info["is_sd1"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
-            env_info["is_sd2"] = p.sd_model.__class__.__name__ in ("LatentDiffusion", "StableDiffusionPipeline")
-            env_info["is_sdxl"] = p.sd_model.__class__.__name__ == "StableDiffusionXLPipeline"
-            env_info["is_sd3"] = p.sd_model.__class__.__name__ == "StableDiffusion3Pipeline"
-            env_info["is_flux"] = p.sd_model.__class__.__name__ == "FluxPipeline"
-            env_info["is_auraflow"] = p.sd_model.__class__.__name__ == "AuraFlowPipeline"
-            env_info["is_pixart"] = p.sd_model.__class__.__name__ == "PixArtAlphaPipeline"
-            # also supports 'Latent Consistency Model': LatentConsistencyModelPipeline', 'UniDiffuser': 'UniDiffuserPipeline', 'Wuerstchen': 'WuerstchenCombinedPipeline', 'Kandinsky 2.1': 'KandinskyPipeline', 'Kandinsky 2.2': 'KandinskyV22Pipeline', 'Kandinsky 3': 'Kandinsky3Pipeline', 'DeepFloyd IF': 'IFPipeline', 'Custom Diffusers Pipeline': 'DiffusionPipeline', 'InstaFlow': 'StableDiffusionPipeline', 'SegMoE': 'StableDiffusionPipeline', 'Kolors': 'KolorsPipeline', 'CogView': 'CogView3PlusPipeline'
-        elif app == SUPPORTED_APPS.forge:
-            # from repositories\huggingface_guess\huggingface_guess\model_list.py
+        if app == SUPPORTED_APPS.forge:
             env_info["model_class"] = p.sd_model.model_config.__class__.__name__
-            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            # env_info["is_ssd"] = False  # ?
-            env_info["is_sd3"] = getattr(
-                p.sd_model, "is_sd3", False
-            )  # p.sd_model.model_config.__class__.__name__ == "SD3" # not actually supported?
-            env_info["is_flux"] = p.sd_model.model_config.__class__.__name__ in ("Flux", "FluxSchnell")
-            # env_info["is_auraflow"] = False  # p.sd_model.model_config.__class__.__name__ == "AuraFlow" # not supported
-        elif app == SUPPORTED_APPS.reforge:
-            env_info["model_class"] = p.sd_model.__class__.__name__
-            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
-            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-        else:  # assume A1111 compatible (p.sd_model.__class__.__name__=="DiffusionEngine")
-            env_info["model_class"] = p.sd_model.__class__.__name__
-            env_info["is_sd1"] = getattr(p.sd_model, "is_sd1", False)
-            env_info["is_sd2"] = getattr(p.sd_model, "is_sd2", False)
-            env_info["is_sdxl"] = getattr(p.sd_model, "is_sdxl", False)
-            env_info["is_ssd"] = getattr(p.sd_model, "is_ssd", False)
-            env_info["is_sd3"] = getattr(p.sd_model, "is_sd3", False)
-        hash_envinfo = hash(tuple(sorted(env_info.items())))
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
@@ -318,7 +281,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
         }
-        hash_options = hash(tuple(sorted(options.items())))
         self.wildcards_obj.refresh_wildcards(
             self.ppp_debug_level, wildcards_folders if options["process_wildcards"] else None
         )
@@ -332,6 +294,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
+        hash_options =  ppp.options_hash()
+        hash_envinfo = ppp.envinfo_hash()
         prompts_list = []
 
         if input_force_equal_seeds:

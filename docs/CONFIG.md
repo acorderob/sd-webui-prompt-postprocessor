@@ -4,11 +4,11 @@
 
 The extension supports a configuration file `ppp_config.yaml` with some settings that don't usually change.
 
-By default this configuration is read from the file `ppp_config.yaml.defaults` in the extension folder (that file must not be modified). If you want to personalize any settings you should first copy this file as `ppp_config.yaml` in the same folder, or in the ComfyUI user folder (preferred, but only possible in ComfyUI). The options in this file will take precedence over those in the defaults file.
+By default this configuration is read from the file `ppp_config.yaml.defaults` in the extension folder. That file must not be modified. If you want to personalize any settings you should first copy it as `ppp_config.yaml` in the same folder, or in the ComfyUI user folder (preferred, but only possible in ComfyUI). The options in this new file will take precedence over those in the defaults file.
 
-This file contains some options for how the host applications (WebUIs) should act in certain operations, and also options for the supported models, which currently include only the model variants definitions. Hosts and models names are fixed values (those supported by the extension). The defaults file contains comments to explain the available options.
+This file contains some options for how the host applications (WebUIs) should act in certain operations, and also define the supported models, including how to detect them and the model variants definitions. Host names are fixed values (those supported by the extension). The defaults file contains comments to explain the available options.
 
-The model variants now support regular expressions instead of a list of strings to detect the variant. If you used a non default value in previous versions you should re-do it in this file with the new format. As before, the default defines variants for *Pony* and *Illustrious* models.
+The model variants now support regular expressions instead of a list of strings to detect the variant. If you used a non default value in previous versions you should create a configuration file and add them with the new format. As before, the default file defines variants for *Pony* and *Illustrious* models.
 
 ## ComfyUI
 

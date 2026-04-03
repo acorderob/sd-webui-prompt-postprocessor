@@ -68,8 +68,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.def_env_info = {
             "app": "tests",
             "ppp_config": None,
-            "is_sdxl": True,
-            "model_class": "DiffusionEngine",
+            "model_class": "SDXL",
+            "property_base": {"is_sdxl": True},
             "models_path": "./webui/models",
             "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
         }
@@ -196,7 +196,9 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     self.assertEqual(result_negative_prompt, eo.negative_prompt, "Incorrect negative prompt")
                 if variables is not None:
                     for var_name, var_value in variables.items():
-                        self.assertIn(var_name, output_variables, f"Variable '{var_name}' not found in output variables")
+                        self.assertIn(
+                            var_name, output_variables, f"Variable '{var_name}' not found in output variables"
+                        )
                         self.assertEqual(
                             output_variables[var_name],
                             var_value,
@@ -1141,7 +1143,10 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
 
     def test_wc_wildcard_default_filter(self):  # wildcard with default filter
         self.process(
-            PromptPair("<ppp:setwcdeffilter 'yaml/wildcard2' 'label1+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__", ""),
+            PromptPair(
+                "<ppp:setwcdeffilter 'yaml/wildcard2' 'label1+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__",
+                "",
+            ),
             PromptPair("the choice is: choice3-choice3, choice3-choice1- choice2 ", ""),
             ppp="nocup",
         )
@@ -1720,21 +1725,35 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
                     "ppp_config": {
                         "models": {
                             "sd1": {
+                                "detect": {"tests": {"class": ["SD15", "SD15_instructpix2pix"]}},
                                 "variants": {
                                     "test3": {"find_in_filename": "testmodel"},
                                     "sdxl": {"find_in_filename": "testmodel"},
-                                }
+                                },
                             },
                             "sdxl": {
+                                "detect": {
+                                    "tests": {
+                                        "class": [
+                                            "SDXL",
+                                            "SDXLRefiner",
+                                            "SDXL_instructpix2pix",
+                                            "Segmind_Vega",
+                                            "KOALA_700M",
+                                            "KOALA_1B",
+                                        ]
+                                    }
+                                },
                                 "variants": {
                                     "test1": {"find_in_filename": "testmodel"},
                                     "test2": {"find_in_filename": "testmodel"},
-                                }
+                                },
                             },
-                            "invalid": {
+                            "something": {
+                                "detect": {"tests": {"class": ["something"]}},
                                 "variants": {
                                     "test4": {"find_in_filename": "testmodel"},
-                                }
+                                },
                             },
                         }
                     },
@@ -1860,7 +1879,7 @@ class TestPromptPostProcessor(TestPromptPostProcessorBase):
             ),
             PromptPair("YES", ""),
         )
-    
+
     # NaN/undefined variable integer comparison tests
 
     def test_cmd_if_undefined_var_int_compare_warn(self):  # undefined var integer compare with on_warning=warn

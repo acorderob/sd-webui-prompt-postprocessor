@@ -7,6 +7,7 @@ class SUPPORTED_APPS(Enum):
     forge = "forge"
     reforge = "reforge"
     sdnext = "sdnext"
+    tests = "tests"  # for testing purposes only, not a real app
 
 SUPPORTED_APPS_NAMES = {
     SUPPORTED_APPS.comfyui: "ComfyUI",
@@ -14,4 +15,5 @@ SUPPORTED_APPS_NAMES = {
     SUPPORTED_APPS.forge: "Forge",
     SUPPORTED_APPS.reforge: "reForge",
     SUPPORTED_APPS.a1111: "A1111 (or compatible)",
+    SUPPORTED_APPS.tests: "Tests",
 }

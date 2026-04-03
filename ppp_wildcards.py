@@ -50,7 +50,7 @@ class PPPWildcards:
     """
 
     DEFAULT_WILDCARDS_FOLDER = "wildcards"
-    LOCALINPUT_FILENAME = "#INPUT"
+    LOCALINPUT_FILENAME = R"//INPUT\\"
 
     def __init__(self, logger):
         self.__logger: logging.Logger = logger

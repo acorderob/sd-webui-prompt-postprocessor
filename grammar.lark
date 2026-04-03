@@ -8,6 +8,7 @@ WC_NAME_PLAIN:       /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/_#\*\?\[!\
 INDEX:               INT | IDENTIFIER
 IDENTIFIER:          CNAME
 SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
+COMPVALUE:           SIMPLEVALUE | IDENTIFIER
 
 // plain text and weights
 ?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
@@ -112,9 +113,9 @@ operation_and: condition _WHITESPACE "and" _WHITESPACE condition
 operation_or: condition _WHITESPACE "or" _WHITESPACE condition
 operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
 truthy_operand: IDENTIFIER
-comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE ( SIMPLEVALUE | IDENTIFIER )
+comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE COMPVALUE
 comparison_list_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
-listvalue.9: "(" _WHITESPACE? SIMPLEVALUE ( _WHITESPACE? "," _WHITESPACE? SIMPLEVALUE )* _WHITESPACE? ")"
+listvalue.9: "(" _WHITESPACE? COMPVALUE ( _WHITESPACE? "," _WHITESPACE? COMPVALUE )* _WHITESPACE? ")"
 
 // command: set
 commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ commandsetmodifiers ] _WHITESPACE? ">" commandsetcontent "<ppp:/set>"

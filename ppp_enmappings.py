@@ -66,7 +66,7 @@ class PPPExtraNetworkMappings:
     """
 
     DEFAULT_ENMAPPINGS_FOLDER = "extranetworkmappings"
-    LOCALINPUT_FILENAME = "#INPUT"
+    LOCALINPUT_FILENAME = R"//INPUT\\"
 
     def __init__(self, logger):
         self.__logger: logging.Logger = logger

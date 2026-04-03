@@ -1,9 +1,12 @@
+# Prompt Post-Processor configuration file.
+
 # If you want to change any of these options make first a copy of this file as "ppp_config.yaml" and edit that file.
-# This file will be overwritten when updating the extension, but your custom "ppp_config.yaml" should not be affected.
+# In ComfyUI the file should be in the user folder.
+# This defaults file will be overwritten when updating the extension, but your custom "ppp_config.yaml" should not be affected.
 
-hosts: # Options for supported host applications
-
-    # For each host define how to handle some operations:
+# Options for supported host applications
+hosts:
+    # For each host, define how to handle some operations:
     #   attention: how to handle attention operators
     #     - ok: leave as is
     #     - parentheses: convert to parentheses-based attention
@@ -34,7 +37,7 @@ hosts: # Options for supported host applications
     #     - comma: replace with comma
     #     - remove: remove the operator
     #     - error: raise an error
-
+    # Options in the user file override all these options by host (individual options are not inherited and if missing will use defaults in code).
     a1111:
         attention: ok
         scheduling: ok
@@ -60,25 +63,198 @@ hosts: # Options for supported host applications
         and: ok
         break: ok
     comfyui:
-        # comfyui only supports parentheses-based attention
+        # ComfyUI only supports parentheses-based attention
         attention: parentheses
-        # by default comfyui does not support scheduling, alternation, AND or BREAK operators, but you may be able to use them with a custom text encoder node
+        # by default ComfyUI does not support scheduling, alternation, AND or BREAK operators, but you may be able to use them with a custom text encoder node
         scheduling: error
         alternation: error
         and: comma
         break: comma
 
-models: # Options for supported base models and variants
-    sd1:
-    sd2:
-    sdxl:
+# Supported base models, variants, and options
+# Check supported models for each host in:
+#   A1111:
+#   Forge: repositories\huggingface_guess\huggingface_guess\model_list.py
+#   reForge:
+#   SD.Next:
+#   ComfyUI:
+models:
+    # We define supported models and how we detect them in each host application (by class or by a known boolean property, or null for not supported).
+    # We can also define here variants and some options.
+    # For each model, detect options in the user file replace these ones by host, and variants are fully replaced (so if you want to add to the default ones you need to copy them to your file).
+    sd1: # Stable Diffusion 1
+        detect:
+            a1111: { property: "is_sd1" }
+            forge: { property: "is_sd1" }
+            reforge: { property: "is_sd1" }
+            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend; cannot differentiate SD1 and SD2, we set both to True
+            comfyui: { class: ["SD15", "SD15_instructpix2pix"] }
+    sd2: # Stable Diffusion 2
+        detect:
+            a1111: { property: "is_sd2" }
+            forge: { property: "is_sd2" }
+            reforge: { property: "is_sd2" }
+            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # cannot differentiate SD1 and SD2, we set both to True; LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
+            comfyui: { class: ["SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"] }
+    ssd: # Segmind Stable Diffusion 1B
+        detect:
+            a1111: { property: "is_ssd" }
+            forge: null
+            reforge: { property: "is_ssd" }
+            sdnext: null
+            comfyui: { class: ["SSD1B"]}
+    sdxl: # Stable Diffusion XL
+        detect:
+            a1111: { property: "is_sdxl" }
+            forge: { property: "is_sdxl" }
+            reforge: { property: "is_sdxl" }
+            sdnext: { class: ["StableDiffusionXLPipeline"] }
+            comfyui: { class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
         variants:
             # At this level goes the name of the defined variants
-            pony:
-                # find_in_filename: regex patterns as a string or list of strings to identify the variant in the model filename (ignores case)
-                find_in_filename: "(?:pony|pny|pdxl)"
-            illustrious:
-                find_in_filename: "(?:illustrious|illust|ilxl)"
-    sd3:
-    flux:
-    auraflow:
+            #   find_in_filename: regex patterns as a str or regex/flags dict or list of them to identify the variant in the model filename.
+            #                     If specified as a string, it is considered a regex with the IGNORECASE flag;
+            #                     If specified as a dict, it should have "regex" and optional "flags" keys;
+            #                     If specified as a list, it should be a list of dicts or strings
+            pony: { find_in_filename: "(?:pony|pny|pdxl)" }
+            illustrious: { find_in_filename: { regex: "(?:illustrious|illust|ilxl)", flags: ["IGNORECASE"] } }
+    sd3: # Stable Diffusion 3
+        detect:
+            a1111: { property: "is_sd3" }
+            forge: { property: "is_sd3", class: ["SD3"] }
+            reforge: { property: "is_sd3" }
+            sdnext: { class: ["StableDiffusion3Pipeline"] }
+            comfyui: { class: ["SD3"] }
+    flux: # Flux 1
+        detect:
+            a1111: null
+            forge: { class: ["Flux", "FluxSchnell"] }
+            reforge: null
+            sdnext: { class: ["FluxPipeline"] }
+            comfyui: { class: ["Flux", "FluxInpaint", "FluxSchnell"] }
+    auraflow: # AuraFlow
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: { class: ["AuraFlowPipeline"] }
+            comfyui: { class: ["AuraFlow"] }
+    pixart: # PixArt
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: { class: ["PixArtAlphaPipeline"] }
+            comfyui: { class: ["PixArtAlpha", "PixArtSigma"] }
+    lumina2: # Lumina2 & ZImage
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Lumina2", "ZImage"] }
+    ltxv: # LTXV
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["LTXV", "LTXAV"] }
+    cosmos: # Cosmos
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["CosmosT2V", "CosmosI2V"] }
+    cosmospredict2: # CosmosPredict2
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["CosmosT2IPredict2", "CosmosI2VPredict2"] }
+    genmomochi: # GenmoMochi
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["GenmoMochi"] }
+    hunyuan: # Hunyuan
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["HunyuanDiT", "HunyuanDiT1"] }
+    hunyuanvideo: # HunyuanVideo
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V", "HunyuanImage21", "HunyuanImage21Refiner", "HunyuanVideo15", "HunyuanVideo15_SR_Distilled"] }
+    hunyuan3d: # Hunyuan3D
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"] }
+    wan: # Wan21 & Wan22
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
+    hidream: # HiDream
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["HiDream"] }
+    qwenimage: # QwenImage & QwenImageEdit
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["QwenImage"] }
+    chroma: # Chroma
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Chroma", "ChromaRadiance"] }
+    omnigen2: # Omnigen 2
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Omnigen2"] }
+    flux2: # Flux 2
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Flux2"] }
+    kandinsky5: # Kandinsky 5
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Kandinsky5", "Kandinsky5Image"] }
+    anima: # Anima
+        detect:
+            a1111: null
+            forge: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Anima"] }
