@@ -2,7 +2,7 @@ from enum import Enum
 import logging
 import sys
 import copy
-from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
+from ppp_classes import SUPPORTED_APPS
 
 
 class DEBUG_LEVEL(Enum):

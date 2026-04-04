@@ -14,12 +14,12 @@ from modules.processing import StableDiffusionProcessing  # pylint: disable=impo
 from modules.shared import opts  # pylint: disable=import-error
 from modules.paths import models_path  # pylint: disable=import-error
 import gradio as gr  # pylint: disable=import-error
-from ppp import PromptPostProcessor  # pylint: disable=import-error
-from ppp_hosts import SUPPORTED_APPS, SUPPORTED_APPS_NAMES  # pylint: disable=import-error
-from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # pylint: disable=import-error
-from ppp_cache import PPPLRUCache  # pylint: disable=import-error
-from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
-from ppp_enmappings import PPPExtraNetworkMappings  # pylint: disable=import-error
+from ppp import PromptPostProcessor
+from ppp_classes import SUPPORTED_APPS, SUPPORTED_APPS_NAMES
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
+from ppp_cache import PPPLRUCache
+from ppp_wildcards import PPPWildcards
+from ppp_enmappings import PPPExtraNetworkMappings
 
 
 class PromptPostProcessorA1111Script(scripts.Script):
@@ -294,7 +294,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
-        hash_options =  ppp.options_hash()
+        hash_options = ppp.options_hash()
         hash_envinfo = ppp.envinfo_hash()
         prompts_list = []
 

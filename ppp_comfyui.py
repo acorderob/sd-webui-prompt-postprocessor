@@ -1,14 +1,14 @@
 import os
 
-# pylint: disable=import-error
-import folder_paths  # type: ignore
-import nodes  # type: ignore
+import folder_paths  # pylint: disable=import-error # type: ignore
+import nodes  # pylint: disable=import-error # type: ignore
 
-from .ppp import PromptPostProcessor
-from .ppp_hosts import SUPPORTED_APPS
-from .ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
-from .ppp_wildcards import PPPWildcards
-from .ppp_enmappings import PPPExtraNetworkMappings
+from ppp import PromptPostProcessor
+from ppp_classes import SUPPORTED_APPS
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
+from ppp_utils import escape_single_quotes
+from ppp_wildcards import PPPWildcards
+from ppp_enmappings import PPPExtraNetworkMappings
 
 if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
@@ -166,7 +166,7 @@ class PromptPostProcessorComfyUINode:
         for input_name, input_type in input_types.items():
             t = expected[input_name]
             if input_type != t:
-                return f"Invalid type for input '{input_name}': {input_type} (expected {t})"
+                return f"Invalid type for input '{escape_single_quotes(input_name)}': {input_type} (expected {t})"
         return True
 
     RETURN_TYPES = (

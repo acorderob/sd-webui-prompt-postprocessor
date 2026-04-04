@@ -3,8 +3,8 @@ from typing import Optional
 import logging
 import yaml
 
-from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
-from ppp_utils import deep_freeze  # pylint: disable=import-error
+from ppp_logging import DEBUG_LEVEL
+from ppp_utils import deep_freeze, escape_single_quotes
 
 
 class PPPENMappingVariant:
@@ -209,25 +209,27 @@ class PPPExtraNetworkMappings:
             full_path (str): The path to the file that contains it.
         """
         if not isinstance(content, dict):
-            self.__logger.warning(f"Invalid extra network mapping in file '{full_path}'!")
+            self.__logger.warning(f"Invalid extra network mapping in file '{escape_single_quotes(full_path)}'!")
             return
         for kind, maps in content.items():
             if not isinstance(maps, dict):
-                self.__logger.warning(f"Invalid extra network mapping definition for '{kind}:*' in file '{full_path}'!")
+                self.__logger.warning(
+                    f"Invalid extra network mapping definition for '{escape_single_quotes(kind)}:*' in file '{escape_single_quotes(full_path)}'!"
+                )
             else:
                 for name, variants in maps.items():
                     key = f"{kind}:{name}"
                     if not isinstance(variants, list):
                         self.__logger.warning(
-                            f"Invalid extra network mapping definition for '{key}' in file '{full_path}'!"
+                            f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!"
                         )
                     elif self.extranetwork_mappings.get(key, None) is not None:
                         self.__logger.warning(
-                            f"Duplicate extra network mapping '{key}' in file '{full_path}' and '{self.extranetwork_mappings[key].file}'!"
+                            f"Duplicate extra network mapping '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.extranetwork_mappings[key].file)}'!"
                         )
                     elif not isinstance(variants, list) or not all(isinstance(v, dict) for v in variants):
                         self.__logger.warning(
-                            f"Invalid extra network mapping definition for '{key}' in file '{full_path}'!"
+                            f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!"
                         )
                     else:
                         self.extranetwork_mappings[key] = PPPENMapping(full_path, kind, name, variants)
@@ -245,12 +247,16 @@ class PPPExtraNetworkMappings:
                 with open(full_path, "r", encoding="utf-8") as file:
                     content = yaml.safe_load(file)
             except:  # pylint: disable=bare-except
-                self.__logger.warning(f"Could not read file '{full_path}' with utf-8 encoding, trying windows-1252...")
+                self.__logger.warning(
+                    f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
+                )
                 with open(full_path, "r", encoding="windows-1252") as file:
                     content = yaml.safe_load(file)
             self.__add_extranetwork_mapping(content, full_path)
         except Exception as e:  # pylint: disable=broad-except
-            self.__logger.error(f"Error reading extra network mappings from file '{full_path}': {e}")
+            self.__logger.error(
+                f"Error reading extra network mappings from file '{escape_single_quotes(full_path)}': {e}"
+            )
 
     def __get_extranetwork_mappings_in_directory(self, directory: str):
         """
@@ -260,7 +266,9 @@ class PPPExtraNetworkMappings:
             directory (str): The path to the directory.
         """
         if not os.path.exists(directory):
-            self.__logger.warning(f"Extra network mappings directory '{directory}' does not exist!")
+            self.__logger.warning(
+                f"Extra network mappings directory '{escape_single_quotes(directory)}' does not exist!"
+            )
             return
         for filename in os.listdir(directory):
             full_path = os.path.abspath(os.path.join(directory, filename))

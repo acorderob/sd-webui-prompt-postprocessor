@@ -15,3 +15,27 @@ def deep_freeze(obj):
     if isinstance(obj, set):
         return tuple(deep_freeze(i) for i in sorted(obj))
     return obj
+
+def escape_single_quotes(s: str):
+    """
+    Escape single quotes in a string.
+
+    Args:
+        s (str): The string to escape.
+
+    Returns:
+        str: The escaped string.
+    """
+    return s.replace("'", "\\'")
+
+def escape_double_quotes(s: str):
+    """
+    Escape double quotes in a string.
+
+    Args:
+        s (str): The string to escape.
+
+    Returns:
+        str: The escaped string.
+    """
+    return s.replace('"', '\\"')

@@ -12,10 +12,11 @@ import lark
 import numpy as np
 import yaml
 
-from ppp_hosts import SUPPORTED_APPS  # pylint: disable=import-error
-from ppp_logging import DEBUG_LEVEL  # pylint: disable=import-error
-from ppp_wildcards import PPPWildcard, PPPWildcards  # pylint: disable=import-error
-from ppp_enmappings import PPPENMappingVariant, PPPExtraNetworkMappings  # pylint: disable=import-error
+from ppp_classes import SUPPORTED_APPS
+from ppp_logging import DEBUG_LEVEL
+from ppp_utils import escape_single_quotes
+from ppp_wildcards import PPPWildcard, PPPWildcards
+from ppp_enmappings import PPPENMappingVariant, PPPExtraNetworkMappings
 
 
 class PPPInterrupt(Exception):
@@ -132,14 +133,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.config: dict[str, Any] = yaml.safe_load(f)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self.config = {}
-            raise PPPInterrupt(f"Failed to load default configuration from '{default_config_file}'.") from exc
+            raise PPPInterrupt(
+                f"Failed to load default configuration from '{escape_single_quotes(default_config_file)}'."
+            ) from exc
         validate_def_cfg = self.__validate_normalize_configuration(self.config, "default configuration file")
         if validate_def_cfg != 0:
             errmsg = "Default configuration file has errors. Please restore the default configuration file and, per instructions, use a copy to adapt it."
             if validate_def_cfg == 2:
                 raise PPPInterrupt(errmsg)
-            else:
-                self.logger.warning(errmsg)
+            self.logger.warning(errmsg)
 
         user_config_file = self.env_info.get("ppp_config", "")
         user_config: dict[str, Any] = {}
@@ -162,8 +164,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if user_config_file and os.path.exists(user_config_file):
                 with open(user_config_file, "r", encoding="utf-8") as f:
                     user_config = yaml.safe_load(f)
-            self.__validate_normalize_configuration(user_config, "user configuration")
-        self.__merge_configuration(user_config)
+                self.__validate_normalize_configuration(user_config, "user configuration")
+        if user_config:
+            self.__merge_configuration(user_config)
 
         self.models_config: dict[str, dict[str, Any] | None] = self.config.get("models") or {}
         self.known_models: list[str] = list(self.models_config.keys())
@@ -179,7 +182,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.host_config: dict[str, Any] = (self.config.get("hosts") or {}).get(self.env_info.get("app", ""))
         if self.host_config is None:
             raise PPPInterrupt(
-                f"No host configuration found for app '{self.env_info.get('app', '')}'. Please check your configuration."
+                f"No host configuration found for app '{escape_single_quotes(self.env_info.get('app', ''))}'. Please check your configuration."
             )
 
         # Update env_info with model detection
@@ -208,7 +211,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.variants_definitions[v] = (m, vo["find_in_filename"])
                 else:
                     self.logger.warning(
-                        f"Variant name '{v}' in model '{m}' conflicts with a known model name. Discarding variant."
+                        f"Variant name '{escape_single_quotes(v)}' in model '{escape_single_quotes(m)}' conflicts with a known model name. Discarding variant."
                     )
 
         if self.debug_level != DEBUG_LEVEL.none:
@@ -442,27 +445,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 return {"regex": find_in_filename, "flags": re.IGNORECASE}
             except re.error:
                 self.logger.warning(
-                    f"{where.title()}: Invalid regex pattern for variant '{variant_key}' in model '{model_key}'. Discarding variant."
+                    f"{where.title()}: Invalid regex pattern for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                 )
         elif isinstance(find_in_filename, dict):
             regex = find_in_filename.get("regex", "")
             flags = find_in_filename.get("flags", [])
             if not isinstance(regex, str) or not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
                 self.logger.warning(
-                    f"{where.title()}: Invalid format for 'find_in_filename' for variant '{variant_key}' in model '{model_key}'. Discarding variant."
+                    f"{where.title()}: Invalid format for 'find_in_filename' for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                 )
             else:
                 fl = self.__re_flags_from_list(flags)
                 if fl == 0 and len(flags):
                     self.logger.warning(
-                        f"{where.title()}: Invalid regex flags for variant '{variant_key}' in model '{model_key}'. Discarding variant."
+                        f"{where.title()}: Invalid regex flags for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                     )
                 try:
                     re.compile(regex, fl)
                     return {"regex": regex, "flags": fl}
                 except re.error:
                     self.logger.warning(
-                        f"{where.title()}: Invalid regex pattern for variant '{variant_key}' in model '{model_key}'. Discarding variant."
+                        f"{where.title()}: Invalid regex pattern for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                     )
         return None
 
@@ -493,14 +496,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         defcfg_hosts: dict[str, Any] = cfg.get("hosts", {})
         for host_key, host_value in dict(defcfg_hosts).items():
             if host_key not in SUPPORTED_APPS._value2member_map_:  # pylint: disable=protected-access
-                self.logger.warning(f"{where.capitalize()}: Unsupported host '{host_key}'. Discarding host.")
+                self.logger.warning(
+                    f"{where.capitalize()}: Unsupported host '{escape_single_quotes(host_key)}'. Discarding host."
+                )
                 defcfg_hosts.pop(host_key, None)
                 result = 1
             elif host_value is not None and (
                 not isinstance(host_value, dict)
                 or not all(k in ["attention", "scheduling", "alternation", "and", "break"] for k in host_value)
             ):
-                self.logger.warning(f"{where.capitalize()}: Invalid format for host '{host_key}'. Discarding host.")
+                self.logger.warning(
+                    f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}'. Discarding host."
+                )
                 defcfg_hosts.pop(host_key, None)
                 result = 1
         defcfg_models: dict[str, Any] = cfg.get("models", {})
@@ -510,7 +517,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 or model_value.get("detect") is None
                 or not isinstance(model_value["detect"], dict)
             ):
-                self.logger.warning(f"{where.capitalize()}: Invalid format for model '{model_key}'. Discarding model.")
+                self.logger.warning(
+                    f"{where.capitalize()}: Invalid format for model '{escape_single_quotes(model_key)}'. Discarding model."
+                )
                 defcfg_models.pop(model_key, None)
                 result = 1
             else:
@@ -518,14 +527,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 for host_key, host_value in dict(defcfg_m_detect).items():
                     if host_key not in SUPPORTED_APPS._value2member_map_:  # pylint: disable=protected-access
                         self.logger.warning(
-                            f"{where.capitalize()}: Unsupported host '{host_key}' in 'detect' for model '{model_key}'. Discarding host."
+                            f"{where.capitalize()}: Unsupported host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host."
                         )
                         defcfg_m_detect.pop(host_key, None)
                         result = 1
                     elif host_value is not None:
                         if not isinstance(host_value, dict):
                             self.logger.warning(
-                                f"{where.capitalize()}: Invalid format for host '{host_key}' in 'detect' for model '{model_key}'. Discarding host."
+                                f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host."
                             )
                             defcfg_m_detect.pop(host_key, None)
                             result = 1
@@ -534,27 +543,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 isinstance(c, str) for c in host_value["class"]
                             ):
                                 self.logger.warning(
-                                    f"{where.capitalize()}: Invalid format for 'class' in host '{host_key}' in 'detect' for model '{model_key}'. Discarding host."
+                                    f"{where.capitalize()}: Invalid format for 'class' in host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host."
                                 )
                                 defcfg_m_detect.pop(host_key, None)
                                 result = 1
                         elif "property" in host_value:
                             if not isinstance(host_value["property"], str):
                                 self.logger.warning(
-                                    f"{where.capitalize()}: Invalid format for 'property' in host '{host_key}' in 'detect' for model '{model_key}'. Discarding host."
+                                    f"{where.capitalize()}: Invalid format for 'property' in host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host."
                                 )
                                 defcfg_m_detect.pop(host_key, None)
                                 result = 1
                         else:
                             self.logger.warning(
-                                f"{where.capitalize()}: Neither 'class' nor 'property' specified for host '{host_key}' in 'detect' for model '{model_key}'. Discarding host."
+                                f"{where.capitalize()}: Neither 'class' nor 'property' specified for host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host."
                             )
                             defcfg_m_detect.pop(host_key, None)
                             result = 1
                 if "variants" in model_value:
                     if not isinstance(model_value["variants"], dict):
                         self.logger.warning(
-                            f"{where.capitalize()}: Invalid format for 'variants' in model '{model_key}'. Discarding model."
+                            f"{where.capitalize()}: Invalid format for 'variants' in model '{escape_single_quotes(model_key)}'. Discarding model."
                         )
                         defcfg_models.pop(model_key, None)
                         result = 1
@@ -563,7 +572,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         for variant_key, variant_value in dict(defcfg_m_variants).items():
                             if not isinstance(variant_key, str) or not variant_key.isidentifier():
                                 self.logger.warning(
-                                    f"{where.capitalize()}: Invalid variant name '{variant_key}' in model '{model_key}'. Discarding variant."
+                                    f"{where.capitalize()}: Invalid variant name '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                                 )
                                 defcfg_m_variants.pop(variant_key, None)
                                 result = 1
@@ -571,7 +580,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 variant_value.get("find_in_filename"), (str, dict, list)
                             ):
                                 self.logger.warning(
-                                    f"{where.capitalize()}: Invalid format for variant '{variant_key}' in model '{model_key}'. Discarding variant."
+                                    f"{where.capitalize()}: Invalid format for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                                 )
                                 defcfg_m_variants.pop(variant_key, None)
                                 result = 1
@@ -1193,7 +1202,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         parsed_prompt = None
         try:
             if self.debug_level == DEBUG_LEVEL.full:
-                self.logger.debug(self.format_output(f"Parsing {prompt_description}: '{prompt}'"))
+                self.logger.debug(self.format_output(f"Parsing {prompt_description}: '{escape_single_quotes(prompt)}'"))
             parsed_prompt = parser.parse(prompt)
             # we store the contents so we can use them later even if the meta position is not valid anymore
             if isinstance(parsed_prompt, lark.Tree):
@@ -1206,7 +1215,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         except lark.exceptions.UnexpectedInput:
             if raise_parsing_error:
                 raise
-            self.logger.exception(self.format_output(f"Parsing failed on prompt!: {prompt}"))
+            self.logger.exception(self.format_output(f"Parsing failed on prompt!: {escape_single_quotes(prompt)}"))
         t2 = time.monotonic_ns()
         if self.debug_level == DEBUG_LEVEL.full:
             self.logger.debug(f"Parse {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
@@ -1306,13 +1315,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 str: The result of the visit.
             """
             backup_result = self.result
+            # if self.__ppp.debug_level == DEBUG_LEVEL.full:
+            #     self.__ppp.logger.debug(f"Visiting node {node}.")
             if restore_state:
+                # if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                #     self.__ppp.logger.debug("Backing up state before visiting.")
                 backup_shell = self.__shell.copy()
                 backup_negtags = self.__negtags.copy()
                 backup_already_processed = self.__already_processed.copy()
                 backup_add_at = self.add_at.copy()
                 backup_insertion_at = self.insertion_at.copy()
                 backup_detectedwildcards = self.detectedWildcards.copy()
+                backup_user_variables = {k: v.copy() for k, v in self.__ppp.user_variables.items()}
+                backup_echoed_variables = self.__ppp.echoed_variables.copy()
             if node is not None:
                 if isinstance(node, list):
                     for child in node:
@@ -1329,12 +1344,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if discard_content or restore_state:
                 self.result = backup_result
             if restore_state:
+                # if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                #     self.__ppp.logger.debug("Restoring state after visiting.")
                 self.__shell = backup_shell
                 self.__negtags = backup_negtags
                 self.__already_processed = backup_already_processed
                 self.add_at = backup_add_at
                 self.insertion_at = backup_insertion_at
                 self.detectedWildcards = backup_detectedwildcards
+                self.__ppp.user_variables = backup_user_variables
+                self.__ppp.echoed_variables = backup_echoed_variables
             return added_result
 
         def __get_original_node_content(self, node: lark.Tree | lark.Token, default=None) -> str:
@@ -1416,7 +1435,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 info = f"({info}) " if info is not None and info != "" else ""
                 output = self.result[len(start_result) :]
                 if output != "":
-                    output = f" >> '{output}'"
+                    output = f" >> '{escape_single_quotes(output)}'"
                 self.__ppp.logger.debug(
                     self.__ppp.format_output(
                         f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}"
@@ -1512,7 +1531,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     try:
                         var_value_adjusted = int(var_value)
                     except (ValueError, TypeError):
-                        self.warn_or_stop(f"Cannot convert variable value '{var_value}' to integer for comparison")
+                        self.warn_or_stop(
+                            f"Cannot convert variable value '{escape_single_quotes(var_value)}' to integer for comparison"
+                        )
                         return False
                 result = comp_ops[cond_comp](var_value_adjusted, c)
                 if result:
@@ -1820,7 +1841,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.__negtags.append(
                     self.NegTag(len(self.result), len(self.result), content, parameters, self.__shell.copy())
                 )
-                info = f"with {parameters or 'no parameters'} : {content}"
+                info = f"with {escape_single_quotes(parameters) or 'no parameters'} : {escape_single_quotes(content)}"
             else:
                 self.warn_or_stop("Ignored negative command in negative prompt")
                 self.__visit(tree.children[1::])
@@ -1862,18 +1883,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             t1 = time.monotonic_ns()
             start_result = self.result
             if variable.startswith("_"):
-                self.warn_or_stop(f"Invalid variable name '{variable}' detected! System variables cannot be set.")
+                self.warn_or_stop(
+                    f"Invalid variable name '{escape_single_quotes(variable)}' detected! System variables cannot be set."
+                )
                 return
             info = variable
             value_description = self.__get_original_node_content(content, None)
             value = content
             modifiers_str: list[str] = [m.value for m in modifiers.children] if modifiers is not None else []
             if any(item in modifiers_str for item in ["+", "add"]):
-                info += f" += '{value_description}'"
+                info += f" += '{escape_single_quotes(value_description or '')}'"
                 raw_oldvalue = self.__ppp.user_variables.get(variable, None)
                 if raw_oldvalue is None:
                     newvalue = value
-                    self.warn_or_stop(f"Unknown variable {variable}")
+                    self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable)}")
                 elif isinstance(raw_oldvalue, str):
                     newvalue = lark.Tree(
                         lark.Token("RULE", "varvalue"),
@@ -1887,7 +1910,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         # Meta should be {"content": raw_oldvalue.meta.content + value.meta.content},
                     )
             elif any(item in modifiers_str for item in ["?", "ifundefined"]):
-                info += f" ?= '{value_description}'"
+                info += f" ?= '{escape_single_quotes(value_description or '')}'"
                 raw_oldvalue = self.__ppp.user_variables.get(variable, None)
                 if raw_oldvalue is None:
                     newvalue = value
@@ -1907,7 +1930,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if currentvalue is None:
                     info += "not evaluated yet"
                 else:
-                    info += f"'{currentvalue}'"
+                    info += f"'{escape_single_quotes(currentvalue)}'"
             t2 = time.monotonic_ns()
             self.__debug_end(command, start_result, t2 - t1, info)
 
@@ -1934,22 +1957,28 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             t1 = time.monotonic_ns()
             start_result = self.result
-            if default is not None:
-                default_value = self.__visit(default, True)  # for log
+            default_value = None
+            # if default is not None:
+            #     default_value = self.__visit(default, True)  # for log
             value = self.__get_user_variable_value(variable, True, True)
             if value is None:
                 if default is not None:
+                    if self.__ppp.debug_level == DEBUG_LEVEL.full:
+                        self.__ppp.logger.debug(
+                            f"Variable '{escape_single_quotes(variable)}' not found, using default value"
+                        )
                     v = self.__visit(default, False, True)
+                    default_value = v
                     self.__ppp.echoed_variables[variable] = v
                     self.result += v
                 else:
-                    self.warn_or_stop(f"Unknown variable {variable}")
+                    self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable)}")
             else:
                 self.__ppp.echoed_variables[variable] = value
             t2 = time.monotonic_ns()
             info = variable
-            if default is not None:
-                info += f" with default '{default_value}'"
+            if default_value is not None:
+                info += f" with default '{escape_single_quotes(default_value)}'"
             self.__debug_end(command, start_result, t2 - t1, info)
 
         def variableuse(self, tree: lark.Tree):
@@ -2039,7 +2068,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                                 )
                                             except lark.exceptions.UnexpectedInput as e:
                                                 self.warn_or_stop(
-                                                    f"Error parsing condition '{v.condition}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
+                                                    f"Error parsing condition '{escape_single_quotes(v.condition)}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
                                                     e,
                                                 )
                                                 cnd = None
@@ -2064,7 +2093,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             if found.name:
                                 if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
                                     self.__ppp.logger.info(
-                                        f"Mapping extranetwork '{extnet_id}' to '{extnet_type}:{found.name}'"
+                                        f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to '{escape_single_quotes(extnet_type)}:{escape_single_quotes(found.name)}'"
                                     )
                                 extnet_id = f"{extnet_type}:{found.name}"
                                 f_parameters = found.parameters
@@ -2083,11 +2112,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     parameters = f_parameters
                             elif found.triggers:
                                 if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
-                                    self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to just triggers")
+                                    self.__ppp.logger.info(
+                                        f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to just triggers"
+                                    )
                                 extnet_id = None
                             else:
                                 if not found_in_cache and self.__ppp.debug_level != DEBUG_LEVEL.none:
-                                    self.__ppp.logger.info(f"Mapping extranetwork '{extnet_id}' to nothing")
+                                    self.__ppp.logger.info(
+                                        f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to nothing"
+                                    )
                                 extnet_id = None
                             if found.triggers:
                                 extra_triggers = ", ".join(found.triggers)
@@ -2097,12 +2130,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     )
                                 except lark.exceptions.UnexpectedInput as e:
                                     self.warn_or_stop(
-                                        f"Error parsing triggers '{extra_triggers}' in extranetwork mapping '{extnet_id}'! : {e.__class__.__name__}",
+                                        f"Error parsing triggers '{escape_single_quotes(extra_triggers)}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
                                         e,
                                     )
                                     compiled_extra_triggers = None
                         else:
-                            self.warn_or_stop(f"Extranetwork mapping '{extnet_id}' not found!")
+                            self.warn_or_stop(f"Extranetwork mapping '{escape_single_quotes(extnet_id)}' not found!")
                     if extnet_id:
                         extnet = f"<{extnet_id}:{parameters}>"
                         self.result += extnet
@@ -2134,13 +2167,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             wildcard_key: str = self.__visit(tree.children[0].children[1], False, True)
             selected_wildcards = [x.key for x in self.__ppp.wildcard_obj.get_wildcards(wildcard_key)]
             if not selected_wildcards:
-                self.warn_or_stop(f"Wildcard '{wildcard_key}' not found for default filter setting!")
+                self.warn_or_stop(
+                    f"Wildcard '{escape_single_quotes(wildcard_key)}' not found for default filter setting!"
+                )
             else:
                 filter_object = tree.children[1].children[1] if tree.children[1] is not None else None
                 if filter_object is None:
                     for wc in selected_wildcards:
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug(f"Removed default filter for wildcard '{wc}'")
+                            self.__ppp.logger.debug(f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
                         self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, None)
                 else:
                     filter_specifier: list[list[str]] = [
@@ -2148,7 +2183,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     ]
                     for wc in selected_wildcards:
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                            self.__ppp.logger.debug(f"Set default filter for wildcard '{wc}'")
+                            self.__ppp.logger.debug(f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
                         self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, filter_specifier)
             t2 = time.monotonic_ns()
             self.__debug_end("commandsetwcdeffilter", start_result, t2 - t1)
@@ -2172,7 +2207,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             filter_specifier: Optional[list[list[str]]] = None,
             wildcard_key: str = None,
         ) -> list[dict]:
-            msg_where = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
+            msg_where = f"wildcard '{escape_single_quotes(wildcard_key)}'" if wildcard_key else "choices"
             if filter_specifier is not None:
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
@@ -2194,7 +2229,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         filtered_choice_values.append(c)
                 if not filtered_choice_values:
                     self.warn_or_stop(
-                        f"Wildcard filter specifier '{','.join(['+'.join(y for y in x) for x in filter_specifier])}' found no matches in choices for wildcard '{wildcard_key}'!"
+                        f"Wildcard filter specifier '{escape_single_quotes(','.join(['+'.join(y for y in x) for x in filter_specifier]))}' found no matches in choices for wildcard '{escape_single_quotes(wildcard_key)}'!"
                     )
             else:
                 filtered_choice_values = choice_values.copy()
@@ -2206,18 +2241,22 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if cmd == "include":
                         wcs = self.__ppp.wildcard_obj.get_wildcards(cmd_args)
                         if not wcs:
-                            self.warn_or_stop(f"Not found included wildcard '{cmd_args}' at {msg_where}!")
+                            self.warn_or_stop(
+                                f"Not found included wildcard '{escape_single_quotes(cmd_args)}' at {msg_where}!"
+                            )
                         c_weight = float(c.get("weight", 1.0))
                         for wc in wcs:
                             if wc.key in self.__seen_wildcards:
                                 self.warn_or_stop(
-                                    f"Circular reference detected including wildcard '{wc.key}' at {msg_where} (chain starts at '{self.__seen_wildcards[0]}')!"
+                                    f"Circular reference detected including wildcard '{escape_single_quotes(wc.key)}' at {msg_where} (chain starts at '{escape_single_quotes(self.__seen_wildcards[0])}')!"
                                 )
                                 continue
                             self.__seen_wildcards.append(wc.key)
                             if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                                self.__ppp.logger.debug(f"Seen wildcard '{wc.key}'")
-                                self.__ppp.logger.debug(f"Including choices from wildcard '{wc.key}'")
+                                self.__ppp.logger.debug(f"Seen wildcard '{escape_single_quotes(wc.key)}'")
+                                self.__ppp.logger.debug(
+                                    f"Including choices from wildcard '{escape_single_quotes(wc.key)}'"
+                                )
                             (_, choice_values) = self.__check_wildcard_initialization(wc)
                             if choice_values is not None:
                                 ch_values = self.__get_choices_internal_get(choice_values, None, wc.key)
@@ -2229,7 +2268,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                         }
                                     )
                     else:
-                        self.warn_or_stop(f"Unsupported choice command '{cmd}' at {msg_where}!")
+                        self.warn_or_stop(f"Unsupported choice command '{escape_single_quotes(cmd)}' at {msg_where}!")
                 else:
                     expanded_choice_values.append(c)
             return expanded_choice_values
@@ -2266,9 +2305,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 from_value: int = options.get("from", 1)
                 to_value: int = options.get("to", 1)
             separator: str = options.get("separator", self.__ppp.wil_choice_separator)
-            msg_where = f"wildcard '{wildcard_key}'" if wildcard_key else "choices"
+            msg_where = f"wildcard '{escape_single_quotes(wildcard_key)}'" if wildcard_key else "choices"
             if sampler != "~":
-                self.warn_or_stop(f"Unsupported sampler '{sampler}' at {msg_where} options!")
+                self.warn_or_stop(f"Unsupported sampler '{escape_single_quotes(sampler)}' at {msg_where} options!")
                 sampler = "~"
             expanded_choice_values = self.__get_choices_internal_get(choice_values, filter_specifier, wildcard_key)
             available_choices: list[dict] = []
@@ -2317,7 +2356,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__ppp.format_output(
                         f"Selecting {'optional ' if optional else ''}{'repeating ' if repeating else ''}{num_choices} choice"
                         + ("s" if num_choices != 1 else "")
-                        + (f" and separating with '{separator}'" if num_choices > 1 else "")
+                        + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else "")
                     )
                 )
             if num_choices > 0:
@@ -2364,7 +2403,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 suffix = ""
                 results = []
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                list_unseen = [f"'{x}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
+                list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
                 self.__ppp.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
             self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
             return (prefix, results, separator, suffix)
@@ -2473,7 +2512,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 )
                             except lark.exceptions.UnexpectedInput as e:
                                 self.warn_or_stop(
-                                    f"Error parsing choice prefix '{prefix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                    f"Error parsing choice prefix '{escape_single_quotes(prefix)}' in wildcard '{escape_single_quotes(wildcard.key)}'! : {e.__class__.__name__}",
                                     e,
                                 )
                         suffix = options.get("suffix", None)
@@ -2484,7 +2523,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                 )
                             except lark.exceptions.UnexpectedInput as e:
                                 self.warn_or_stop(
-                                    f"Error parsing choice suffix '{suffix}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                    f"Error parsing choice suffix '{escape_single_quotes(suffix)}' in wildcard '{escape_single_quotes(wildcard.key)}'! : {e.__class__.__name__}",
                                     e,
                                 )
                         n = 1
@@ -2517,7 +2556,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     )
                                 except lark.exceptions.UnexpectedInput as e:
                                     self.warn_or_stop(
-                                        f"Error parsing condition '{condition}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                        f"Error parsing condition '{escape_single_quotes(condition)}' in wildcard '{escape_single_quotes(wildcard.key)}'! : {e.__class__.__name__}",
                                         e,
                                     )
                                     cv["if"] = None
@@ -2532,7 +2571,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     )
                                 except lark.exceptions.UnexpectedInput as e:
                                     self.warn_or_stop(
-                                        f"Error parsing choice content '{content}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}",
+                                        f"Error parsing choice content '{escape_single_quotes(content)}' in wildcard '{escape_single_quotes(wildcard.key)}'! : {e.__class__.__name__}",
                                         e,
                                     )
                                     cv["content"] = None
@@ -2541,9 +2580,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                                     self.__ppp.logger.debug(f"Processed choice {cv}")
                                 choice_values.append(cv)
                             else:
-                                self.warn_or_stop(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
+                                self.warn_or_stop(
+                                    f"Invalid choice {cv} in wildcard '{escape_single_quotes(wildcard.key)}'!"
+                                )
                         else:
-                            self.warn_or_stop(f"Invalid choice {cv} in wildcard '{wildcard.key}'!")
+                            self.warn_or_stop(
+                                f"Invalid choice {cv} in wildcard '{escape_single_quotes(wildcard.key)}'!"
+                            )
                     else:
                         try:
                             choice_values.append(
@@ -2553,13 +2596,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             )
                         except lark.exceptions.UnexpectedInput as e:
                             self.warn_or_stop(
-                                f"Error parsing choice '{cv}' in wildcard '{wildcard.key}'! : {e.__class__.__name__}", e
+                                f"Error parsing choice '{escape_single_quotes(cv)}' in wildcard '{escape_single_quotes(wildcard.key)}'! : {e.__class__.__name__}",
+                                e,
                             )
                 wildcard.choices = choice_values
                 t2 = time.monotonic_ns()
                 if self.__ppp.debug_level == DEBUG_LEVEL.full:
                     self.__ppp.logger.debug(
-                        f"Processed choices for wildcard '{wildcard.key}' ({(t2-t1) / 1_000_000_000:.3f} seconds)"
+                        f"Processed choices for wildcard '{escape_single_quotes(wildcard.key)}' ({(t2-t1) / 1_000_000_000:.3f} seconds)"
                     )
             return (options, choice_values)
 
@@ -2618,7 +2662,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     and any(x.isdecimal() for x in filter_specifier)
                 ):
                     self.__ppp.logger.warning(
-                        f"Using a globbing wildcard '{wildcard_key}' with positional index filters is not recommended!"
+                        f"Using a globbing wildcard '{escape_single_quotes(wildcard_key)}' with positional index filters is not recommended!"
                     )
                 var_object = tree.children[3]
                 variablename = None
@@ -2639,19 +2683,21 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         return
                     if wildcard.key in self.__seen_wildcards:
                         self.warn_or_stop(
-                            f"Circular reference detected with wildcard '{self.__seen_wildcards[-1]}' (chain starts at '{self.__seen_wildcards[0]}')!"
+                            f"Circular reference detected with wildcard '{escape_single_quotes(self.__seen_wildcards[-1])}' (chain starts at '{escape_single_quotes(self.__seen_wildcards[0])}')!"
                         )
                         continue
                     self.__seen_wildcards.append(wildcard.key)
                     if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                        self.__ppp.logger.debug(f"Seen wildcard '{wildcard.key}'")
+                        self.__ppp.logger.debug(f"Seen wildcard '{escape_single_quotes(wildcard.key)}'")
                     (options, choice_values) = self.__check_wildcard_initialization(wildcard)
                     if options is not None:
                         if applied_options is None:
                             applied_options = options
                         else:
                             if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                                self.__ppp.logger.debug(f"Options for wildcard '{wildcard.key}' are ignored!")
+                                self.__ppp.logger.debug(
+                                    f"Options for wildcard '{escape_single_quotes(wildcard.key)}' are ignored!"
+                                )
                     choice_values_all += choice_values
                 self.result += self.__get_choices(applied_options, choice_values_all, filter_specifier, wildcard_key)
                 if wildcard_key in self.__wildcard_filters:
@@ -2664,11 +2710,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.detectedWildcards.append(wc)
                 self.result += wc
             if self.__ppp.debug_level == DEBUG_LEVEL.full:
-                list_unseen = [f"'{x}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
+                list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
                 self.__ppp.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
             self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
             t2 = time.monotonic_ns()
-            self.__debug_end("wildcard", start_result, t2 - t1, f"'{wc}'")
+            self.__debug_end("wildcard", start_result, t2 - t1, f"'{escape_single_quotes(wc)}'")
 
         def choices(self, tree: lark.Tree):
             """
@@ -2687,7 +2733,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.detectedWildcards.append(ch)
                 self.result += ch
             t2 = time.monotonic_ns()
-            self.__debug_end("choices", start_result, t2 - t1, f"'{ch}'")
+            self.__debug_end("choices", start_result, t2 - t1, f"'{escape_single_quotes(ch)}'")
 
         def __default__(self, tree):
             t1 = time.monotonic_ns()

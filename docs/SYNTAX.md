@@ -60,15 +60,15 @@ The only command available is `include wildcard`, which will include the choices
 
 These are examples of formats you can use to insert a choice construct:
 
-| Construct                                      | Result |
-| ---------                                      | ------ |
-| `{choice1\|5::choice2\|3::choice3}`            | select 1 choice, two of them have weights |
-| `{3$$choice1\|5 if _is_sd1::choice2\|choice3}` | select 3 choices, one has a weight and a condition |
-| `{2-3$$2::choice1\|choice2\|choice3}`          | select 2 to 3 choices, one of them has a weight |
-| `{r2-3$$choice1\|choice2\|choice3}`            | select 2 to 3 choices allowing repetition |
-| `{2-3$$ / $$choice1\|choice2\|choice3}`        | select 2 to 3 choices with separator " / " |
-| `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`| select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional |
-| `{choice1\|choice2\|%0.5::path/wildcard}`      | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
+| Construct                                         | Result |
+| ---------                                         | ------ |
+| `{choice1\|5::choice2\|3::choice3}`               | select 1 choice, two of them have weights |
+| `{3$$choice1\|5 if _is_sd1::choice2\|choice3}`    | select 3 choices, one has a weight and a condition |
+| `{2-3$$2::choice1\|choice2\|choice3}`             | select 2 to 3 choices, one of them has a weight |
+| `{r2-3$$choice1\|choice2\|choice3}`               | select 2 to 3 choices allowing repetition |
+| `{2-3$$ / $$choice1\|choice2\|choice3}`           | select 2 to 3 choices with separator " / " |
+| `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`   | select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional |
+| `{choice1\|choice2\|%0.5::include path/wildcard}` | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
 
 Notes:
 

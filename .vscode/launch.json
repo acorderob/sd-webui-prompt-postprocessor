@@ -9,14 +9,6 @@
             "type": "debugpy",
             "request": "attach",
             "processId": "${command:pickProcess}"
-        },
-        {
-            "name": "Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "tests/tests.py",
-            "console": "integratedTerminal",
-            "justMyCode": true
         }
     ]
 }
