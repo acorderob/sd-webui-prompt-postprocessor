@@ -9,6 +9,51 @@ class TestVariables(TestPromptPostProcessorBase):
     def setUp(self):  # pylint: disable=arguments-differ
         super().setUp(enable_file_logging=False)
 
+    # Empty variable test
+
+    def test_empty_variable(self):
+        self.process(
+            PromptPair(
+                "${v1=}<ppp:set v2><ppp:/set>${v3:}",
+                "",
+            ),
+            PromptPair("", ""),
+            variables={"v1": "", "v2": "", "v3": ""},
+        )
+
+    # Echoed variables tests
+
+    def test_echoed_variable(self):
+        self.process(
+            PromptPair(
+                "${v1=test1}<ppp:set v2>test2<ppp:/set>${v3:test3}${v3:test4}",
+                "",
+            ),
+            # v3 is echoed withs two defaults, the output prompt has both but the variable value is the last default
+            PromptPair("test3test4", ""),
+            variables={"v1": "test1", "v2": "test2", "v3": "test4"},
+        )
+
+    def test_unknown_echoed_variable(self):
+        self.process(
+            PromptPair(
+                "${v1}",
+                "",
+            ),
+            # v3 is echoed withs two defaults, the output prompt has both but the variable value is the last default
+            PromptPair("", ""),
+            variables={"v1": ""},
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.interrupt,
+                self.def_env_info,
+                {**self.defopts, "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value},
+                self.grammar_content,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
     # Variable nesting tests
 
     def test_var_nested_1(self):  # variable default nested in variable set

@@ -3,9 +3,9 @@
 The Prompt PostProcessor (or PPP, formerly known as "sd-webui-sendtonegative"), is an extension designed to process the prompt in several ways. This extension is compatible with:
 
 * [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
-* [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 * [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
 * [reForge](https://github.com/Panchovix/stable-diffusion-webui-reForge)
+* [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 * ...and probably other forks
 
 These are some features:
@@ -70,6 +70,10 @@ See the [configuration documentation](docs/CONFIG.md).
 ## Usage
 
 See the [syntax documentation](docs/SYNTAX.md).
+
+## Cookbook
+
+See the [cookbook](docs/COOKBOOK.md) for interesting usages.
 
 ## License
 

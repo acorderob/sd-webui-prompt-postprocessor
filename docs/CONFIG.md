@@ -37,7 +37,7 @@ The outputs are the final positive and negative prompt and a variables dictionar
 
 You can use the "**ACB PPP Select Variable**" node to choose one and output its value. You can use this to send only part of the prompt to, for example, a detailer node. For example:
 
-With this prompt: `__quality__, 1girl, ${head:!__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use `${head}` as prompt for the head/face detailer.
+With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use `${head}` as prompt for the head/face detailer.
 
 ### ACB PPP Wildcard Options node
 
@@ -90,7 +90,7 @@ Please note that *ComfyUI* does not natively support the `BREAK` and `AND` const
 ### General settings
 
 * **Debug level**: What to write to the console. Note: in *SD.Next* debug messages only show if you launch it with the `--debug` argument.
-* **What to do on invalid content warnings?**: Warn on the console or stop the generation. This also affects integer comparisons with undefined or non-numeric variables: in *warn* mode the comparison evaluates to false, in *stop* mode the generation is stopped with an error.
+* **What to do on invalid content warnings?**: Warn on the console or stop the generation. This also affects the use of unknown variables, and integer comparisons with undefined or non-numeric variables: in *warn* mode the comparison evaluates to false, in *stop* mode the generation is stopped with an error.
 * **Apply in img2img**: Check if you want to do the processing in img2img processes.
 * **Add original prompts to metadata**: Adds original prompts to the metadata if they have changed.
 * **Extranetwork Mappings folders**: You can enter multiple folders separated by commas.

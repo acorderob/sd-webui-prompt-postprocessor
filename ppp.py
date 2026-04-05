@@ -1,3 +1,4 @@
+import ast
 import logging
 import math
 import os
@@ -640,68 +641,79 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         skip_current_block = []
         all_blocks_skipped = []
 
-        def evaluate_conditions(conditions: list[str]) -> bool:
+        def eval_bool_expr(expr: str, constants: dict[str, bool]) -> bool:
             """
-            Evaluates the conditions based on the provided options. Allows for negation with '!' prefix.
+            Evaluates a boolean expression using known constants.
+            Supports: and, or, not, parentheses, and named constants.
 
             Args:
-                conditions (list[str]): List of conditions to evaluate.
-
+                expr (str): The boolean expression to evaluate.
+                constants (dict[str, bool]): A dictionary of constant values.
             Returns:
-                bool: True if all conditions are met, False otherwise.
+                bool: The result of the evaluated expression.
             """
-            r = True
-            for condition in conditions:
-                if condition.startswith("!"):
-                    r = r and not options.get(condition[1:], False)
-                else:
-                    r = r and options.get(condition, True)
-            return r
+            tree = ast.parse(expr, mode="eval")
+
+            def _eval(node) -> bool:
+                if isinstance(node, ast.Expression):
+                    return _eval(node.body)
+                if isinstance(node, ast.BoolOp):
+                    if isinstance(node.op, ast.And):
+                        return all(_eval(v) for v in node.values)
+                    if isinstance(node.op, ast.Or):
+                        return any(_eval(v) for v in node.values)
+                if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                    return not _eval(node.operand)
+                if isinstance(node, ast.Name):
+                    return bool(constants[node.id])  # raises KeyError for unknown names
+                if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+                    return node.value
+                raise ValueError(f"Unsupported construct: {ast.dump(node)}")
+
+            return _eval(tree)
 
         for line in lines:
             stripped_line = line.strip()
             if stripped_line.startswith("//#if"):
                 # Extract condition from the #if directive
-                conditions = stripped_line[5:].strip().split(" ")
+                conditions = stripped_line[5:].strip()
                 # Evaluate the conditions
-                skip_current_block.append(not evaluate_conditions(conditions))
+                skip_current_block.append(not eval_bool_expr(conditions, options))
                 all_blocks_skipped.append(skip_current_block[-1])
-                continue
-            if stripped_line.startswith("//#elif"):
+            elif stripped_line.startswith("//#elif"):
                 if not skip_current_block:
                     self.logger.warning("Unmatched //#elif directive found in grammar content.")
                 elif all_blocks_skipped[-1]:
                     # Extract condition from the #elif directive
-                    conditions = stripped_line[7:].strip().split(" ")
+                    conditions = stripped_line[7:].strip()
                     # Evaluate the conditions
-                    skip_current_block[-1] = not evaluate_conditions(conditions)
+                    skip_current_block[-1] = not eval_bool_expr(conditions, options)
                     if not skip_current_block[-1]:
                         all_blocks_skipped[-1] = False
                 else:
                     skip_current_block[-1] = True
-                continue
-            if stripped_line.startswith("//#else"):
+            elif stripped_line.startswith("//#else"):
                 if not skip_current_block:
                     self.logger.warning("Unmatched //#else directive found in grammar content.")
                 elif all_blocks_skipped[-1]:
                     skip_current_block[-1] = False
                 else:
                     skip_current_block[-1] = True
-                continue
-            if stripped_line.startswith("//#endif"):
+            elif stripped_line.startswith("//#endif"):
                 if not skip_current_block:
                     self.logger.warning("Unmatched //#endif directive found in grammar content.")
                 else:
                     skip_current_block.pop()
                     all_blocks_skipped.pop()
-                continue
-            # Include the line if we're not skipping any current block
-            if not any(skip_current_block):
+            elif stripped_line.startswith("//#"):
+                self.logger.warning(f"Unrecognized directive found in grammar content: {stripped_line}")
+            elif not any(skip_current_block):
+                # Include the line if we're not skipping any current block
                 result_lines.append(stripped_line)
         # Check for unclosed blocks at the end
         if skip_current_block:
-            self.logger.warning(
-                f"Found {len(skip_current_block)} unclosed conditional directive(s) at the end of the file"
+            raise PPPInterrupt(
+                f"Found {len(skip_current_block)} unclosed conditional directive(s) at the end of the grammar file"
             )
         return "\n".join(result_lines)
 
@@ -1326,7 +1338,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 backup_add_at = self.add_at.copy()
                 backup_insertion_at = self.insertion_at.copy()
                 backup_detectedwildcards = self.detectedWildcards.copy()
-                backup_user_variables = {k: v.copy() for k, v in self.__ppp.user_variables.items()}
+                backup_user_variables = self.__ppp.user_variables.copy()
                 backup_echoed_variables = self.__ppp.echoed_variables.copy()
             if node is not None:
                 if isinstance(node, list):
@@ -1968,11 +1980,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             f"Variable '{escape_single_quotes(variable)}' not found, using default value"
                         )
                     v = self.__visit(default, False, True)
+                    self.result += v
                     default_value = v
                     self.__ppp.echoed_variables[variable] = v
-                    self.result += v
                 else:
                     self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable)}")
+                    default_value = ""
+                    self.__ppp.echoed_variables[variable] = ""
             else:
                 self.__ppp.echoed_variables[variable] = value
             t2 = time.monotonic_ns()
@@ -2178,9 +2192,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             self.__ppp.logger.debug(f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
                         self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, None)
                 else:
-                    filter_specifier: list[list[str]] = [
-                        [str(label) for label in option.children] for option in filter_object.children
-                    ]
+                    filter_specifier: list[list[str]] = []
+                    for or_ in filter_object.children:
+                        for and_ in or_.children:
+                            label = and_.children[0]
+                            if isinstance(label, lark.Tree):
+                                filter_specifier.append([self.__visit(label, False, True)])
+                            else:
+                                filter_specifier.append([str(label)])
                     for wc in selected_wildcards:
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug(f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
@@ -2630,7 +2649,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 filter_specifier: list[int | str] = None
                 filter_object = tree.children[2]
                 if filter_object is not None:
-                    if (
+                    if (  # it's an inherited filter from another wildcard
                         isinstance(filter_object.children[1], lark.Token)
                         and filter_object.children[1] is not None
                         and "^" in filter_object.children[1]
@@ -2640,7 +2659,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices with inherited filter")
                     else:
-                        filter_specifier = [[y.value for y in x.children] for x in filter_object.children[2].children]
+                        filter_specifier = []
+                        for x in filter_object.children[2].children:
+                            for y in x.children:
+                                y2 = y.children[0]
+                                if isinstance(y2, lark.Token):
+                                    # it's a literal, we can use it directly
+                                    filter_specifier.append([y2.value])
+                                else:
+                                    # it's a variable, we need to evaluate it
+                                    v = self.__visit(y2, False, True)
+                                    filter_specifier.append([v])
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices")
                     self.__wildcard_filters[wildcard_key] = filter_specifier

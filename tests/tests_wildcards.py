@@ -238,7 +238,7 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcard_filter_compound(self):  # wildcard with compound filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'label1+label3'__", ""),
-            PromptPair("the choice is: choice3-choice3", ""),
+            PromptPair("the choice is: choice3-choice1", ""),
             ppp="nocup",
         )
 
@@ -252,7 +252,14 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcard_filter_compound3(self):  # wildcard with doubly inherited compound filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2bisbis'#label1+label3'__", ""),
-            PromptPair("the choice is: choice3bisbis", ""),
+            PromptPair("the choice is: choice1bisbis", ""),
+            ppp="nocup",
+        )
+
+    def test_wc_wildcard_filter_compound4(self):  # wildcard with doubly inherited compound filter with variable
+        self.process(
+            PromptPair("${v=label1}the choice is: __yaml/wildcard2bisbis'#${v}+label3'__", ""),
+            PromptPair("the choice is: choice1bisbis", ""),
             ppp="nocup",
         )
 
@@ -262,7 +269,17 @@ class TestWildcards(TestPromptPostProcessorBase):
                 "<ppp:setwcdeffilter 'yaml/wildcard2' 'label1+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__",
                 "",
             ),
-            PromptPair("the choice is: choice3-choice3, choice3-choice1- choice2 ", ""),
+            PromptPair("the choice is: choice3-choice1, choice3-choice1- choice2 ", ""),
+            ppp="nocup",
+        )
+
+    def test_wc_wildcard_default_filter2(self):  # wildcard with default filter with variable
+        self.process(
+            PromptPair(
+                "${v=label1}<ppp:setwcdeffilter 'yaml/wildcard2' '${v}+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__",
+                "",
+            ),
+            PromptPair("the choice is: choice3-choice1, choice3-choice1- choice2 ", ""),
             ppp="nocup",
         )
 

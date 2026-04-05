@@ -149,6 +149,8 @@ The prefix and suffix are added to the result along with the selected choices an
 
 It is recommended to use the object format for the wildcard parameters and for choices with complex options.
 
+If your first choice is interpreted as parameters, and you don't need parameters, you can avoid the problem by adding an empty parameters object `{}` as first choice.
+
 Wildcards can contain just one choice. In json and yaml formats this allows the use of a string value for the keys, rather than an array.
 
 A choice inside a wildcard can also be a list or a dictionary of one element containing a list. These are considered anonymous wildcards. With a list it will be an anonymous wildcard with no choice options, and with a dictionary the key will be the options for the choice containing the anonymous wildcard and the value the choices of the anonymous wildcard. Anonymous wildcards can help formatting complex choice values that are used in only one place and thus creating a regular wildcard is not necessary. See test.yaml for examples. Use an anonymous wildcard to group options inside a wildcard, and attach a label to it to be able to choose only from that group.
@@ -206,9 +208,11 @@ If also supports the addition and undefined check as an extension of the *Dynami
 | `${var?=value}`  | equivalent to "ifundefined"          |
 | `${var?=!value}` | equivalent to "evaluate ifundefined" |
 
+Set variables are included in the output variables with their last value.
+
 ## Echo command
 
-This command prints the value of a variable, or the specified default if it doesn't exist.
+This command prints the value of a variable, or the specified default if it doesn't exist. If the variable does not exist and has no default, depending on the **What to do on invalid content warnings?** setting it will assume an empty value, or result in an error.
 
 The format is:
 
@@ -223,6 +227,8 @@ The *Dynamic Prompts* format is:
 | ---------            |
 | `${varname}`         |
 | `${varname:default}` |
+
+An echoed variable that uses the default because it doesn't have a value will be included in the output variables with the last default value used.
 
 ## If command
 
