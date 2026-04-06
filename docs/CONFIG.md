@@ -12,7 +12,11 @@ The model variants now support regular expressions instead of a list of strings 
 
 ## ComfyUI
 
-### ACB Prompt Post Processor node inputs
+### ACB Prompt Post Processor node
+
+The main node that processes the prompt.
+
+Inputs:
 
 * **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
 * **modelname**: Name of the model. Needed for the detection of model variants.
@@ -31,15 +35,45 @@ The model variants now support regular expressions instead of a list of strings 
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 
-### ACB Prompt Post Processor node outputs
+Outputs:
 
-The outputs are the final positive and negative prompt and a variables dictionary.
+* **pos_prompt**: the resulting positive prompt
+* **neg_prompt**: the resulting negative prompt
+* **variables**: the dictionary of variables set or echoed.
 
-You can use the "**ACB PPP Select Variable**" node to choose one and output its value. You can use this to send only part of the prompt to, for example, a detailer node. For example:
+### ACB PPP Select Variable node
 
-With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use `${head}` as prompt for the head/face detailer.
+Lets you extract the variables used from the output (or just one of them). You can use this to send only part of the prompt to, for example, a detailer node. For example:
+
+With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use it as prompt for the head/face detailer.
+
+Inputs:
+
+* **variables**: the variables dictionary from the main node output.
+* **name**: optional name of a variable.
+
+Output:
+
+* **value**: the resulting content, either all the variables (one per line, in "name: value" format) or just the content of the chosen one.
+
+### ACB PPP Wildcards Concat node
+
+This node lets you select up to 10 wildcards that will be concatenated with a chosen separator.
+
+Inputs:
+
+* **previous_prompt**: An optional text that will be prepended to the wildcards. Lets you chain multiple nodes or other string nodes.
+* **filter**: a string to filter the identifiers of the wildcards. It matches the start of the identifiers.
+* **separator**: a separator string.
+* **wildcard_<n>**: the wildcards to concatenate.
+
+Output:
+
+* **prompt**: concatenated result.
 
 ### ACB PPP Wildcard Options node
+
+Options for wildcard processing, in case you want to change them from the defaults.
 
 * **folders**: You can enter multiple folders separated by commas. You can leave it empty (the default) and add a `ppp_wildcards` or `wildcards` entry in the **extra_model_paths.yaml** file (recommended).
 * **definitions**: Wildcards definitions (in yaml or json format). Direct input added to the ones found in the wildcards folders. Allows wildcards to be included in the workflow.
@@ -53,10 +87,14 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 
 ### ACB PPP Send-To-Negative Options node
 
+Options for sent to negative commands, in case you want to change them from the defaults.
+
 * **separator**: You can specify the separator used when adding to the negative prompt (by default it's ", ").
 * **ignore_repeats**: It ignores repeated content to avoid repetitions in the negative prompt.
 
 ### ACB PPP Cleanup Options node
+
+Options for cleanup processing, in case you want to change them from the defaults.
 
 * **extra_spaces**: Removes other unnecessary spaces.
 * **empty_constructs**: Removes attention/scheduling/alternation constructs when they are invalid.
@@ -74,6 +112,8 @@ With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__
 Please note that *ComfyUI* does not natively support the `BREAK` and `AND` constructs, but the related settings are kept in that UI in case you use a node that supports them and the extension is configured to allow them (see the configuration file below).
 
 ### ACB PPP ExtraNetwork Mapping Options node
+
+Options for extranetworks mapping, in case you want to change them from the defaults.
 
 * **folders**: You can enter multiple folders separated by commas. You can leave it empty (the default) and add a `ppp_extranetworkmappings` entry in the **extra_model_paths.yaml** file (recommended).
 * **definitions**: Extranetwork Mappings definitions (in yaml format). Direct input added to the ones found in the extranetwork mappings folders. Allows the mappings to be included in the workflow.

@@ -14,6 +14,48 @@ if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
 
 
+def _resolve_wildcards_folders(override: str = "") -> list[str]:
+    """Return the resolved list of wildcard folder paths."""
+    folders_str = override
+    if folders_str == "":
+        try:
+            fp1 = folder_paths.get_folder_paths("ppp_wildcards")
+        except Exception:  # pylint: disable=W0718
+            fp1 = None
+        try:
+            fp2 = folder_paths.get_folder_paths("wildcards")
+        except Exception:  # pylint: disable=W0718
+            fp2 = None
+        folders_str = ",".join(fp1 or fp2 or [])
+    if folders_str == "":
+        folders_str = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
+    return [
+        (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
+        for f in folders_str.split(",")
+        if f.strip() != ""
+    ]
+
+
+def _resolve_enmappings_folders(override: str = "") -> list[str]:
+    """Return the resolved list of extra-network mapping folder paths."""
+    folders_str = override
+    if folders_str == "":
+        try:
+            fp3 = folder_paths.get_folder_paths("ppp_extranetworkmappings")
+        except Exception:  # pylint: disable=W0718
+            fp3 = None
+        folders_str = ",".join(fp3 or [])
+    if folders_str == "":
+        folders_str = os.getenv(
+            "EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER
+        )
+    return [
+        (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
+        for f in folders_str.split(",")
+        if f.strip() != ""
+    ]
+
+
 class PromptPostProcessorComfyUINode:
     """
     Node for processing prompts.
@@ -220,40 +262,8 @@ class PromptPostProcessorComfyUINode:
             "model_class": modelclass,
             "property_base": None,
         }
-        wc_wildcards_folders = wc_options["wc_wildcards_folders"] if wc_options else ""
-        if wc_wildcards_folders == "":
-            try:
-                fp1 = folder_paths.get_folder_paths("ppp_wildcards")
-            except Exception:  # pylint: disable=W0718
-                fp1 = None
-            try:
-                fp2 = folder_paths.get_folder_paths("wildcards")
-            except Exception:  # pylint: disable=W0718
-                fp2 = None
-            wc_wildcards_folders = ",".join(fp1 or fp2 or [])
-        if wc_wildcards_folders == "":
-            wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
-        wildcards_folders = [
-            (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
-            for f in wc_wildcards_folders.split(",")
-            if f.strip() != ""
-        ]
-        en_mappings_folders = en_options["en_mappings_folders"] if en_options else ""
-        if en_mappings_folders == "":
-            try:
-                fp3 = folder_paths.get_folder_paths("ppp_extranetworkmappings")
-            except Exception:  # pylint: disable=W0718
-                fp3 = None
-            en_mappings_folders = ",".join(fp3 or [])
-        if en_mappings_folders == "":
-            en_mappings_folders = os.getenv(
-                "EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER
-            )
-        enmappings_folders = [
-            (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
-            for f in en_mappings_folders.split(",")
-            if f.strip() != ""
-        ]
+        wildcards_folders = _resolve_wildcards_folders(wc_options["wc_wildcards_folders"] if wc_options else "")
+        enmappings_folders = _resolve_enmappings_folders(en_options["en_mappings_folders"] if en_options else "")
 
         options = {
             "debug_level": debug_level,
@@ -743,3 +753,133 @@ class PromptPostProcessorSelectVariableComfyUINode:
             elif name in variables:
                 value = variables[name]
         return (value,)
+
+
+class PromptPostProcessorWildcardConcatComfyUINode:
+    """
+    Node for selecting and concatenating wildcards as a prompt.
+    """
+
+    NONE_OPTION = "(none)"
+    _wildcards_obj = None
+    _wildcards_log = None
+
+    @classmethod
+    def _ensure_wildcards(cls):
+        if cls._wildcards_obj is None:
+            lf = PromptPostProcessorLogFactory(SUPPORTED_APPS.comfyui)
+            cls._wildcards_log = lf.log
+            cls._wildcards_obj = PPPWildcards(cls._wildcards_log)
+        cls._wildcards_obj.refresh_wildcards(DEBUG_LEVEL.minimal, _resolve_wildcards_folders())
+        return cls._wildcards_obj
+
+    @classmethod
+    def get_wildcard_keys(cls, filter_prefix=""):
+        wc_obj = cls._ensure_wildcards()
+        keys = sorted(wc_obj.wildcards.keys())
+        if filter_prefix:
+            keys = [k for k in keys if k.startswith(filter_prefix)]
+        return [cls.NONE_OPTION] + keys
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        wc_list = cls.get_wildcard_keys()
+        return {
+            "required": {
+                "filter": (
+                    "STRING",
+                    {
+                        "default": "build",
+                        "multiline": False,
+                        "dynamicPrompts": False,
+                        "tooltip": "Filter wildcards by prefix (changing this refreshes the dropdowns)",
+                    },
+                ),
+                "separator": (
+                    "STRING",
+                    {
+                        "default": ", ",
+                        "multiline": False,
+                        "dynamicPrompts": False,
+                        "tooltip": "Separator used to concatenate the selected wildcard references",
+                    },
+                ),
+                "wildcard_1": (wc_list, {"tooltip": "Wildcard 1"}),
+                "wildcard_2": (wc_list, {"tooltip": "Wildcard 2"}),
+                "wildcard_3": (wc_list, {"tooltip": "Wildcard 3"}),
+                "wildcard_4": (wc_list, {"tooltip": "Wildcard 4"}),
+                "wildcard_5": (wc_list, {"tooltip": "Wildcard 5"}),
+                "wildcard_6": (wc_list, {"tooltip": "Wildcard 6"}),
+                "wildcard_7": (wc_list, {"tooltip": "Wildcard 7"}),
+                "wildcard_8": (wc_list, {"tooltip": "Wildcard 8"}),
+                "wildcard_9": (wc_list, {"tooltip": "Wildcard 9"}),
+                "wildcard_10": (wc_list, {"tooltip": "Wildcard 10"}),
+            },
+            "optional": {
+                "previous_prompt": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Connect to the prompt output of another Wildcard Concat node to chain more than 10 wildcards",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("prompt",)
+
+    FUNCTION = "process"
+
+    CATEGORY = "ACB"
+
+    def process(
+        self,
+        filter,  # noqa: A002  # pylint: disable=redefined-builtin, unused-argument
+        separator,
+        wildcard_1,
+        wildcard_2,
+        wildcard_3,
+        wildcard_4,
+        wildcard_5,
+        wildcard_6,
+        wildcard_7,
+        wildcard_8,
+        wildcard_9,
+        wildcard_10,
+        previous_prompt=None,
+    ):
+        parts = [
+            f"__{w}__"
+            for w in [
+                wildcard_1,
+                wildcard_2,
+                wildcard_3,
+                wildcard_4,
+                wildcard_5,
+                wildcard_6,
+                wildcard_7,
+                wildcard_8,
+                wildcard_9,
+                wildcard_10,
+            ]
+            if w != self.NONE_OPTION
+        ]
+        result = separator.join(parts)
+        if previous_prompt:
+            result = previous_prompt + separator + result if result else previous_prompt
+        return (result,)
+
+
+try:
+    from server import PromptServer  # type: ignore # pylint: disable=import-error
+    from aiohttp import web as _aiohttp_web  # type: ignore # pylint: disable=import-error
+
+    @PromptServer.instance.routes.get("/acb_ppp/wildcards")
+    async def _acb_ppp_get_wildcards(request):
+        filter_prefix = request.rel_url.query.get("filter", "")
+        wc_list = PromptPostProcessorWildcardConcatComfyUINode.get_wildcard_keys(filter_prefix)
+        return _aiohttp_web.json_response({"wildcards": wc_list})
+
+except Exception:  # pylint: disable=broad-except
+    pass

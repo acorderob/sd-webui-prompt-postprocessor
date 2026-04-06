@@ -17,6 +17,7 @@ from .ppp_comfyui import (
     PromptPostProcessorSTNOptionsComfyUINode,
     PromptPostProcessorCleanupOptionsComfyUINode,
     PromptPostProcessorSelectVariableComfyUINode,
+    PromptPostProcessorWildcardConcatComfyUINode,
 )
 
 NODE_CLASS_MAPPINGS = {
@@ -26,6 +27,7 @@ NODE_CLASS_MAPPINGS = {
     "ACBPPPSendToNegativeOptions": PromptPostProcessorSTNOptionsComfyUINode,
     "ACBPPPCleanupOptions": PromptPostProcessorCleanupOptionsComfyUINode,
     "ACBPPPSelectVariable": PromptPostProcessorSelectVariableComfyUINode,
+    "ACBPPPWildcardConcat": PromptPostProcessorWildcardConcatComfyUINode,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ACBPromptPostProcessor": "ACB Prompt Post Processor",
@@ -34,6 +36,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ACBPPPSendToNegativeOptions": "ACB PPP Send-To-Negative Options",
     "ACBPPPCleanupOptions": "ACB PPP Cleanup Options",
     "ACBPPPSelectVariable": "ACB PPP Select Variable",
+    "ACBPPPWildcardConcat": "ACB PPP Wildcard Concat",
 }
 WEB_DIRECTORY = "./web"
 
