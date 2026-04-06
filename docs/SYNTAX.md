@@ -93,7 +93,7 @@ Wildcards cannot be used inside an extranetwork tag (because some lora names con
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double.
 
-The filter is a comma separated list of an integer (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice).
+The filter is a comma separated list of an integer/range (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice).
 
 There are some additional formats when using filters.
 
@@ -112,6 +112,7 @@ These are examples of formats you can use to insert a wildcard:
 | ---------                            | ------                                                                   |
 | `__wildcard__`                       | select 1 choice                                                          |
 | `__path/wildcard'0'__`               | select the first choice                                                  |
+| `__path/wildcard'1-2'__`             | select the second or third choice                                        |
 | `__path/wildcard'label'__`           | select the choices with label "label"                                    |
 | `__path/wildcard'0,label1,label2'__` | select the first choice and those with labels "label1" or "label2"       |
 | `__path/wildcard'0,label1+label2'__` | select the first choice and those with both labels "label1" and "label2" |

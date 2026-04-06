@@ -2192,14 +2192,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             self.__ppp.logger.debug(f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
                         self.__ppp.wildcard_obj.set_wildcard_default_filter(wc, None)
                 else:
-                    filter_specifier: list[list[str]] = []
-                    for or_ in filter_object.children:
-                        for and_ in or_.children:
-                            label = and_.children[0]
-                            if isinstance(label, lark.Tree):
-                                filter_specifier.append([self.__visit(label, False, True)])
-                            else:
-                                filter_specifier.append([str(label)])
+                    filter_specifier = self.__extract_filter_specifiers(filter_object)
                     for wc in selected_wildcards:
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug(f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
@@ -2231,14 +2224,23 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 filtered_choice_values = []
                 for i, c in enumerate(choice_values):
                     passes = False
-                    for o in filter_specifier:
+                    for or_ in filter_specifier:
                         tmp_pass = True
-                        for a in o:
-                            if a.isdecimal():
-                                if int(a) != i:
+                        for and_ in or_:
+                            if and_.isdecimal():
+                                if int(and_) != i:
                                     tmp_pass = False
                                     break
-                            elif a.lower() not in c.get("labels", []):
+                            elif re.match(r"^\d+-\d+$", and_):
+                                try:
+                                    start, end = map(int, and_.split("-", 1))
+                                    if not (start <= i <= end):
+                                        tmp_pass = False
+                                        break
+                                except ValueError:
+                                    tmp_pass = False
+                                    break
+                            elif and_.lower() not in c.get("labels", []):
                                 tmp_pass = False
                                 break
                         if tmp_pass:
@@ -2646,7 +2648,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     t2 = time.monotonic_ns()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return
-                filter_specifier: list[int | str] = None
+                filter_specifier: list[list[str]] = None
                 filter_object = tree.children[2]
                 if filter_object is not None:
                     if (  # it's an inherited filter from another wildcard
@@ -2659,17 +2661,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices with inherited filter")
                     else:
-                        filter_specifier = []
-                        for x in filter_object.children[2].children:
-                            for y in x.children:
-                                y2 = y.children[0]
-                                if isinstance(y2, lark.Token):
-                                    # it's a literal, we can use it directly
-                                    filter_specifier.append([y2.value])
-                                else:
-                                    # it's a variable, we need to evaluate it
-                                    v = self.__visit(y2, False, True)
-                                    filter_specifier.append([v])
+                        filter_specifier = self.__extract_filter_specifiers(filter_object.children[2])
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices")
                     self.__wildcard_filters[wildcard_key] = filter_specifier
@@ -2688,7 +2680,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if (
                     len(selected_wildcards) > 1
                     and filter_specifier is not None
-                    and any(x.isdecimal() for x in filter_specifier)
+                    and any(y[0].isdecimal() for x in filter_specifier for y in x)
                 ):
                     self.__ppp.logger.warning(
                         f"Using a globbing wildcard '{escape_single_quotes(wildcard_key)}' with positional index filters is not recommended!"
@@ -2744,6 +2736,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
             t2 = time.monotonic_ns()
             self.__debug_end("wildcard", start_result, t2 - t1, f"'{escape_single_quotes(wc)}'")
+
+        def __extract_filter_specifiers(self, filters: lark.Tree) -> list[list[str]]:
+            filter_specifier = []
+            for or_ in filters.children:
+                for and_ in or_.children:
+                    label = and_.children[0]
+                    if isinstance(label, lark.Token):
+                        # it's a literal, we can use it directly
+                        filter_specifier.append([label.value])
+                    else:
+                        # it's a variable, we need to evaluate it
+                        v = self.__visit(label, False, True)
+                        filter_specifier.append([v])
+            return filter_specifier
 
         def choices(self, tree: lark.Tree):
             """

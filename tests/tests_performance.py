@@ -1,6 +1,7 @@
-import unittest
-
 from .base_tests import PromptPair, TestPromptPostProcessorBase
+
+if __name__ == "__main__":
+    raise SystemExit("This script must not be run directly")
 
 
 class TestPerformance(TestPromptPostProcessorBase):
@@ -72,7 +73,3 @@ class TestPerformance(TestPromptPostProcessorBase):
             PromptPair(large_prompt, ""),
             ppp="nocup",
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

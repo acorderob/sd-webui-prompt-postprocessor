@@ -1,7 +1,8 @@
-import unittest
-
 from ppp import PromptPostProcessor
 from .base_tests import PromptPair, TestPromptPostProcessorBase
+
+if __name__ == "__main__":
+    raise SystemExit("This script must not be run directly")
 
 
 class TestWildcards(TestPromptPostProcessorBase):
@@ -203,6 +204,13 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcard_filter_index(self):  # wildcard with positional index filter
         self.process(
             PromptPair("the choice is: __yaml/wildcard2'2'__", ""),
+            PromptPair("the choice is: choice3-choice3", ""),
+            ppp="nocup",
+        )
+
+    def test_wc_wildcard_filter_index_range(self):  # wildcard with positional index range filter
+        self.process(
+            PromptPair("the choice is: __yaml/wildcard2'2-3'__", ""),
             PromptPair("the choice is: choice3-choice3", ""),
             ppp="nocup",
         )
@@ -411,7 +419,3 @@ class TestWildcards(TestPromptPostProcessorBase):
             PromptPair("the choices are: choice1-choice3-choice1 choice3- choice2 - choice2  choice3", ""),
             ppp="nocup",
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

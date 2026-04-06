@@ -1,7 +1,8 @@
-import unittest
-
 from ppp import PromptPostProcessor  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
+
+if __name__ == "__main__":
+    raise SystemExit("This script must not be run directly")
 
 
 class TestChoices(TestPromptPostProcessorBase):
@@ -95,7 +96,3 @@ class TestChoices(TestPromptPostProcessorBase):
             PromptPair("ch_two", ""),
             ppp="nocup",
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

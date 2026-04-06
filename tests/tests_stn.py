@@ -1,6 +1,7 @@
-import unittest
-
 from .base_tests import PromptPair, TestPromptPostProcessorBase
+
+if __name__ == "__main__":
+    raise SystemExit("This script must not be run directly")
 
 
 class TestSendToNegative(TestPromptPostProcessorBase):
@@ -121,7 +122,3 @@ class TestSendToNegative(TestPromptPostProcessorBase):
                 # "[neg1[|neg12|||neg15]|neg2|neg3]", # expected output if the constructs were unified
             ),
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

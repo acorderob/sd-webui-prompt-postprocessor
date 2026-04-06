@@ -5,7 +5,8 @@ STRING:              /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i 
 BOOLEAN:             /true|false/i
 WC_NAME_PLAIN_START: /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/])+/u // starting characters, excluding end and other inside constructs
 WC_NAME_PLAIN:       /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/_#\*\?\[!\]])+/u // continuing characters, including globbing characters and anonymous wildcard mark, excluding end and other inside constructs
-FILTER:               INT | IDENTIFIER
+INDEX:               INT
+FILTER:              INDEX | IDENTIFIER
 IDENTIFIER:          CNAME
 SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
 COMPVALUE:           SIMPLEVALUE | IDENTIFIER
@@ -173,12 +174,13 @@ varvalue: content_var
 //#if ALLOW_WILDCARDS
     // wildcards construct
     wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
+    wc_filter_nums: IDENTIFIER | INDEX | (INDEX /-/ INDEX)
     //#if ALLOW_COMMVARS
         wildcard_name.2: ( WC_NAME_PLAIN_START | variableuse | commandecho ) ( WC_NAME_PLAIN | variableuse | commandecho )*
-        wc_filter_simple: FILTER | variableuse
+        wc_filter_simple: wc_filter_nums | variableuse
     //#else
         wildcard_name.2: ( WC_NAME_PLAIN_START) WC_NAME_PLAIN*
-        wc_filter_simple: FILTER
+        wc_filter_simple: wc_filter_nums
     //#endif
     wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /["']/
     wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*

@@ -1,7 +1,8 @@
-import unittest
-
 from ppp import PromptPostProcessor  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
+
+if __name__ == "__main__":
+    raise SystemExit("This script must not be run directly")
 
 
 class TestVariables(TestPromptPostProcessorBase):
@@ -52,6 +53,17 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
+        )
+
+    # Variable in extranetworks
+
+    def test_variable_in_extranetwork(self):
+        self.process(
+            PromptPair(
+                "${f=filename}${w=0.5}<lora:${f}:${w}>",
+                "",
+            ),
+            PromptPair("<lora:filename:0.5>", ""),
         )
 
     # Variable nesting tests
@@ -199,7 +211,3 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.extranetwork_maps_obj,
             ),
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
