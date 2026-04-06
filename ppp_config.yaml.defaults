@@ -129,28 +129,28 @@ models:
         detect:
             a1111: null
             forge: { class: ["Flux", "FluxSchnell"] }
-            reforge: null
+            reforge: { class: ["Flux", "FluxInpaint", "FluxSchnell"] }
             sdnext: { class: ["FluxPipeline"] }
             comfyui: { class: ["Flux", "FluxInpaint", "FluxSchnell"] }
     auraflow: # AuraFlow
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["AuraFlow"] }
             sdnext: { class: ["AuraFlowPipeline"] }
             comfyui: { class: ["AuraFlow"] }
     pixart: # PixArt
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["PixArtAlpha", "PixArtSigma"] }
             sdnext: { class: ["PixArtAlphaPipeline"] }
             comfyui: { class: ["PixArtAlpha", "PixArtSigma"] }
     lumina2: # Lumina2 & ZImage
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["Lumina2", "ZImage"] }
             sdnext: null
             comfyui: { class: ["Lumina2", "ZImage"] }
     ltxv: # LTXV
@@ -164,77 +164,77 @@ models:
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["CosmosT2V", "CosmosI2V"] }
             sdnext: null
             comfyui: { class: ["CosmosT2V", "CosmosI2V"] }
     cosmospredict2: # CosmosPredict2
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["CosmosT2IPredict2", "CosmosI2VPredict2"] }
             sdnext: null
             comfyui: { class: ["CosmosT2IPredict2", "CosmosI2VPredict2"] }
     genmomochi: # GenmoMochi
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["GenmoMochi"] }
             sdnext: null
             comfyui: { class: ["GenmoMochi"] }
     hunyuan: # Hunyuan
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["HunyuanDiT", "HunyuanDiT1"] }
             sdnext: null
             comfyui: { class: ["HunyuanDiT", "HunyuanDiT1"] }
     hunyuanvideo: # HunyuanVideo
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V", "HunyuanImage21", "HunyuanImage21Refiner", "HunyuanVideo15", "HunyuanVideo15_SR_Distilled"] }
             sdnext: null
             comfyui: { class: ["HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V", "HunyuanImage21", "HunyuanImage21Refiner", "HunyuanVideo15", "HunyuanVideo15_SR_Distilled"] }
     hunyuan3d: # Hunyuan3D
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"] }
             sdnext: null
             comfyui: { class: ["Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"] }
     wan: # Wan21 & Wan22
         detect:
             a1111: null
-            forge: null
-            reforge: null
+            forge: { class: ["WAN21_T2V", "WAN21_I2V"] }
+            reforge: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
             sdnext: null
             comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
     hidream: # HiDream
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["HiDream"] }
             sdnext: null
             comfyui: { class: ["HiDream"] }
     qwenimage: # QwenImage & QwenImageEdit
         detect:
             a1111: null
-            forge: null
+            forge: { class: ["QwenImage"] }
             reforge: null
             sdnext: null
             comfyui: { class: ["QwenImage"] }
     chroma: # Chroma
         detect:
             a1111: null
-            forge: null
-            reforge: null
+            forge: { class: ["Chroma"] }
+            reforge: { class: ["Chroma", "ChromaRadiance"] }
             sdnext: null
             comfyui: { class: ["Chroma", "ChromaRadiance"] }
     omnigen2: # Omnigen 2
         detect:
             a1111: null
             forge: null
-            reforge: null
+            reforge: { class: ["Omnigen2"] }
             sdnext: null
             comfyui: { class: ["Omnigen2"] }
     flux2: # Flux 2
