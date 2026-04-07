@@ -45,13 +45,13 @@ class TestCommands(TestPromptPostProcessorBase):
             PromptPair("this is PONY", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -269,13 +269,13 @@ class TestCommands(TestPromptPostProcessorBase):
             PromptPair("<lora:lorapony:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -290,13 +290,13 @@ class TestCommands(TestPromptPostProcessorBase):
             PromptPair("<lora:lorapony:0.4>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -311,13 +311,13 @@ class TestCommands(TestPromptPostProcessorBase):
             PromptPair("<lora:lorapony:0.6:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -332,13 +332,13 @@ class TestCommands(TestPromptPostProcessorBase):
             PromptPair("<lora:loraillustrious:0.9:0.8>inlinetrigger, triggerillustrious1, triggerillustrious2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/ilxlmodel.safetensors",
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

@@ -1,9 +1,12 @@
+from dataclasses import replace
+
 from ppp import PromptPostProcessor  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
 
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
+
 
 class TestCleanup(TestPromptPostProcessorBase):
 
@@ -36,10 +39,13 @@ class TestCleanup(TestPromptPostProcessorBase):
             PromptPair("this is a test", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "remove_extranetwork_tags": True},
+                replace(
+                    self.defopts,
+                    rem_removeextranetworktags=True,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -51,14 +57,14 @@ class TestCleanup(TestPromptPostProcessorBase):
             PromptPair("this is a test,\nsecond line", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "cleanup_extra_separators2": False,
-                    "cleanup_extra_separators_include_eol": False,
-                },
+                replace(
+                    self.defopts,
+                    cup_extraseparators2=False,
+                    cup_extraseparators_include_eol=False,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -80,23 +86,23 @@ class TestCleanup(TestPromptPostProcessorBase):
             ),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "cleanup_empty_constructs": False,
-                    "cleanup_extra_separators": True,
-                    "cleanup_extra_separators2": False,
-                    "cleanup_extra_separators_include_eol": False,
-                    "cleanup_extra_spaces": False,
-                    "cleanup_breaks": False,
-                    "cleanup_breaks_eol": False,
-                    "cleanup_ands": False,
-                    "cleanup_ands_eol": False,
-                    "cleanup_extranetwork_tags": False,
-                    "cleanup_merge_attention": False,
-                },
+                replace(
+                    self.defopts,
+                    cup_emptyconstructs=False,
+                    cup_extraseparators=True,
+                    cup_extraseparators2=False,
+                    cup_extraseparators_include_eol=False,
+                    cup_extraspaces=False,
+                    cup_breaks=False,
+                    cup_breaks_eol=False,
+                    cup_ands=False,
+                    cup_ands_eol=False,
+                    cup_extranetworktags=False,
+                    cup_mergeattention=False,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

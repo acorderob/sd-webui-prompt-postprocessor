@@ -1,4 +1,7 @@
-from ppp import PromptPostProcessor  # pylint: disable=import-error
+from dataclasses import replace
+
+from ppp import PromptPostProcessor
+from ppp_classes import ONWARNING_CHOICES  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -21,7 +24,6 @@ class TestModelVariants(TestPromptPostProcessorBase):
             PromptPair("test1test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
@@ -61,11 +63,12 @@ class TestModelVariants(TestPromptPostProcessorBase):
                         }
                     },
                 },
-                {
-                    **self.defopts,
-                    "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value,
-                },
+                replace(
+                    self.defopts,
+                    gen_onwarning=ONWARNING_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

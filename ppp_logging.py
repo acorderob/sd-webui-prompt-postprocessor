@@ -2,7 +2,6 @@ from enum import Enum
 import logging
 import sys
 import copy
-from ppp_classes import SUPPORTED_APPS
 
 
 class DEBUG_LEVEL(Enum):
@@ -53,7 +52,7 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
-    def __init__(self, app: SUPPORTED_APPS = None, filename = None):  # pylint: disable=unused-argument
+    def __init__(self, filename = None):
         """
         Initializes the PromptPostProcessor class.
 

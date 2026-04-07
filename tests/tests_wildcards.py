@@ -1,4 +1,7 @@
+from dataclasses import replace
+
 from ppp import PromptPostProcessor
+from ppp_classes import IFWILDCARDS_CHOICES
 from .base_tests import PromptPair, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -18,14 +21,14 @@ class TestWildcards(TestPromptPostProcessorBase):
             PromptPair("__bad_wildcard__", "{option1|option2}"),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "process_wildcards": False,
-                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
-                },
+                replace(
+                    self.defopts,
+                    wil_process_wildcards=False,
+                    wil_ifwildcards=IFWILDCARDS_CHOICES.ignore,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -43,14 +46,14 @@ class TestWildcards(TestPromptPostProcessorBase):
             ),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "process_wildcards": False,
-                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.remove.value,
-                },
+                replace(
+                    self.defopts,
+                    wil_process_wildcards=False,
+                    wil_ifwildcards=IFWILDCARDS_CHOICES.remove,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -62,14 +65,14 @@ class TestWildcards(TestPromptPostProcessorBase):
             PromptPair(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", "{option1|option2}"),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "process_wildcards": False,
-                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value,
-                },
+                replace(
+                    self.defopts,
+                    wil_process_wildcards=False,
+                    wil_ifwildcards=IFWILDCARDS_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -84,14 +87,14 @@ class TestWildcards(TestPromptPostProcessorBase):
             ),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "process_wildcards": False,
-                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value,
-                },
+                replace(
+                    self.defopts,
+                    wil_process_wildcards=False,
+                    wil_ifwildcards=IFWILDCARDS_CHOICES.stop,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -104,14 +107,14 @@ class TestWildcards(TestPromptPostProcessorBase):
             PromptPair(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {
-                    **self.defopts,
-                    "process_wildcards": False,
-                    "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value,
-                },
+                replace(
+                    self.defopts,
+                    wil_process_wildcards=False,
+                    wil_ifwildcards=IFWILDCARDS_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

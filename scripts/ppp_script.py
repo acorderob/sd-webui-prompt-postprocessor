@@ -15,7 +15,7 @@ from modules.shared import opts  # pylint: disable=import-error
 from modules.paths import models_path  # pylint: disable=import-error
 import gradio as gr  # pylint: disable=import-error
 from ppp import PromptPostProcessor
-from ppp_classes import SUPPORTED_APPS, SUPPORTED_APPS_NAMES
+from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, SUPPORTED_APPS_NAMES, PPPStateOptions
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
 from ppp_cache import PPPLRUCache
 from ppp_wildcards import PPPWildcards
@@ -175,10 +175,54 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 )
             )
         )
+        options = PPPStateOptions(
+            debug_level=DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL)),
+            gen_onwarning=ONWARNING_CHOICES(getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ONWARNING)),
+            wil_process_wildcards=getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_WC_PROCESS),
+            wil_ifwildcards=IFWILDCARDS_CHOICES(
+                getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS)
+            ),
+            wil_choice_separator=getattr(
+                opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR
+            ),
+            wil_keep_choices_order=getattr(
+                opts, "ppp_wil_keep_choices_order", PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
+            ),
+            stn_separator=getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),
+            stn_ignore_repeats=getattr(opts, "ppp_stn_ignorerepeats", PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS),
+            cup_do_cleanup=True,
+            cup_cleanup_variables=True,
+            cup_extraspaces=getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
+            cup_emptyconstructs=getattr(
+                opts, "ppp_cup_emptyconstructs", PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
+            ),
+            cup_extraseparators=getattr(
+                opts, "ppp_cup_extraseparators", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
+            ),
+            cup_extraseparators2=getattr(
+                opts, "ppp_cup_extraseparators2", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
+            ),
+            cup_extraseparators_include_eol=getattr(
+                opts,
+                "ppp_cup_extraseparators_include_eol",
+                PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL,
+            ),
+            cup_breaks=getattr(opts, "ppp_cup_breaks", PromptPostProcessor.DEFAULT_CUP_BREAKS),
+            cup_breaks_eol=getattr(opts, "ppp_cup_breaks_eol", PromptPostProcessor.DEFAULT_CUP_BREAKS_EOL),
+            cup_ands=getattr(opts, "ppp_cup_ands", PromptPostProcessor.DEFAULT_CUP_ANDS),
+            cup_ands_eol=getattr(opts, "ppp_cup_ands_eol", PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
+            cup_extranetworktags=getattr(
+                opts, "ppp_cup_extranetworktags", PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
+            ),
+            cup_mergeattention=getattr(opts, "ppp_cup_mergeattention", PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION),
+            rem_removeextranetworktags=getattr(
+                opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
+            ),
+        )
         if self.ppp_logger is None:
-            lf = PromptPostProcessorLogFactory(app)
+            lf = PromptPostProcessorLogFactory()
             self.ppp_logger = lf.log
-            self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
+            self.ppp_debug_level = options.debug_level
             self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
             self.wildcards_obj = PPPWildcards(self.ppp_logger)
             self.extranetwork_mappings_obj = PPPExtraNetworkMappings(self.ppp_logger)
@@ -190,7 +234,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.ppp_logger.warning("Compel parser is not supported!")
         init_images = getattr(p, "init_images", [None]) or [None]
         is_i2i = bool(init_images[0])
-        self.ppp_debug_level = DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", DEBUG_LEVEL.none.value))
         do_i2i = getattr(opts, "ppp_gen_doi2i", False)
         add_prompts = getattr(opts, "ppp_gen_addpromptstometadata", True)
         if is_i2i and not do_i2i:
@@ -237,60 +280,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
             for f in en_mappings_folders.split(",")
             if f.strip() != ""
         ]
-        options = {
-            "debug_level": getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL),
-            "on_warning": getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ONWARNING),
-            "process_wildcards": getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_WC_PROCESS),
-            "if_wildcards": getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS),
-            "choice_separator": getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
-            "keep_choices_order": getattr(
-                opts, "ppp_wil_keep_choices_order", PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
-            ),
-            "stn_separator": getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),
-            "stn_ignore_repeats": getattr(
-                opts, "ppp_stn_ignorerepeats", PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS
-            ),
-            "do_cleanup": True,
-            "cleanup_variables": True,
-            "cleanup_extra_spaces": getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
-            "cleanup_empty_constructs": getattr(
-                opts, "ppp_cup_emptyconstructs", PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
-            ),
-            "cleanup_extra_separators": getattr(
-                opts, "ppp_cup_extraseparators", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
-            ),
-            "cleanup_extra_separators2": getattr(
-                opts, "ppp_cup_extraseparators2", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
-            ),
-            "cleanup_extra_separators_include_eol": getattr(
-                opts,
-                "ppp_cup_extraseparators_include_eol",
-                PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL,
-            ),
-            "cleanup_breaks": getattr(opts, "ppp_cup_breaks", PromptPostProcessor.DEFAULT_CUP_BREAKS),
-            "cleanup_breaks_eol": getattr(opts, "ppp_cup_breaks_eol", PromptPostProcessor.DEFAULT_CUP_BREAKS_EOL),
-            "cleanup_ands": getattr(opts, "ppp_cup_ands", PromptPostProcessor.DEFAULT_CUP_ANDS),
-            "cleanup_ands_eol": getattr(opts, "ppp_cup_ands_eol", PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
-            "cleanup_extranetwork_tags": getattr(
-                opts, "ppp_cup_extranetworktags", PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
-            ),
-            "cleanup_merge_attention": getattr(
-                opts, "ppp_cup_mergeattention", PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION
-            ),
-            "remove_extranetwork_tags": getattr(
-                opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
-            ),
-        }
         self.wildcards_obj.refresh_wildcards(
-            self.ppp_debug_level, wildcards_folders if options["process_wildcards"] else None
+            self.ppp_debug_level, wildcards_folders if options.wil_process_wildcards else None
         )
         self.extranetwork_mappings_obj.refresh_extranetwork_mappings(self.ppp_debug_level, enmappings_folders)
         ppp = PromptPostProcessor(
             self.ppp_logger,
-            self.ppp_interrupt,
             env_info,
             options,
             self.grammar_content,
+            self.ppp_interrupt,
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
@@ -500,13 +499,13 @@ def on_ui_settings():
     shared.opts.add_option(
         key="ppp_gen_onwarning",
         info=shared.OptionInfo(
-            default=PromptPostProcessor.ONWARNING_CHOICES.warn.value,
+            default=ONWARNING_CHOICES.warn.value,
             label="What to do on invalid content warnings?",
             component=gr.Radio,
             component_args={
                 "choices": (
-                    ("Show warning in console", PromptPostProcessor.ONWARNING_CHOICES.warn.value),
-                    ("Stop the generation", PromptPostProcessor.ONWARNING_CHOICES.stop.value),
+                    ("Show warning in console", ONWARNING_CHOICES.warn.value),
+                    ("Stop the generation", ONWARNING_CHOICES.stop.value),
                 )
             },
             section=section,
@@ -567,16 +566,16 @@ def on_ui_settings():
         info=shared.OptionInfo(
             default=import_old_settings(
                 ["ppp_gen_ifwildcards", "ppp_ifwildcards"],
-                PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
+                IFWILDCARDS_CHOICES.ignore.value,
             ),
             label="What to do with remaining/invalid wildcards?",
             component=gr.Radio,
             component_args={
                 "choices": (
-                    ("Ignore", PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value),
-                    ("Remove", PromptPostProcessor.IFWILDCARDS_CHOICES.remove.value),
-                    ("Add visible warning", PromptPostProcessor.IFWILDCARDS_CHOICES.warn.value),
-                    ("Stop the generation", PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value),
+                    ("Ignore", IFWILDCARDS_CHOICES.ignore.value),
+                    ("Remove", IFWILDCARDS_CHOICES.remove.value),
+                    ("Add visible warning", IFWILDCARDS_CHOICES.warn.value),
+                    ("Stop the generation", IFWILDCARDS_CHOICES.stop.value),
                 )
             },
             section=section,

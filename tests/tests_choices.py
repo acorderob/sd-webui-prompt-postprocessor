@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ppp import PromptPostProcessor  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
 
@@ -81,10 +83,13 @@ class TestChoices(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "remove_extranetwork_tags": True},
+                replace(
+                    self.defopts,
+                    rem_removeextranetworktags=True,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

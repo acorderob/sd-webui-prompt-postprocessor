@@ -21,13 +21,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("(test1:0.9) (test2) (test3:1.5) (test4:0.99)", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"attention": "parentheses"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -42,13 +42,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1 test2 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"attention": "disable"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -63,13 +63,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"attention": "remove"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -84,13 +84,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"attention": "error"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -106,13 +106,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"scheduling": "before"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -127,13 +127,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"scheduling": "after"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -148,13 +148,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"scheduling": "first"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -169,13 +169,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"scheduling": "remove"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -190,13 +190,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"scheduling": "error"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -212,13 +212,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"alternation": "first"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -233,13 +233,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"alternation": "remove"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -254,13 +254,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"alternation": "error"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -276,13 +276,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"and": "eol"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -297,13 +297,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"and": "comma"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -318,13 +318,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"and": "remove"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -339,13 +339,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"and": "error"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -361,13 +361,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"break": "eol"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -382,13 +382,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"break": "comma"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -403,13 +403,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"break": "remove"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -424,13 +424,13 @@ class TestHosts(TestPromptPostProcessorBase):
             PromptPair("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 {
                     **self.def_env_info,
                     "ppp_config": {"hosts": {"tests": {"break": "error"}}},
                 },
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

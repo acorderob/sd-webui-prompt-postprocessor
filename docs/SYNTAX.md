@@ -41,6 +41,7 @@ The construct parameters can be written with the following options (all are opti
 * "**r**": means it allows repetition of the choices.
 * "**o**": means it is "optional", and no error will be raised if there are no choices to select from.
 * "**n**" or "**n-m**" or "**n-**" or "**-m**": number or range of choices to select. Allows zero as the start of a range. Default is 1.
+* "**'description'**": optional description, only valid in wildcard definitions. Used only in the Wildcards Concat node in ComfyUI.
 * "**$$sep**": separator when multiple choices are selected. Default is set in settings.
 * "**$$**": end of the parameters (not optional if any parameters).
 
@@ -129,11 +130,13 @@ A wildcard definition can be:
 * A txt file. The wildcard name will be the relative path of the file, without the extension. Each line will be a choice. Lines starting with `#` or empty are ignored. Doesn't support nesting.
 * An array or scalar value inside a json or yaml file. The wildcard name includes the relative folder path of the file, without the extension, but also the path of the value inside the file (if there is one). If the file contains a dictionary, the filename part is not used for the wildcard name. Supports nesting by having dictionaries inside dictionaries.
 
-The best format is a yaml file with a dictionary of wildcards inside. An editor supporting yaml syntax and linting is recommended (f.e. vscode).
+The best format is a yaml file with a dictionary of wildcards inside. An editor supporting yaml syntax and linting is recommended (f.e. VSCode).
 
 In a choice, the content after a `#`  is ignored.
 
-If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder). The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) and `command` property (a boolean) in addition to the standard `weight` and `text`/`content`.
+If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder).
+
+The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) and `command` property (a boolean) in addition to the standard `weight` and `text`/`content`.
 
 ```yaml
 { command: false, labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
@@ -142,8 +145,8 @@ If the first choice follows the format of wildcard parameters (*including the fi
 Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
 
 ```yaml
-{ sampler: "~", repeating: false, optional: false, count: 2, prefix: "prefix-", suffix: "-suffix", separator: "/" }
-{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, prefix: "prefix-", suffix: "-suffix", separator: "/" }
+{ sampler: "~", repeating: false, optional: false, count: 2, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
+{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
 ```
 
 The prefix and suffix are added to the result along with the selected choices and separators. They can contain other constructs, but the separator can't.

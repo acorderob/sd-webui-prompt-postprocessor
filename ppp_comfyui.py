@@ -4,7 +4,7 @@ import folder_paths  # pylint: disable=import-error # type: ignore
 import nodes  # pylint: disable=import-error # type: ignore
 
 from ppp import PromptPostProcessor
-from ppp_classes import SUPPORTED_APPS
+from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
 from ppp_utils import escape_single_quotes
 from ppp_wildcards import PPPWildcards
@@ -46,9 +46,7 @@ def _resolve_enmappings_folders(override: str = "") -> list[str]:
             fp3 = None
         folders_str = ",".join(fp3 or [])
     if folders_str == "":
-        folders_str = os.getenv(
-            "EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER
-        )
+        folders_str = os.getenv("EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER)
     return [
         (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
         for f in folders_str.split(",")
@@ -64,7 +62,7 @@ class PromptPostProcessorComfyUINode:
     logger = None
 
     def __init__(self):
-        lf = PromptPostProcessorLogFactory(SUPPORTED_APPS.comfyui)
+        lf = PromptPostProcessorLogFactory()
         self.logger = lf.log
         grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammar.lark")
         with open(grammar_filename, "r", encoding="utf-8") as file:
@@ -134,7 +132,7 @@ class PromptPostProcessorComfyUINode:
                     },
                 ),
                 "on_warnings": (
-                    [e.value for e in PromptPostProcessor.ONWARNING_CHOICES],
+                    [e.value for e in ONWARNING_CHOICES],
                     {
                         "default": PromptPostProcessor.DEFAULT_ONWARNING,
                         "tooltip": "How to handle invalid content warnings",
@@ -265,82 +263,78 @@ class PromptPostProcessorComfyUINode:
         wildcards_folders = _resolve_wildcards_folders(wc_options["wc_wildcards_folders"] if wc_options else "")
         enmappings_folders = _resolve_enmappings_folders(en_options["en_mappings_folders"] if en_options else "")
 
-        options = {
-            "debug_level": debug_level,
-            "on_warnings": on_warnings,
-            "process_wildcards": process_wildcards,
-            "if_wildcards": (
-                wc_options["wc_if_wildcards"] if wc_options else PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value
-            ),
-            "choice_separator": (
+        options = PPPStateOptions(
+            debug_level=DEBUG_LEVEL(debug_level),
+            gen_onwarning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ONWARNING,
+            wil_process_wildcards=process_wildcards,
+            wil_ifwildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
+            wil_choice_separator=(
                 wc_options["wc_choice_separator"] if wc_options else PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR
             ),
-            "keep_choices_order": (
+            wil_keep_choices_order=(
                 wc_options["wc_keep_choices_order"] if wc_options else PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
             ),
-            "stn_separator": stn_options["stn_separator"] if stn_options else PromptPostProcessor.DEFAULT_STN_SEPARATOR,
-            "stn_ignore_repeats": (
+            stn_separator=stn_options["stn_separator"] if stn_options else PromptPostProcessor.DEFAULT_STN_SEPARATOR,
+            stn_ignore_repeats=(
                 stn_options["stn_ignore_repeats"] if stn_options else PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS
             ),
-            "do_cleanup": do_cleanup,
-            "cleanup_variables": cleanup_variables,
-            "cleanup_extra_spaces": (
+            cup_do_cleanup=do_cleanup,
+            cup_cleanup_variables=cleanup_variables,
+            cup_extraspaces=(
                 cup_options["cup_extra_spaces"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES
             ),
-            "cleanup_empty_constructs": (
+            cup_emptyconstructs=(
                 cup_options["cup_empty_constructs"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
             ),
-            "cleanup_extra_separators": (
+            cup_extraseparators=(
                 cup_options["cup_extra_separators"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
             ),
-            "cleanup_extra_separators2": (
+            cup_extraseparators2=(
                 cup_options["cup_extra_separators2"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
             ),
-            "cleanup_extra_separators_include_eol": (
+            cup_extraseparators_include_eol=(
                 cup_options["cup_extra_separators_include_eol"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL
             ),
-            "cleanup_breaks": cup_options["cup_breaks"] if cup_options else PromptPostProcessor.DEFAULT_CUP_BREAKS,
-            "cleanup_breaks_eol": (
+            cup_breaks=cup_options["cup_breaks"] if cup_options else PromptPostProcessor.DEFAULT_CUP_BREAKS,
+            cup_breaks_eol=(
                 cup_options["cup_breaks_eol"] if cup_options else PromptPostProcessor.DEFAULT_CUP_BREAKS_EOL
             ),
-            "cleanup_ands": cup_options["cup_ands"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS,
-            "cleanup_ands_eol": (
-                cup_options["cup_ands_eol"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS_EOL
-            ),
-            "cleanup_extranetwork_tags": (
+            cup_ands=cup_options["cup_ands"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS,
+            cup_ands_eol=(cup_options["cup_ands_eol"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
+            cup_extranetworktags=(
                 cup_options["cup_extranetwork_tags"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
             ),
-            "cleanup_merge_attention": (
+            cup_mergeattention=(
                 cup_options["cup_merge_attention"] if cup_options else PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION
             ),
-            "remove_extranetwork_tags": (
+            rem_removeextranetworktags=(
                 cup_options["cup_remove_extranetwork_tags"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
-        }
+        )
         self.wildcards_obj.refresh_wildcards(
-            debug_level,
-            wildcards_folders if options["process_wildcards"] else None,
+            options.debug_level,
+            wildcards_folders if options.wil_process_wildcards else None,
             wc_options["wc_wildcards_input"] if wc_options else "",
         )
         self.extranetwork_mappings_obj.refresh_extranetwork_mappings(
-            debug_level,
+            options.debug_level,
             enmappings_folders,
             en_options["en_mappings_input"] if en_options else "",
         )
         ppp = PromptPostProcessor(
             self.logger,
-            self.interrupt,
             env_info,
             options,
             self.grammar_content,
+            self.interrupt,
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
@@ -386,9 +380,9 @@ class PromptPostProcessorWildcardOptionsComfyUINode:
                     },
                 ),
                 "if_wildcards": (
-                    [e.value for e in PromptPostProcessor.IFWILDCARDS_CHOICES],
+                    [e.value for e in IFWILDCARDS_CHOICES],
                     {
-                        "default": PromptPostProcessor.IFWILDCARDS_CHOICES.stop.value,
+                        "default": IFWILDCARDS_CHOICES.stop.value,
                         "tooltip": "How to handle invalid wildcards in the prompt",
                     },
                 ),
@@ -761,17 +755,31 @@ class PromptPostProcessorWildcardConcatComfyUINode:
     """
 
     NONE_OPTION = "(none)"
-    _wildcards_obj = None
-    _wildcards_log = None
+    _ppp = None
+    # _state = None
+    # _tree = None
+    _wildcard_key_map: dict[str, str] = {}
 
     @classmethod
     def _ensure_wildcards(cls):
-        if cls._wildcards_obj is None:
-            lf = PromptPostProcessorLogFactory(SUPPORTED_APPS.comfyui)
-            cls._wildcards_log = lf.log
-            cls._wildcards_obj = PPPWildcards(cls._wildcards_log)
-        cls._wildcards_obj.refresh_wildcards(DEBUG_LEVEL.minimal, _resolve_wildcards_folders())
-        return cls._wildcards_obj
+        if cls._ppp is None:
+            lf = PromptPostProcessorLogFactory()
+            cls._ppp = PromptPostProcessor(
+                lf.log,
+                {
+                    "app": SUPPORTED_APPS.comfyui.value,
+                    "models_path": folder_paths.models_dir,
+                    "model_filename": "",
+                    "model_class": "",
+                    "property_base": None,
+                },
+                PPPStateOptions(debug_level=DEBUG_LEVEL.minimal),
+                wildcards_obj=PPPWildcards(lf.log),
+            )
+        # We need to populate the wildcard options in the tree to get the descriptions for the dropdown labels
+        cls._ppp.state.wildcards_obj.refresh_wildcards(cls._ppp.state.options.debug_level, _resolve_wildcards_folders())
+        cls._ppp.init_wildcards_options()
+        return cls._ppp.state.wildcards_obj
 
     @classmethod
     def get_wildcard_keys(cls, filter_prefix=""):
@@ -779,7 +787,16 @@ class PromptPostProcessorWildcardConcatComfyUINode:
         keys = sorted(wc_obj.wildcards.keys())
         if filter_prefix:
             keys = [k for k in keys if k.startswith(filter_prefix)]
-        return [cls.NONE_OPTION] + keys
+        cls._wildcard_key_map = {cls.NONE_OPTION: cls.NONE_OPTION}
+        labels = []
+        for k in keys:
+            wc = wc_obj.wildcards[k]
+            pretty_key = k.replace("_", " ")
+            desc = str(wc.options["description"]) if wc.options and "description" in wc.options else None
+            label = f"{pretty_key} ({desc})" if desc else pretty_key
+            labels.append(label)
+            cls._wildcard_key_map[label] = k
+        return [cls.NONE_OPTION] + labels
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -849,8 +866,9 @@ class PromptPostProcessorWildcardConcatComfyUINode:
         wildcard_10,
         previous_prompt=None,
     ):
+        key_map = self.__class__._wildcard_key_map  # pylint: disable=protected-access
         parts = [
-            f"__{w}__"
+            f"__{key_map.get(w, w)}__"
             for w in [
                 wildcard_1,
                 wildcard_2,

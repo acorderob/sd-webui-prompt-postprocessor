@@ -58,7 +58,7 @@ Output:
 
 ### ACB PPP Wildcards Concat node
 
-This node lets you select up to 10 wildcards that will be concatenated with a chosen separator.
+This node lets you select up to 10 wildcards that will be concatenated with a chosen separator. You can't specify wildcard folders in the node, so use the other available options to set them.
 
 Inputs:
 

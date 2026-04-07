@@ -1,4 +1,7 @@
-from ppp import PromptPostProcessor  # pylint: disable=import-error
+from dataclasses import replace
+
+from ppp import PromptPostProcessor
+from ppp_classes import ONWARNING_CHOICES  # pylint: disable=import-error
 from .base_tests import PromptPair, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -46,10 +49,13 @@ class TestVariables(TestPromptPostProcessorBase):
             variables={"v1": ""},
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value},
+                replace(
+                    self.defopts,
+                    gen_onwarning=ONWARNING_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -147,10 +153,13 @@ class TestVariables(TestPromptPostProcessorBase):
             PromptPair("NO", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value},
+                replace(
+                    self.defopts,
+                    gen_onwarning=ONWARNING_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -175,10 +184,13 @@ class TestVariables(TestPromptPostProcessorBase):
             PromptPair("NO", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value},
+                replace(
+                    self.defopts,
+                    gen_onwarning=ONWARNING_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),
@@ -203,10 +215,13 @@ class TestVariables(TestPromptPostProcessorBase):
             PromptPair("NO", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
-                {**self.defopts, "on_warning": PromptPostProcessor.ONWARNING_CHOICES.warn.value},
+                replace(
+                    self.defopts,
+                    gen_onwarning=ONWARNING_CHOICES.warn,
+                ),
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             ),

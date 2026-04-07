@@ -1,9 +1,17 @@
 """Pydantic models for the PPP configuration file structure (ppp_config.yaml)."""
 
+from dataclasses import dataclass, field
+from logging import Logger
 import re
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
+from lark import Lark
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from ppp_logging import DEBUG_LEVEL
+from ppp_wildcards import PPPWildcards
+from ppp_enmappings import PPPExtraNetworkMappings
+
 
 class SUPPORTED_APPS(Enum):
     comfyui = "comfyui"
@@ -13,6 +21,7 @@ class SUPPORTED_APPS(Enum):
     sdnext = "sdnext"
     tests = "tests"  # for testing purposes only, not a real app
 
+
 SUPPORTED_APPS_NAMES = {
     SUPPORTED_APPS.comfyui: "ComfyUI",
     SUPPORTED_APPS.sdnext: "SD.Next",
@@ -21,6 +30,75 @@ SUPPORTED_APPS_NAMES = {
     SUPPORTED_APPS.a1111: "A1111 (or compatible)",
     SUPPORTED_APPS.tests: "Tests",
 }
+
+
+class IFWILDCARDS_CHOICES(Enum):
+    ignore = "ignore"
+    remove = "remove"
+    warn = "warn"
+    stop = "stop"
+
+
+class ONWARNING_CHOICES(Enum):
+    warn = "warn"
+    stop = "stop"
+
+
+@dataclass(frozen=True)
+class PPPStateOptions:
+    """Options that can be set for prompt processing."""
+
+    debug_level: DEBUG_LEVEL = DEBUG_LEVEL.minimal
+    gen_onwarning: ONWARNING_CHOICES = ONWARNING_CHOICES.warn
+    wil_process_wildcards: bool = True
+    wil_keep_choices_order: bool = True
+    wil_choice_separator: str = ", "
+    wil_ifwildcards: IFWILDCARDS_CHOICES = IFWILDCARDS_CHOICES.stop
+    stn_ignore_repeats: bool = True
+    stn_separator: str = ", "
+    cup_do_cleanup: bool = True  # whether to do cleanup at all (if False, all other cleanup options are ignored)
+    cup_cleanup_variables: bool = True
+    cup_extraspaces: bool = True
+    cup_emptyconstructs: bool = True
+    cup_extraseparators: bool = True
+    cup_extraseparators2: bool = True
+    cup_extraseparators_include_eol: bool = False
+    cup_breaks: bool = False
+    cup_breaks_eol: bool = False
+    cup_ands: bool = False
+    cup_ands_eol: bool = False
+    cup_extranetworktags: bool = False
+    cup_mergeattention: bool = True
+    rem_removeextranetworktags: bool = False
+
+
+@dataclass(frozen=True)
+class PPPState:
+    """State object passed to various PPP components during prompt processing."""
+
+    logger: Logger
+    host_config: dict[str, str] = field(default_factory=dict)
+    options: PPPStateOptions = field(default_factory=PPPStateOptions)
+    system_variables: dict[str, Any] = field(default_factory=dict)
+    user_variables: dict[str, Any] = field(default_factory=dict)
+    echoed_variables: dict[str, Any] = field(default_factory=dict)
+    wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
+    extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)
+    parsers: dict[str, Lark] = field(default_factory=dict)
+
+
+class PPPInterrupt(Exception):
+    """
+    Custom exception to handle interruptions in the PromptPostProcessor.
+    This exception can be raised to stop the processing of prompts.
+    """
+
+    def __init__(self, message: str = "Processing interrupted.", pos_prefix: str = "", neg_prefix: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.pos_prefix = pos_prefix
+        self.neg_prefix = neg_prefix
+
 
 # ------------------- Host configuration -------------------
 

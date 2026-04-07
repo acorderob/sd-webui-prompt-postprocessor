@@ -1,9 +1,11 @@
+from dataclasses import replace
 import os
 import logging
 from typing import NamedTuple, Optional
 import unittest
 import datetime
 
+from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, PPPStateOptions
 from ppp_enmappings import PPPExtraNetworkMappings  # pylint: disable=import-error
 from ppp_wildcards import PPPWildcards  # pylint: disable=import-error
 from ppp import PromptPostProcessor  # pylint: disable=import-error
@@ -36,35 +38,35 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         else:
             log_filename = None  # Disable file logging
 
-        self.lf = PromptPostProcessorLogFactory(None, log_filename)
+        self.lf = PromptPostProcessorLogFactory(log_filename)
         self.ppp_logger = self.lf.log
         self.ppp_logger.setLevel(logging.DEBUG)
         self.grammar_content = None
         self.interrupted = False
-        self.defopts = {
-            "debug_level": DEBUG_LEVEL.full.value,
-            "on_warning": PromptPostProcessor.ONWARNING_CHOICES.stop.value,
-            "process_wildcards": True,
-            "if_wildcards": PromptPostProcessor.IFWILDCARDS_CHOICES.ignore.value,
-            "choice_separator": ", ",
-            "keep_choices_order": False,
-            "stn_separator": ", ",
-            "stn_ignore_repeats": True,
-            "do_cleanup": True,
-            "cleanup_variables": True,
-            "cleanup_empty_constructs": True,
-            "cleanup_extra_separators": True,
-            "cleanup_extra_separators2": True,
-            "cleanup_extra_separators_include_eol": False,
-            "cleanup_extra_spaces": True,
-            "cleanup_breaks": True,
-            "cleanup_breaks_eol": False,
-            "cleanup_ands": True,
-            "cleanup_ands_eol": False,
-            "cleanup_extranetwork_tags": True,
-            "cleanup_merge_attention": True,
-            "remove_extranetwork_tags": False,
-        }
+        self.defopts = PPPStateOptions(
+            debug_level=DEBUG_LEVEL.full,
+            gen_onwarning=ONWARNING_CHOICES.stop,
+            wil_process_wildcards=True,
+            wil_ifwildcards=IFWILDCARDS_CHOICES.ignore,
+            wil_choice_separator=", ",
+            wil_keep_choices_order=False,
+            stn_separator=", ",
+            stn_ignore_repeats=True,
+            cup_do_cleanup=True,
+            cup_cleanup_variables=True,
+            cup_emptyconstructs=True,
+            cup_extraseparators=True,
+            cup_extraseparators2=True,
+            cup_extraseparators_include_eol=False,
+            cup_extraspaces=True,
+            cup_breaks=True,
+            cup_breaks_eol=False,
+            cup_ands=True,
+            cup_ands_eol=False,
+            cup_extranetworktags=True,
+            cup_mergeattention=True,
+            rem_removeextranetworktags=False,
+        )
         self.def_env_info = {
             "app": "tests",
             "ppp_config": None,
@@ -130,51 +132,37 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             if ppp == "nocup":
                 the_obj = PromptPostProcessor(
                     self.ppp_logger,
-                    self.interrupt,
                     self.def_env_info,
-                    {
-                        **self.defopts,
-                        "do_cleanup": False,
-                        "cleanup_variables": False,
-                        "cleanup_empty_constructs": False,
-                        "cleanup_extra_separators": False,
-                        "cleanup_extra_separators2": False,
-                        "cleanup_extra_separators_include_eol": False,
-                        "cleanup_extra_spaces": False,
-                        "cleanup_breaks": False,
-                        "cleanup_breaks_eol": False,
-                        "cleanup_ands": False,
-                        "cleanup_ands_eol": False,
-                        "cleanup_extranetwork_tags": False,
-                        "cleanup_merge_attention": False,
-                    },
+                    replace(
+                        self.defopts,
+                        cup_do_cleanup=False,
+                        cup_cleanup_variables=False,
+                        cup_emptyconstructs=False,
+                        cup_extraseparators=False,
+                        cup_extraseparators2=False,
+                        cup_extraseparators_include_eol=False,
+                        cup_extraspaces=False,
+                        cup_breaks=False,
+                        cup_breaks_eol=False,
+                        cup_ands=False,
+                        cup_ands_eol=False,
+                        cup_extranetworktags=False,
+                        cup_mergeattention=False,
+                    ),
                     self.grammar_content,
+                    self.interrupt,
                     self.wildcards_obj,
                     self.extranetwork_maps_obj,
                 )
-            # elif ppp == "comfyui":
-            #     the_obj = PromptPostProcessor(
-            #         self.ppp_logger,
-            #         self.interrupt,
-            #         {
-            #             **self.def_env_info,
-            #             "app": "comfyui",
-            #             "model_class": "SDXL",
-            #         },
-            #         self.defopts,
-            #         self.grammar_content,
-            #         self.wildcards_obj,
-            #         self.extranetwork_maps_obj,
-            #     )
         else:
             the_obj = ppp
         if not the_obj:
             the_obj = PromptPostProcessor(
                 self.ppp_logger,
-                self.interrupt,
                 self.def_env_info,
                 self.defopts,
                 self.grammar_content,
+                self.interrupt,
                 self.wildcards_obj,
                 self.extranetwork_maps_obj,
             )

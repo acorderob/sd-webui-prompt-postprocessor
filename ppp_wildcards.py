@@ -52,7 +52,7 @@ class PPPWildcards:
     DEFAULT_WILDCARDS_FOLDER = "wildcards"
     LOCALINPUT_FILENAME = R"//INPUT\\"
 
-    def __init__(self, logger):
+    def __init__(self, logger=None):
         self.__logger: logging.Logger = logger
         self.__debug_level = DEBUG_LEVEL.none
         self.__wildcards_folders = []
@@ -77,7 +77,7 @@ class PPPWildcards:
         """
         self.__debug_level = debug_level
         self.__wildcards_folders = wildcards_folders or []
-        # if self.__debug_level != DEBUG_LEVEL.none:
+        # if self.__debug_level != DEBUG_LEVEL.none and self.__logger:
         #     self.__logger.info("Refreshing wildcards...")
         # t1 = time.monotonic_ns()
         for fullpath in list(self.__wildcard_files.keys()):
@@ -108,7 +108,7 @@ class PPPWildcards:
             self.wildcards = {}
             self.__wildcard_files = {}
         # t2 = time.monotonic_ns()
-        # if self.__debug_level != DEBUG_LEVEL.none:
+        # if self.__debug_level != DEBUG_LEVEL.none and self.__logger:
         #     self.__logger.info(f"Wildcards refresh time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
     def get_wildcards(self, key: str) -> list[PPPWildcard]:
@@ -171,7 +171,7 @@ class PPPWildcards:
             debug (bool): Whether to print debug messages or not.
         """
         last_modified_cached = self.__wildcard_files.get(full_path, None)  # a time or a hash
-        if debug and last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
+        if debug and last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
             if full_path == self.LOCALINPUT_FILENAME:
                 self.__logger.debug("Removing from memory wildcards from input")
             else:
@@ -200,7 +200,7 @@ class PPPWildcards:
             if extension not in (".txt", ".json", ".yaml", ".yml"):
                 return
             self.__remove_wildcards_from_path(full_path, False)
-            if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none:
+            if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
                 self.__logger.debug(f"Updating wildcards from file: {full_path}")
             if extension == ".txt":
                 self.__get_wildcards_in_text_file(full_path, base)
@@ -208,7 +208,8 @@ class PPPWildcards:
                 self.__get_wildcards_in_structured_file(full_path, base)
             self.__wildcard_files[full_path] = last_modified
         except Exception as e:  # pylint: disable=broad-except
-            self.__logger.error(f"Error reading wildcard file '{escape_single_quotes(full_path)}': {e}")
+            if self.__logger:
+                self.__logger.error(f"Error reading wildcard file '{escape_single_quotes(full_path)}': {e}")
 
     def __get_wildcards_in_input(self, wildcards_input: str):
         """
@@ -223,20 +224,22 @@ class PPPWildcards:
             if h == new_h:
                 return
             self.__remove_wildcards_from_path(self.LOCALINPUT_FILENAME, False)
-            if h is not None and self.__debug_level != DEBUG_LEVEL.none:
+            if h is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
                 self.__logger.debug("Updating wildcards from input")
             wildcards_input = wildcards_input.strip()
             if wildcards_input != "":
                 try:
                     content = yaml.safe_load(wildcards_input)
                 except yaml.YAMLError as e:
-                    self.__logger.warning(f"Invalid format for input wildcards: {e}")
+                    if self.__logger:
+                        self.__logger.warning(f"Invalid format for input wildcards: {e}")
                     return
                 if content is not None:
                     self.__add_wildcard(content, self.LOCALINPUT_FILENAME, [self.LOCALINPUT_FILENAME])
             self.__wildcard_files[self.LOCALINPUT_FILENAME] = new_h
         except Exception as e:  # pylint: disable=broad-except
-            self.__logger.error(f"Error reading wildcards input: {e}")
+            if self.__logger:
+                self.__logger.error(f"Error reading wildcards input: {e}")
 
     # NOTE wcdef and choice options should not have properties in common
 
@@ -251,7 +254,19 @@ class PPPWildcards:
             bool: Whether the dictionary is a valid wildcard definition options dictionary or not.
         """
         return all(
-            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "description", "separator"]
+            k
+            in [
+                "sampler",
+                "repeating",
+                "optional",
+                "count",
+                "from",
+                "to",
+                "prefix",
+                "suffix",
+                "description",
+                "separator",
+            ]
             for k in d.keys()
         )
 
@@ -334,9 +349,10 @@ class PPPWildcards:
             # we assume it is an anonymous wildcard with options
             firstkey = list(c.keys())[0]
             return self.__create_anonymous_wildcard(full_path, key_parts, i, c[firstkey], firstkey)
-        self.__logger.warning(
-            f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(full_path)}'!"
-        )
+        if self.__logger:
+            self.__logger.warning(
+                f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(full_path)}'!"
+            )
         return None
 
     def __create_anonymous_wildcard(self, full_path, key_parts, i, content, options=None):
@@ -378,20 +394,23 @@ class PPPWildcards:
                 tmp_key_parts.extend(key.split("/"))
                 fullkey = "/".join(tmp_key_parts)
                 if self.wildcards.get(fullkey, None) is not None:
-                    self.__logger.warning(
-                        f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!"
-                    )
+                    if self.__logger:
+                        self.__logger.warning(
+                            f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!"
+                        )
                 else:
                     obj = self.__get_nested(content, key)
                     choices = self.__get_choices(obj, full_path, tmp_key_parts)
                     if choices is None:
-                        self.__logger.warning(
-                            f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!"
-                        )
+                        if self.__logger:
+                            self.__logger.warning(
+                                f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!"
+                            )
                     elif fullkey.startswith("_"):
-                        self.__logger.warning(
-                            f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)"
-                        )
+                        if self.__logger:
+                            self.__logger.warning(
+                                f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)"
+                            )
                     else:
                         self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
             return
@@ -400,23 +419,27 @@ class PPPWildcards:
         elif isinstance(content, (int, float, bool)):
             content = [str(content)]
         if not isinstance(content, list):
-            self.__logger.warning(f"Invalid wildcard in file '{escape_single_quotes(full_path)}'!")
+            if self.__logger:
+                self.__logger.warning(f"Invalid wildcard in file '{escape_single_quotes(full_path)}'!")
             return
         fullkey = "/".join(key_parts)
         if self.wildcards.get(fullkey, None) is not None:
-            self.__logger.warning(
-                f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!"
-            )
+            if self.__logger:
+                self.__logger.warning(
+                    f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!"
+                )
         else:
             choices = self.__get_choices(content, full_path, key_parts)
             if choices is None:
-                self.__logger.warning(
-                    f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!"
-                )
+                if self.__logger:
+                    self.__logger.warning(
+                        f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!"
+                    )
             elif fullkey.startswith("_"):
-                self.__logger.warning(
-                    f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)"
-                )
+                if self.__logger:
+                    self.__logger.warning(
+                        f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)"
+                    )
             else:
                 self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 
@@ -434,9 +457,10 @@ class PPPWildcards:
             with open(full_path, "r", encoding="utf-8") as file:
                 content = yaml.safe_load(file)
         except:  # pylint: disable=bare-except
-            self.__logger.warning(
-                f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
-            )
+            if self.__logger:
+                self.__logger.warning(
+                    f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
+                )
             with open(full_path, "r", encoding="windows-1252") as file:
                 content = yaml.safe_load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
@@ -455,9 +479,10 @@ class PPPWildcards:
             with open(full_path, "r", encoding="utf-8") as file:
                 text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         except:  # pylint: disable=bare-except
-            self.__logger.warning(
-                f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
-            )
+            if self.__logger:
+                self.__logger.warning(
+                    f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
+                )
             with open(full_path, "r", encoding="windows-1252") as file:
                 text_content = map(lambda x: x.strip("\n\r"), file.readlines())
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
@@ -473,7 +498,8 @@ class PPPWildcards:
             directory (str): The path to the directory.
         """
         if not os.path.exists(directory):
-            self.__logger.warning(f"Wildcard directory '{escape_single_quotes(directory)}' does not exist!")
+            if self.__logger:
+                self.__logger.warning(f"Wildcard directory '{escape_single_quotes(directory)}' does not exist!")
             return
         for filename in os.listdir(directory):
             full_path = os.path.abspath(os.path.join(directory, filename))
