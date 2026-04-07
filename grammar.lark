@@ -149,12 +149,10 @@ varvalue: content_var
 
 //#if ALLOW_CHOICES or ALLOW_WILDCARDS
     // choices parameters (for choices and wildcards)
-    choicesoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] ( ( [ _WHITESPACE? choicesoptions_from ] "-" [ _WHITESPACE? choicesoptions_to ] ) | [ _WHITESPACE? choicesoptions_num ] ) [ _WHITESPACE? choicesoptions_sep ]
+    choicesoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] [ _WHITESPACE? choicesoptions_range ] [ _WHITESPACE? choicesoptions_sep ]
     choicesoptions_sampler: /[~@]/ // ~ for random, @ for cyclical
     choicesoptions_flags: /[ro]{1,2}/ // r for repeating, o for optional
-    choicesoptions_num: INT
-    choicesoptions_from: INT
-    choicesoptions_to: INT
+    choicesoptions_range: INT | ( [ INT ] _WHITESPACE? "-" _WHITESPACE? [ INT ] )
     choicesoptions_sep: "$$" plain
 
     // choice options
@@ -172,6 +170,10 @@ varvalue: content_var
 //#endif
 
 //#if ALLOW_WILDCARDS
+    // wildcard definition options
+    wcdefoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] [ _WHITESPACE? choicesoptions_range ] [ _WHITESPACE? wcdescription ] [ _WHITESPACE? choicesoptions_sep ]
+    wcdescription: STRING
+
     // wildcards construct
     wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
     wc_filter_nums: IDENTIFIER | INDEX | (INDEX /-/ INDEX)

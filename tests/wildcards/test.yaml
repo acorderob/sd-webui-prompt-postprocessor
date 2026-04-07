@@ -1,11 +1,12 @@
 yaml:
   wildcard1:
+    - "'First wildcard'$$"
     - choice1
     - choice2
     - choice3
 
   wildcard2:
-    - ~r2-3$$-$$
+    - ~r2-3'Wildcard description'$$-$$
     - "'label1,label2'4::choice1"
     - "3:: choice2 "
     - { labels: ["label1", "label3"], weight: 2, content: choice3 }
@@ -31,6 +32,7 @@ yaml:
     - { weight: 4, if: _is_ssd, text: choice4 }
 
   wildcard7:
+    - { description: "Lora wildcard" }
     - <lora:test1:1>
     - <lora:test2:1>
     - <lora:test3:1>

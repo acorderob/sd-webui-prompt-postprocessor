@@ -238,18 +238,20 @@ class PPPWildcards:
         except Exception as e:  # pylint: disable=broad-except
             self.__logger.error(f"Error reading wildcards input: {e}")
 
-    def is_dict_choices_options(self, d: dict) -> bool:
+    # NOTE wcdef and choice options should not have properties in common
+
+    def is_dict_wcdef_options(self, d: dict) -> bool:
         """
-        Check if a dictionary is a valid choices options dictionary.
+        Check if a dictionary is a valid wildcard definition options dictionary.
 
         Args:
             d (dict): The dictionary to check.
 
         Returns:
-            bool: Whether the dictionary is a valid choices options dictionary or not.
+            bool: Whether the dictionary is a valid wildcard definition options dictionary or not.
         """
         return all(
-            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "separator"]
+            k in ["sampler", "repeating", "optional", "count", "from", "to", "prefix", "suffix", "description", "separator"]
             for k in d.keys()
         )
 
@@ -316,8 +318,10 @@ class PPPWildcards:
         Returns:
             dict: The processed choice.
         """
-        if self.is_dict_choices_options(c) or self.is_dict_choice_options(c):
-            # we assume it is a choice or wildcard parameters in object format
+        if self.is_dict_wcdef_options(c):
+            return c
+        elif self.is_dict_choice_options(c):
+            # we assume it is a choice in object format
             choice = c
             choice_content = choice.get("content", choice.get("text", None))
             if choice_content is not None and isinstance(choice_content, list):

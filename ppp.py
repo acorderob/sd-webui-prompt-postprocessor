@@ -378,10 +378,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             propagate_positions=True,
             start="choice",
         )
-        self.parser_choicesoptions = lark.Lark(
+        self.parser_wcdefoptions = lark.Lark(
             grammar_content_full,
             propagate_positions=True,
-            start="choicesoptions",
+            start="wcdefoptions",
         )
         self.parser_condition = lark.Lark(
             grammar_content_full,
@@ -1579,7 +1579,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 cond_result = not self.__eval_condition(condition.children[0])
             else:  # truthy_operand / comparison_simple_value / comparison_list_value
                 # we get the name of the variable
-                cond_var = condition.children[0].value  # it should be a Token
+                cond_var = str(condition.children[0])
                 poscomp = 1
                 invert = False
                 if poscomp >= len(condition.children):
@@ -1588,17 +1588,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     cond_value = "true"
                 else:
                     # we get the comparison (with possible not) and the value
-                    cond_comp = condition.children[poscomp].value  # it should be a Token
+                    cond_comp = str(condition.children[poscomp])
                     if cond_comp == "not":
                         invert = not invert
                         poscomp += 1
-                        cond_comp = condition.children[poscomp].value  # it should be a Token
+                        cond_comp = str(condition.children[poscomp])
                     poscomp += 1
                     cond_value_node = condition.children[poscomp]
                     cond_value = (
-                        list(v.value for v in cond_value_node.children)
+                        list(str(v) for v in cond_value_node.children)
                         if isinstance(cond_value_node, (lark.Tree, list))
-                        else cond_value_node.value if isinstance(cond_value_node, lark.Token) else cond_value_node
+                        else str(cond_value_node) if isinstance(cond_value_node, lark.Token) else cond_value_node
                     )
                 cond_result = self.__eval_basiccondition(cond_var, cond_comp, cond_value)
                 if invert:
@@ -1846,7 +1846,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if not self.__is_negative:
                 negtagparameters = tree.children[0]
                 if negtagparameters is not None:
-                    parameters = negtagparameters.value  # should be a token
+                    parameters = str(negtagparameters)
                 else:
                     parameters = ""
                 content = self.__visit(tree.children[1::], False, True)
@@ -1870,7 +1870,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.__is_negative:
                 negtagparameters = tree.children[0]
                 if negtagparameters is not None:
-                    parameters = negtagparameters.value  # should be a token
+                    parameters = str(negtagparameters)
                 else:
                     parameters = ""
                 self.__negtags.append(
@@ -1902,7 +1902,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             info = variable
             value_description = self.__get_original_node_content(content, None)
             value = content
-            modifiers_str: list[str] = [m.value for m in modifiers.children] if modifiers is not None else []
+            modifiers_str: list[str] = [str(m) for m in modifiers.children] if modifiers is not None else []
             if any(item in modifiers_str for item in ["+", "add"]):
                 info += f" += '{escape_single_quotes(value_description or '')}'"
                 raw_oldvalue = self.__ppp.user_variables.get(variable, None)
@@ -2038,18 +2038,18 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             start_result = self.result
             extnet = "(ignored)"
             if not self.__ppp.rem_removeextranetworktags:
-                extnet_type: str = (tree.children[0].children[0] or "") + tree.children[0].children[1]
+                extnet_type: str = (tree.children[0].children[0] or "") + str(tree.children[0].children[1])
                 is_mapping = extnet_type.startswith("$")
                 if is_mapping:
                     extnet_type = extnet_type[1:]
-                extnet_id: str = tree.children[1].value
+                extnet_id: str = str(tree.children[1])
                 if extnet_id.startswith("'") or extnet_id.startswith('"'):
                     extnet_id = extnet_id[1:-1]
                 extnet_id = re.sub(r"\\(.)", r"\1", extnet_id)  # so we can escape some special characters
                 parameters: str = ""
                 parameters_defaulted = False
                 if tree.children[2]:
-                    parameters = tree.children[2].value
+                    parameters = str(tree.children[2])
                 elif extnet_type in ("lora", "hypernet"):
                     parameters = "1"
                     parameters_defaulted = True
@@ -2441,7 +2441,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 return r[0] + r[2].join(r[1]) + r[3]
             return ""
 
-        def __convert_choices_options(self, options: Optional[lark.Tree]) -> dict:
+        def __convert_choices_options(self, options: Optional[lark.Tree], is_wcdef: bool = False) -> dict:
             """
             Convert the choices options to a dictionary.
 
@@ -2455,32 +2455,42 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 return None
             options_dict = {}
             if len(options.children) == 1:
-                options_dict["sampler"] = options.children[0] if options.children[0] is not None else "~"
+                if options.children[0] is not None:
+                    options_dict["sampler"] = str(options.children[0])
             else:
-                options_dict["sampler"] = options.children[0].children[0] if options.children[0] is not None else "~"
-                options_dict["repeating"] = (
-                    "r" in options.children[1].children[0] if options.children[1] is not None else False
-                )
-                options_dict["optional"] = (
-                    "o" in options.children[1].children[0] if options.children[1] is not None else False
-                )
-                if len(options.children) == 4:
-                    ifrom = 2
-                    ito = 2
-                    isep = 3
-                else:  # 6
-                    ifrom = 2
-                    ito = 3
-                    isep = 4
-                options_dict["from"] = (
-                    int(options.children[ifrom].children[0]) if options.children[ifrom] is not None else 1
-                )
-                options_dict["to"] = int(options.children[ito].children[0]) if options.children[ito] is not None else 1
-                options_dict["separator"] = (
-                    self.__visit(options.children[isep], False, True)
-                    if options.children[isep] is not None
-                    else self.__ppp.wil_choice_separator
-                )
+                if options.children[0] is not None:
+                    options_dict["sampler"] = str(options.children[0].children[0])
+                if options.children[1] is not None:
+                    flags = str(options.children[1].children[0])
+                    options_dict["repeating"] = "r" in flags
+                    options_dict["optional"] = "o" in flags
+                irange = 2
+                idesc = 3
+                isep = 4
+                if options.children[irange] is not None:
+                    if len(options.children[irange].children) == 1:
+                        if options.children[irange].children[0] is not None:
+                            options_dict["count"] = int(options.children[irange].children[0])
+                    else:
+                        options_dict["from"] = (
+                            int(options.children[irange].children[0])
+                            if options.children[irange].children[0] is not None
+                            else 1
+                        )
+                        options_dict["to"] = (
+                            int(options.children[irange].children[1])
+                            if options.children[irange].children[1] is not None
+                            else 1
+                        )
+                if is_wcdef:
+                    if options.children[idesc] is not None:
+                        options_dict["description"] = str(options.children[idesc].children[0])[1:-1]
+                else:
+                    isep -= 1  # only wildcard definition options have a description
+                if options.children[isep] is not None:
+                    options_dict["separator"] = self.__visit(options.children[isep], False, True)
+            if not options_dict:
+                options_dict = None
             return options_dict
 
         def __convert_choice(self, choice: lark.Tree) -> dict:
@@ -2497,9 +2507,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             choice_dict["command"] = choice.children[0] is not None
             c_label_obj = choice.children[1]
             choice_dict["labels"] = (
-                [x.value.lower() for x in c_label_obj.children[1:-1]]  # should be a token
-                if c_label_obj is not None
-                else []
+                [str(x).lower() for x in c_label_obj.children[1:-1]] if c_label_obj is not None else []
             )
             choice_dict["weight"] = float(choice.children[2].children[0]) if choice.children[2] is not None else 1.0
             choice_dict["if"] = choice.children[3].children[0] if choice.children[3] is not None else None
@@ -2523,7 +2531,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 n = 0
                 # we check the first choice to see if it is actually options
                 if isinstance(wildcard.unprocessed_choices[0], dict):
-                    if self.__ppp.wildcard_obj.is_dict_choices_options(wildcard.unprocessed_choices[0]):
+                    if self.__ppp.wildcard_obj.is_dict_wcdef_options(wildcard.unprocessed_choices[0]):
                         options = wildcard.unprocessed_choices[0]
                         prefix = options.get("prefix", None)
                         if prefix is not None and isinstance(prefix, str):
@@ -2553,11 +2561,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         try:
                             options = self.__convert_choices_options(
                                 self.__ppp.parse_prompt(
-                                    "as choices options",
+                                    "as wildcard options",
                                     wildcard.unprocessed_choices[0][:-2].strip(),
-                                    self.__ppp.parser_choicesoptions,
+                                    self.__ppp.parser_wcdefoptions,
                                     True,
-                                )
+                                ),
+                                True,
                             )
                             n = 1
                         except lark.exceptions.UnexpectedInput:
@@ -2626,7 +2635,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.__ppp.logger.debug(
                         f"Processed choices for wildcard '{escape_single_quotes(wildcard.key)}' ({(t2-t1) / 1_000_000_000:.3f} seconds)"
                     )
-            return (options, choice_values)
+            return (self.__clean_wildcard_options(options), choice_values)
+
+        def __clean_wildcard_options(self, options: dict) -> dict:
+            if options is not None:
+                options.pop("description", None)  # description is only for wildcard definitions, not for usage
+                if not options:
+                    options = None
+            return options
 
         def wildcard(self, tree: lark.Tree):
             """
@@ -2635,7 +2651,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             t1 = time.monotonic_ns()
             seen_wildcards_len = len(self.__seen_wildcards)
             start_result = self.result
-            applied_options = self.__convert_choices_options(tree.children[0])
+            applied_options = self.__clean_wildcard_options(self.__convert_choices_options(tree.children[0], False))
             wildcard_key: str = self.__visit(tree.children[1], False, True)
             wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
             if self.__ppp.wil_process_wildcards:
@@ -2654,7 +2670,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     if (  # it's an inherited filter from another wildcard
                         isinstance(filter_object.children[1], lark.Token)
                         and filter_object.children[1] is not None
-                        and "^" in filter_object.children[1]
+                        and "^" in str(filter_object.children[1])
                     ):
                         filter_wildcard_key = self.__visit(filter_object.children[2], False, True)
                         filter_specifier = self.__wildcard_filters.get(filter_wildcard_key, None)
@@ -2665,8 +2681,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Filtering choices")
                     self.__wildcard_filters[wildcard_key] = filter_specifier
-                    if (
-                        filter_object.children[1] is not None and "#" in filter_object.children[1]
+                    if filter_object.children[1] is not None and "#" in str(
+                        filter_object.children[1]
                     ):  # means do not use the filter in this wildcard
                         if self.__ppp.debug_level == DEBUG_LEVEL.full:
                             self.__ppp.logger.debug("Ignoring filter")
@@ -2689,7 +2705,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 variablename = None
                 variablebackup = None
                 if var_object is not None:
-                    variablename = var_object.children[0]  # should be a token
+                    variablename = str(var_object.children[0])
                     variablevalue = self.__visit(var_object.children[1], False, True)
                     variablebackup = self.__ppp.user_variables.get(variablename, None)
                     self.__remove_user_variable(variablename)
@@ -2744,7 +2760,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     label = and_.children[0]
                     if isinstance(label, lark.Token):
                         # it's a literal, we can use it directly
-                        filter_specifier.append([label.value])
+                        filter_specifier.append([str(label)])
                     else:
                         # it's a variable, we need to evaluate it
                         v = self.__visit(label, False, True)
@@ -2757,7 +2773,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             """
             t1 = time.monotonic_ns()
             start_result = self.result
-            options = self.__convert_choices_options(tree.children[0])
+            options = self.__convert_choices_options(tree.children[0], False)
             choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
             ch = self.__get_original_node_content(tree, "?{...}")
             if self.__ppp.wil_process_wildcards:
