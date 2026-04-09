@@ -972,6 +972,43 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         prompt = self.__cleanup(prompt, 1)
         negative_prompt = self.__cleanup(negative_prompt, -1)
 
+        # Result checks
+        warnings = []
+
+        # Check for special character sequences that should not be in the result
+        compound_prompt = prompt + "\n" + negative_prompt
+        found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
+        if found_sequences:
+            warnings.append(
+                f"Probably invalid character sequences: {', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}."
+            )
+        # Check for correctly nested parentheses and brackets
+        stack = []
+        prev_char = ""
+        for char in compound_prompt:
+            if prev_char != "\\":
+                if char in "([":  # opening characters
+                    stack.append(char)
+                elif char in ")]":  # closing characters
+                    if not stack:
+                        warnings.append(f"Unmatched '{char}' character.")
+                        break
+                    last_open = stack.pop()
+                    if (last_open == "(" and char != ")") or (last_open == "[" and char != "]"):
+                        warnings.append(f"Mismatched '{last_open}' and '{char}' characters.")
+                        break
+                prev_char = char
+            else:
+                prev_char = ""  # reset prev_char to avoid treating escaped characters as escapes
+        if stack:
+            warnings.append(f"Unmatched '{''.join(stack)}' characters.")
+        if warnings:
+            self.log(
+                logging.WARNING,
+                "Found some weird things in the result. Something might be wrong!\n"
+                + "\n".join(f"  - {w}" for w in warnings),
+            )
+
         # Check for wildcards not processed
         foundP = bool(p_processor.detectedWildcards)
         foundNP = bool(n_processor.detectedWildcards)
@@ -994,15 +1031,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.WILDCARD_STOP.format(ppwl) if foundP else "",
                     self.WILDCARD_STOP.format(npwl) if foundNP else "",
                 )
-
-        # Check for special character sequences that should not be in the result
-        compound_prompt = prompt + "\n" + negative_prompt
-        found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
-        if found_sequences:
-            self.log(
-                logging.WARNING,
-                f"""Found probably invalid character sequences on the result ({', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}). Something might be wrong!""",
-            )
         return prompt, negative_prompt, all_variables
 
     def process_prompt(

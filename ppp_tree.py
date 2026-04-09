@@ -1005,7 +1005,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     wcs = self.__state.wildcards_obj.get_wildcards(cmd_args)
                     if not wcs:
                         self.warn_or_stop(
-                            f"Not found included wildcard '{escape_single_quotes(cmd_args)}' at {msg_where}!"
+                            f"Included wildcard '{escape_single_quotes(cmd_args)}' not found at {msg_where}!"
                         )
                     c_weight = float(c.get("weight", 1.0))
                     for wc in wcs:

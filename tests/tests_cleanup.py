@@ -1,3 +1,4 @@
+import logging
 from dataclasses import replace
 
 from ppp import PromptPostProcessor  # pylint: disable=import-error
@@ -132,3 +133,67 @@ class TestCleanup(TestPromptPostProcessorBase):
             ),
             ppp="nocup",
         )
+
+    # Result warnings tests
+
+    def test_cl_warn_unmatched_open_paren(self):  # unmatched open parenthesis triggers warning
+        with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
+            self.process(
+                PromptPair("(unclosed paren", ""),
+                PromptPair("(unclosed paren", ""),
+            )
+        self.assertTrue(
+            any("Unmatched" in msg for msg in cm.output),
+            "Expected an 'Unmatched' warning for open parenthesis",
+        )
+
+    def test_cl_warn_unmatched_close_paren(self):  # unmatched close parenthesis triggers warning
+        with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
+            self.process(
+                PromptPair("extra close paren)", ""),
+                PromptPair("extra close paren)", ""),
+            )
+        self.assertTrue(
+            any("Unmatched" in msg for msg in cm.output),
+            "Expected an 'Unmatched' warning for close parenthesis",
+        )
+
+    def test_cl_warn_mismatched_brackets(self):  # mismatched bracket types trigger warning
+        with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
+            self.process(
+                PromptPair("(mismatched]", ""),
+                PromptPair("(mismatched]", ""),
+            )
+        self.assertTrue(
+            any("Mismatched" in msg or "Unmatched" in msg for msg in cm.output),
+            "Expected a 'Mismatched' or 'Unmatched' warning for bracket mismatch",
+        )
+
+    def test_cl_warn_unmatched_open_bracket(self):  # unmatched open bracket triggers warning
+        with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
+            self.process(
+                PromptPair("unclosed [bracket", ""),
+                PromptPair("unclosed [bracket", ""),
+            )
+        self.assertTrue(
+            any("Unmatched" in msg for msg in cm.output),
+            "Expected an 'Unmatched' warning for open bracket",
+        )
+
+    def test_cl_warn_unmatched_complex(self):  # unmatched complex case triggers warning
+        with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
+            self.process(
+                PromptPair("[(unmatched [bracket))", ""),
+                PromptPair("[(unmatched [bracket))", ""),
+            )
+        self.assertTrue(
+            any("Unmatched" in msg for msg in cm.output),
+            "Expected an 'Unmatched' warning",
+        )
+
+    def test_cl_warn_escaped_unmatched_no_false_warning(self):  # escaped unmatched paren/bracket does not trigger warning
+        with self.assertNoLogs("PromptPostProcessor", level=logging.WARNING):
+            self.process(
+                PromptPair(r"text with \(escaped unmatched\]", ""),
+                PromptPair(r"text with \(escaped unmatched\]", ""),
+            )
