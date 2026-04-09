@@ -1,6 +1,7 @@
 if __name__ == "__main__":
     raise SystemExit("This script must be run from a Stable Diffusion WebUI")
 
+import logging
 import sys
 import os
 import time
@@ -16,7 +17,7 @@ from modules.paths import models_path  # pylint: disable=import-error
 import gradio as gr  # pylint: disable=import-error
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, SUPPORTED_APPS_NAMES, PPPStateOptions
-from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_cache import PPPLRUCache
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
@@ -177,32 +178,30 @@ class PromptPostProcessorA1111Script(scripts.Script):
         )
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL)),
-            gen_onwarning=ONWARNING_CHOICES(getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ONWARNING)),
-            wil_process_wildcards=getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_WC_PROCESS),
-            wil_ifwildcards=IFWILDCARDS_CHOICES(
+            on_warning=ONWARNING_CHOICES(getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ON_WARNING)),
+            process_wildcards=getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_PROCESS_WILDCARDS),
+            if_wildcards=IFWILDCARDS_CHOICES(
                 getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS)
             ),
-            wil_choice_separator=getattr(
-                opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR
-            ),
-            wil_keep_choices_order=getattr(
+            choice_separator=getattr(opts, "ppp_wil_choice_separator", PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR),
+            keep_choices_order=getattr(
                 opts, "ppp_wil_keep_choices_order", PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
             ),
             stn_separator=getattr(opts, "ppp_stn_separator", PromptPostProcessor.DEFAULT_STN_SEPARATOR),
             stn_ignore_repeats=getattr(opts, "ppp_stn_ignorerepeats", PromptPostProcessor.DEFAULT_STN_IGNORE_REPEATS),
             cup_do_cleanup=True,
             cup_cleanup_variables=True,
-            cup_extraspaces=getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
-            cup_emptyconstructs=getattr(
+            cup_extra_spaces=getattr(opts, "ppp_cup_extraspaces", PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES),
+            cup_empty_constructs=getattr(
                 opts, "ppp_cup_emptyconstructs", PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
             ),
-            cup_extraseparators=getattr(
+            cup_extra_separators=getattr(
                 opts, "ppp_cup_extraseparators", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
             ),
-            cup_extraseparators2=getattr(
+            cup_extra_separators2=getattr(
                 opts, "ppp_cup_extraseparators2", PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
             ),
-            cup_extraseparators_include_eol=getattr(
+            cup_extra_separators_include_eol=getattr(
                 opts,
                 "ppp_cup_extraseparators_include_eol",
                 PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL,
@@ -211,11 +210,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
             cup_breaks_eol=getattr(opts, "ppp_cup_breaks_eol", PromptPostProcessor.DEFAULT_CUP_BREAKS_EOL),
             cup_ands=getattr(opts, "ppp_cup_ands", PromptPostProcessor.DEFAULT_CUP_ANDS),
             cup_ands_eol=getattr(opts, "ppp_cup_ands_eol", PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
-            cup_extranetworktags=getattr(
+            cup_extranetwork_tags=getattr(
                 opts, "ppp_cup_extranetworktags", PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
             ),
-            cup_mergeattention=getattr(opts, "ppp_cup_mergeattention", PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION),
-            rem_removeextranetworktags=getattr(
+            cup_merge_attention=getattr(
+                opts, "ppp_cup_mergeattention", PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION
+            ),
+            cup_remove_extranetwork_tags=getattr(
                 opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
         )
@@ -226,19 +227,21 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
             self.wildcards_obj = PPPWildcards(self.ppp_logger)
             self.extranetwork_mappings_obj = PPPExtraNetworkMappings(self.ppp_logger)
-            self.ppp_logger.info(
-                f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized, running on {SUPPORTED_APPS_NAMES[app]}"
+            log(
+                self.ppp_logger,
+                DEBUG_LEVEL.minimal,
+                logging.INFO,
+                f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized, running on {SUPPORTED_APPS_NAMES[app]}",
             )
         t1 = time.monotonic_ns()
         if getattr(opts, "prompt_attention", "") == "Compel parser":
-            self.ppp_logger.warning("Compel parser is not supported!")
+            log(self.ppp_logger, self.ppp_debug_level, logging.WARNING, "Compel parser is not supported!")
         init_images = getattr(p, "init_images", [None]) or [None]
         is_i2i = bool(init_images[0])
         do_i2i = getattr(opts, "ppp_gen_doi2i", False)
         add_prompts = getattr(opts, "ppp_gen_addpromptstometadata", True)
         if is_i2i and not do_i2i:
-            if self.ppp_debug_level != DEBUG_LEVEL.none:
-                self.ppp_logger.info("Not processing the prompt for i2i")
+            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Not processing the prompt for i2i")
             return
 
         p.extra_generation_params.update(
@@ -250,8 +253,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
             }
         )
 
-        if self.ppp_debug_level != DEBUG_LEVEL.none:
-            self.ppp_logger.info(f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})")
+        log(
+            self.ppp_logger,
+            self.ppp_debug_level,
+            logging.INFO,
+            f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})",
+        )
         env_info = {
             "app": app.value,
             "models_path": models_path,
@@ -281,7 +288,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if f.strip() != ""
         ]
         self.wildcards_obj.refresh_wildcards(
-            self.ppp_debug_level, wildcards_folders if options.wil_process_wildcards else None
+            self.ppp_debug_level, wildcards_folders if options.process_wildcards else None
         )
         self.extranetwork_mappings_obj.refresh_extranetwork_mappings(self.ppp_debug_level, enmappings_folders)
         ppp = PromptPostProcessor(
@@ -298,16 +305,14 @@ class PromptPostProcessorA1111Script(scripts.Script):
         prompts_list = []
 
         if input_force_equal_seeds:
-            if self.ppp_debug_level != DEBUG_LEVEL.none:
-                self.ppp_logger.info("Forcing equal seeds")
+            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Forcing equal seeds")
             seeds = getattr(p, "all_seeds", [])
             subseeds = getattr(p, "all_subseeds", [])
             p.all_seeds = [seeds[0] for _ in seeds]
             p.all_subseeds = [subseeds[0] for _ in subseeds]
 
         if input_unlink_seed:
-            if self.ppp_debug_level != DEBUG_LEVEL.none:
-                self.ppp_logger.info("Using unlinked seed")
+            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Using unlinked seed")
             num_seeds = len(getattr(p, "all_seeds", []))
             if input_incremental_seed:
                 first_seed = np.random.randint(0, 2**32, dtype=np.int64) if input_seed == -1 else input_seed
@@ -355,8 +360,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         # processes prompts
         for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):
-            if self.ppp_debug_level != DEBUG_LEVEL.none:
-                self.ppp_logger.info(f"processing prompts[{i+1}] ({prompttype})")
+            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts[{i+1}] ({prompttype})")
             if (
                 self.lru_cache.get(
                     (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
@@ -371,8 +375,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 self.lru_cache.put(
                     (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), posp, negp), (posp, negp)
                 )
-            elif self.ppp_debug_level != DEBUG_LEVEL.none:
-                self.ppp_logger.info("result already in cache")
+            else:
+                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
 
         # updates the prompts
         rpr_copy = None
@@ -426,8 +430,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 p.extra_generation_params[k] = v
 
         t2 = time.monotonic_ns()
-        if self.ppp_debug_level != DEBUG_LEVEL.none:
-            self.ppp_logger.info(f"process time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
+        log(
+            self.ppp_logger,
+            self.ppp_debug_level,
+            logging.INFO,
+            f"process time: {(t2 - t1) / 1_000_000_000:.3f} seconds",
+        )
 
     def ppp_interrupt(self):
         """

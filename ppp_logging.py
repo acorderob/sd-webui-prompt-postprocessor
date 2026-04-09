@@ -3,6 +3,8 @@ import logging
 import sys
 import copy
 
+from ppp_utils import format_output
+
 
 class DEBUG_LEVEL(Enum):
     none = "none"
@@ -95,3 +97,17 @@ class PromptPostProcessorLogCustomAdapter(logging.LoggerAdapter):
             tuple: A tuple containing the processed log message and keyword arguments.
         """
         return f"[PPP] {msg}", kwargs
+
+def log(logger: logging.Logger, debug_level: DEBUG_LEVEL, kind: int, message: str, min_level: DEBUG_LEVEL | None = None):
+    if logger:
+        if min_level is None:
+            if kind == logging.DEBUG:
+                min_level = DEBUG_LEVEL.full
+            elif kind == logging.INFO:
+                min_level = DEBUG_LEVEL.minimal
+            else:
+                min_level = DEBUG_LEVEL.none
+        i_debug_level = list(DEBUG_LEVEL).index(debug_level)
+        i_min_level = list(DEBUG_LEVEL).index(min_level)
+        if i_debug_level >= i_min_level:
+            logger.log(kind, format_output(message))

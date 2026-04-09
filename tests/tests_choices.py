@@ -86,7 +86,7 @@ class TestChoices(TestPromptPostProcessorBase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    rem_removeextranetworktags=True,
+                    cup_remove_extranetwork_tags=True,
                 ),
                 self.grammar_content,
                 self.interrupt,

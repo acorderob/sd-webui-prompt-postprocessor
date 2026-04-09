@@ -49,27 +49,27 @@ class PPPStateOptions:
     """Options that can be set for prompt processing."""
 
     debug_level: DEBUG_LEVEL = DEBUG_LEVEL.minimal
-    gen_onwarning: ONWARNING_CHOICES = ONWARNING_CHOICES.warn
-    wil_process_wildcards: bool = True
-    wil_keep_choices_order: bool = True
-    wil_choice_separator: str = ", "
-    wil_ifwildcards: IFWILDCARDS_CHOICES = IFWILDCARDS_CHOICES.stop
+    on_warning: ONWARNING_CHOICES = ONWARNING_CHOICES.warn
+    process_wildcards: bool = True
+    keep_choices_order: bool = True
+    choice_separator: str = ", "
+    if_wildcards: IFWILDCARDS_CHOICES = IFWILDCARDS_CHOICES.stop
     stn_ignore_repeats: bool = True
     stn_separator: str = ", "
     cup_do_cleanup: bool = True  # whether to do cleanup at all (if False, all other cleanup options are ignored)
     cup_cleanup_variables: bool = True
-    cup_extraspaces: bool = True
-    cup_emptyconstructs: bool = True
-    cup_extraseparators: bool = True
-    cup_extraseparators2: bool = True
-    cup_extraseparators_include_eol: bool = False
+    cup_extra_spaces: bool = True
+    cup_empty_constructs: bool = True
+    cup_extra_separators: bool = True
+    cup_extra_separators2: bool = True
+    cup_extra_separators_include_eol: bool = False
     cup_breaks: bool = False
     cup_breaks_eol: bool = False
     cup_ands: bool = False
     cup_ands_eol: bool = False
-    cup_extranetworktags: bool = False
-    cup_mergeattention: bool = True
-    rem_removeextranetworktags: bool = False
+    cup_extranetwork_tags: bool = False
+    cup_merge_attention: bool = True
+    cup_remove_extranetwork_tags: bool = False
 
 
 @dataclass(frozen=True)

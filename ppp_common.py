@@ -6,7 +6,7 @@ import textwrap
 import time
 import lark
 
-from ppp_logging import DEBUG_LEVEL
+from ppp_logging import log
 from ppp_classes import ONWARNING_CHOICES, PPPInterrupt, PPPState
 from ppp_utils import escape_single_quotes, format_output
 
@@ -33,12 +33,12 @@ def parse_prompt(
     t1 = time.monotonic_ns()
     parsed_prompt = None
     try:
-        if state.options.debug_level == DEBUG_LEVEL.full:
-            state.logger.debug(
-                format_output(
-                    f"Parsing {prompt_description}: '{escape_single_quotes(prompt)}'"
-                )
-            )
+        log(
+            state.logger,
+            state.options.debug_level,
+            logging.DEBUG,
+            f"Parsing {prompt_description}: '{escape_single_quotes(prompt)}'",
+        )
         parsed_prompt = parser.parse(prompt)
         # we store the contents so we can use them later even if the meta position is not valid anymore
         if isinstance(parsed_prompt, lark.Tree):
@@ -51,42 +51,43 @@ def parse_prompt(
     except lark.exceptions.UnexpectedInput:
         if raise_parsing_error:
             raise
-        state.logger.exception(
-            format_output(f"Parsing failed on prompt!: {escape_single_quotes(prompt)}")
+        log(
+            state.logger,
+            state.options.debug_level,
+            logging.ERROR,
+            f"Parsing failed on prompt!: {escape_single_quotes(prompt)}",
         )
     t2 = time.monotonic_ns()
-    if state.options.debug_level == DEBUG_LEVEL.full:
-        state.logger.debug(
-            f"Parse {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds"
+    log(
+        state.logger,
+        state.options.debug_level,
+        logging.DEBUG,
+        f"Parse {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds",
+    )
+    if parsed_prompt:
+        log(
+            state.logger,
+            state.options.debug_level,
+            logging.DEBUG,
+            "Tree:\n"
+            + textwrap.indent(
+                re.sub(r"\n$", "", (parsed_prompt.pretty() if isinstance(parsed_prompt, lark.Tree) else parsed_prompt)),
+                "    ",
+            ),
         )
-        if parsed_prompt:
-            state.logger.debug(
-                "Tree:\n"
-                + textwrap.indent(
-                    re.sub(
-                        r"\n$",
-                        "",
-                        (
-                            parsed_prompt.pretty()
-                            if isinstance(parsed_prompt, lark.Tree)
-                            else parsed_prompt
-                        ),
-                    ),
-                    "    ",
-                )
-            )
     return parsed_prompt
 
 
 def warn_or_stop(state: PPPState, is_negative: bool, message: str, e: Exception = None):
     INVALID_CONTENT_STOP = "INVALID CONTENT! {0}\nBREAK "
-    if state.options.gen_onwarning == ONWARNING_CHOICES.stop:
+    if state.options.on_warning == ONWARNING_CHOICES.stop:
         raise PPPInterrupt(
             message,
             INVALID_CONTENT_STOP.format(message) if not is_negative else "",
             INVALID_CONTENT_STOP.format(message) if is_negative else "",
         ) from e
-    state.logger.warning(format_output(message))
+    log(state.logger, state.options.debug_level, logging.WARNING, format_output(message))
+
 
 def load_grammar() -> str:
     # Process with lark (debug with https://www.lark-parser.org/ide/)
@@ -96,13 +97,15 @@ def load_grammar() -> str:
     return grammar_content
 
 
-def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: logging.Logger = None) -> str:
+def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: logging.Logger, debug_level: int) -> str:
     """
     Preprocesses the grammar content to handle conditional compilation directives.
 
     Args:
         grammar_content (str): The raw grammar content.
         options (dict[str,bool]): Options for preprocessing.
+        logger (logging.Logger): The logger object.
+        debug_level (int): The debug level for logging.
 
     Returns:
         str: The preprocessed grammar content.
@@ -153,8 +156,7 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
             all_blocks_skipped.append(skip_current_block[-1])
         elif stripped_line.startswith("//#elif"):
             if not skip_current_block:
-                if logger:
-                    logger.warning("Unmatched //#elif directive found in grammar content.")
+                log(logger, debug_level, logging.WARNING, "Unmatched //#elif directive found in grammar content.")
             elif all_blocks_skipped[-1]:
                 # Extract condition from the #elif directive
                 conditions = stripped_line[7:].strip()
@@ -166,22 +168,24 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
                 skip_current_block[-1] = True
         elif stripped_line.startswith("//#else"):
             if not skip_current_block:
-                if logger:
-                    logger.warning("Unmatched //#else directive found in grammar content.")
+                log(logger, debug_level, logging.WARNING, "Unmatched //#else directive found in grammar content.")
             elif all_blocks_skipped[-1]:
                 skip_current_block[-1] = False
             else:
                 skip_current_block[-1] = True
         elif stripped_line.startswith("//#endif"):
             if not skip_current_block:
-                if logger:
-                    logger.warning("Unmatched //#endif directive found in grammar content.")
+                log(logger, debug_level, logging.WARNING, "Unmatched //#endif directive found in grammar content.")
             else:
                 skip_current_block.pop()
                 all_blocks_skipped.pop()
         elif stripped_line.startswith("//#"):
-            if logger:
-                logger.warning(f"Unrecognized directive found in grammar content: {stripped_line}")
+            log(
+                logger,
+                debug_level,
+                logging.WARNING,
+                f"Unrecognized directive found in grammar content: {stripped_line}",
+            )
         elif not any(skip_current_block):
             # Include the line if we're not skipping any current block
             result_lines.append(stripped_line)

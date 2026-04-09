@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 import yaml
 
-from ppp_logging import DEBUG_LEVEL
+from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import deep_freeze, escape_single_quotes
 
 
@@ -95,8 +95,7 @@ class PPPExtraNetworkMappings:
         """
         self.__debug_level = debug_level
         self.__enmappings_folders = enmappings_folders or []
-        # if self.__debug_level != DEBUG_LEVEL.none and self.__logger:
-        #     self.__logger.info("Refreshing extra network mappings...")
+        # log(self.__logger, self.__debug_level, logging.INFO, "Refreshing extra network mappings...")
         # t1 = time.monotonic_ns()
         self.cached_mappings = {}
         for fullpath in list(self.__enmappings_files.keys()):
@@ -118,8 +117,7 @@ class PPPExtraNetworkMappings:
             self.extranetwork_mappings = {}
             self.__enmappings_files = {}
         # t2 = time.monotonic_ns()
-        # if self.__debug_level != DEBUG_LEVEL.none and self.__logger:
-        #     self.__logger.info(f"Extra network mappings refresh time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
+        # log(self.__logger, self.__debug_level, logging.INFO, f"Extra network mappings refresh time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
     # def get_extranetwork_mappings(self, key: str) -> list[PPPENMapping]:
     #     """
@@ -143,11 +141,16 @@ class PPPExtraNetworkMappings:
             debug (bool): Whether to print debug messages or not.
         """
         last_modified_cached = self.__enmappings_files.get(full_path, None)  # a time or a hash
-        if debug and last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
+        if debug and last_modified_cached is not None:
             if full_path == self.LOCALINPUT_FILENAME:
-                self.__logger.debug("Removing extra network mappings from input")
+                log(self.__logger, self.__debug_level, logging.DEBUG, "Removing extra network mappings from input")
             else:
-                self.__logger.debug(f"Removing extra network mappings from file: {full_path}")
+                log(
+                    self.__logger,
+                    self.__debug_level,
+                    logging.DEBUG,
+                    f"Removing extra network mappings from file: {full_path}",
+                )
         if full_path in self.__enmappings_files.keys():
             del self.__enmappings_files[full_path]
         for key in list(self.extranetwork_mappings.keys()):
@@ -170,8 +173,13 @@ class PPPExtraNetworkMappings:
         if extension not in (".yaml", ".yml", ".json"):
             return
         self.__remove_extranetwork_mappings_from_path(full_path, False)
-        if last_modified_cached is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
-            self.__logger.debug(f"Updating extra network mappings from file: {full_path}")
+        if last_modified_cached is not None:
+            log(
+                self.__logger,
+                self.__debug_level,
+                logging.DEBUG,
+                f"Updating extra network mappings from file: {full_path}",
+            )
         self.__get_extranetwork_mappings_in_structured_file(full_path)
         self.__enmappings_files[full_path] = last_modified
 
@@ -187,15 +195,19 @@ class PPPExtraNetworkMappings:
         if h == new_h:
             return
         self.__remove_extranetwork_mappings_from_path(self.LOCALINPUT_FILENAME, False)
-        if h is not None and self.__debug_level != DEBUG_LEVEL.none and self.__logger:
-            self.__logger.debug("Updating extra network mappings from input")
+        if h is not None:
+            log(self.__logger, self.__debug_level, logging.DEBUG, "Updating extra network mappings from input")
         enmappings_input = enmappings_input.strip()
         if enmappings_input != "":
             try:
                 content = yaml.safe_load(enmappings_input)
             except yaml.YAMLError as e:
-                if self.__logger:
-                    self.__logger.warning(f"Invalid format for input extra network mappings: {e}")
+                log(
+                    self.__logger,
+                    self.__debug_level,
+                    logging.WARNING,
+                    f"Invalid format for input extra network mappings: {e}",
+                )
                 return
             if content is not None:
                 self.__add_extranetwork_mapping(content, self.LOCALINPUT_FILENAME)
@@ -210,33 +222,45 @@ class PPPExtraNetworkMappings:
             full_path (str): The path to the file that contains it.
         """
         if not isinstance(content, dict):
-            if self.__logger:
-                self.__logger.warning(f"Invalid extra network mapping in file '{escape_single_quotes(full_path)}'!")
+            log(
+                self.__logger,
+                self.__debug_level,
+                logging.WARNING,
+                f"Invalid extra network mapping in file '{escape_single_quotes(full_path)}'!",
+            )
             return
         for kind, maps in content.items():
             if not isinstance(maps, dict):
-                if self.__logger:
-                    self.__logger.warning(
-                        f"Invalid extra network mapping definition for '{escape_single_quotes(kind)}:*' in file '{escape_single_quotes(full_path)}'!"
-                    )
+                log(
+                    self.__logger,
+                    self.__debug_level,
+                    logging.WARNING,
+                    f"Invalid extra network mapping definition for '{escape_single_quotes(kind)}:*' in file '{escape_single_quotes(full_path)}'!",
+                )
             else:
                 for name, variants in maps.items():
                     key = f"{kind}:{name}"
                     if not isinstance(variants, list):
-                        if self.__logger:
-                            self.__logger.warning(
-                                f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!"
-                            )
+                        log(
+                            self.__logger,
+                            self.__debug_level,
+                            logging.WARNING,
+                            f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!",
+                        )
                     elif self.extranetwork_mappings.get(key, None) is not None:
-                        if self.__logger:
-                            self.__logger.warning(
-                                f"Duplicate extra network mapping '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.extranetwork_mappings[key].file)}'!"
-                            )
+                        log(
+                            self.__logger,
+                            self.__debug_level,
+                            logging.WARNING,
+                            f"Duplicate extra network mapping '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.extranetwork_mappings[key].file)}'!",
+                        )
                     elif not isinstance(variants, list) or not all(isinstance(v, dict) for v in variants):
-                        if self.__logger:
-                            self.__logger.warning(
-                                f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!"
-                            )
+                        log(
+                            self.__logger,
+                            self.__debug_level,
+                            logging.WARNING,
+                            f"Invalid extra network mapping definition for '{escape_single_quotes(key)}' in file '{escape_single_quotes(full_path)}'!",
+                        )
                     else:
                         self.extranetwork_mappings[key] = PPPENMapping(full_path, kind, name, variants)
 
@@ -253,18 +277,22 @@ class PPPExtraNetworkMappings:
                 with open(full_path, "r", encoding="utf-8") as file:
                     content = yaml.safe_load(file)
             except:  # pylint: disable=bare-except
-                if self.__logger:
-                    self.__logger.warning(
-                        f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252..."
-                    )
+                log(
+                    self.__logger,
+                    self.__debug_level,
+                    logging.WARNING,
+                    f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252...",
+                )
                 with open(full_path, "r", encoding="windows-1252") as file:
                     content = yaml.safe_load(file)
             self.__add_extranetwork_mapping(content, full_path)
         except Exception as e:  # pylint: disable=broad-except
-            if self.__logger:
-                self.__logger.error(
-                    f"Error reading extra network mappings from file '{escape_single_quotes(full_path)}': {e}"
-                )
+            log(
+                self.__logger,
+                self.__debug_level,
+                logging.ERROR,
+                f"Error reading extra network mappings from file '{escape_single_quotes(full_path)}': {e}",
+            )
 
     def __get_extranetwork_mappings_in_directory(self, directory: str):
         """
@@ -274,10 +302,12 @@ class PPPExtraNetworkMappings:
             directory (str): The path to the directory.
         """
         if not os.path.exists(directory):
-            if self.__logger:
-                self.__logger.warning(
-                    f"Extra network mappings directory '{escape_single_quotes(directory)}' does not exist!"
-                )
+            log(
+                self.__logger,
+                self.__debug_level,
+                logging.WARNING,
+                f"Extra network mappings directory '{escape_single_quotes(directory)}' does not exist!",
+            )
             return
         for filename in os.listdir(directory):
             full_path = os.path.abspath(os.path.join(directory, filename))

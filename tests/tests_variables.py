@@ -52,7 +52,7 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    gen_onwarning=ONWARNING_CHOICES.warn,
+                    on_warning=ONWARNING_CHOICES.warn,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -156,7 +156,7 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    gen_onwarning=ONWARNING_CHOICES.warn,
+                    on_warning=ONWARNING_CHOICES.warn,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -187,7 +187,7 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    gen_onwarning=ONWARNING_CHOICES.warn,
+                    on_warning=ONWARNING_CHOICES.warn,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -218,7 +218,7 @@ class TestVariables(TestPromptPostProcessorBase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    gen_onwarning=ONWARNING_CHOICES.warn,
+                    on_warning=ONWARNING_CHOICES.warn,
                 ),
                 self.grammar_content,
                 self.interrupt,

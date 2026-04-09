@@ -1,4 +1,5 @@
 from collections import namedtuple
+import logging
 import math
 import re
 import textwrap
@@ -9,8 +10,8 @@ import numpy as np
 
 from ppp_classes import IFWILDCARDS_CHOICES, PPPState
 from ppp_enmappings import PPPENMappingVariant
-from ppp_logging import DEBUG_LEVEL
-from ppp_utils import escape_single_quotes, format_output
+from ppp_logging import DEBUG_LEVEL, log
+from ppp_utils import escape_single_quotes
 from ppp_common import parse_prompt, warn_or_stop
 from ppp_wildcards import PPPWildcard
 
@@ -48,6 +49,9 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.detectedWildcards: list[str] = []
         self.result = ""
 
+    def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None):
+        log(self.__state.logger, self.__state.options.debug_level, kind, message, min_level)
+
     def warn_or_stop(self, message: str, e: Exception = None):
         warn_or_stop(self.__state, self.__is_negative, message, e)
 
@@ -65,12 +69,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         self.__is_negative = is_negative
-        if self.__debug_level != DEBUG_LEVEL.none:
-            self.__state.logger.info(f"Processing {prompt_description}...")
+        self.log(logging.INFO, f"Processing {prompt_description}...")
         self.visit(parsed_prompt)
         t2 = time.monotonic_ns()
-        if self.__debug_level != DEBUG_LEVEL.none:
-            self.__state.logger.info(f"Process {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
+        self.log(logging.INFO, f"Process {prompt_description} time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
         return self.result
 
     def __visit(
@@ -91,11 +93,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             str: The result of the visit.
         """
         backup_result = self.result
-        # if self.__debug_level == DEBUG_LEVEL.full:
-        #     self.__state.logger.debug(f"Visiting node {node}.")
+        # self.log(logging.DEBUG, f"Visiting node {node}.")
         if restore_state:
-            # if self.__debug_level == DEBUG_LEVEL.full:
-            #     self.__state.logger.debug("Backing up state before visiting.")
+            # self.log(logging.DEBUG, "Backing up state before visiting.")
             backup_shell = self.__shell.copy()
             backup_negtags = self.__negtags.copy()
             backup_already_processed = self.__already_processed.copy()
@@ -120,8 +120,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         if discard_content or restore_state:
             self.result = backup_result
         if restore_state:
-            # if self.__debug_level == DEBUG_LEVEL.full:
-            #     self.__state.logger.debug("Restoring state after visiting.")
+            # self.log(logging.DEBUG, "Restoring state after visiting.")
             self.__shell = backup_shell
             self.__negtags = backup_negtags
             self.__already_processed = backup_already_processed
@@ -210,9 +209,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             output = self.result[len(start_result) :]
             if output != "":
                 output = f" >> '{escape_single_quotes(output)}'"
-            self.__state.logger.debug(
-                format_output(f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
-            )
+            self.log(logging.DEBUG, f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
 
     def __resolve_cond_value(self, c: str):
         """Resolve a condition value: try int first, fall back to variable lookup."""
@@ -322,7 +319,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Returns:
             bool: The result of the if condition evaluation.
         """
-        # self.__state.logger.debug(f"__eval_condition {condition.data}")
+        # self.log(logging.DEBUG, f"__eval_condition {condition.data}")
         if condition.data == "operation_and":
             cond_result = True
             for c in condition.children:
@@ -388,8 +385,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         + and_replacements[and_processing][1]
                         + self.__visit(tree.children[i + 1], False, True).lstrip()
                     )
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug(f"AND construct {and_replacements[and_processing][0]}")
+                    self.log(logging.DEBUG, f"AND construct {and_replacements[and_processing][0]}")
                 elif and_processing == "error":
                     self.warn_or_stop("AND constructs are not allowed!")
                 else:  # and_processing == "ok":
@@ -423,43 +419,37 @@ class TreeProcessor(lark.visitors.Interpreter):
             pos = int(pos)
         scheduling_processing = self.__state.host_config.get("scheduling", "ok")
         if scheduling_processing == "before":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Scheduling construct removed, taking before option")
+            self.log(logging.DEBUG, "Scheduling construct removed, taking before option")
             if before is not None:
                 self.__visit(before)
         elif scheduling_processing == "after":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Scheduling construct removed, taking after option")
+            self.log(logging.DEBUG, "Scheduling construct removed, taking after option")
             if after is not None:
                 self.__visit(after)
         elif scheduling_processing == "first":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Scheduling construct removed, taking first option")
+            self.log(logging.DEBUG, "Scheduling construct removed, taking first option")
             if before is not None:
                 self.__visit(before)
             elif after is not None:
                 self.__visit(after)
         elif scheduling_processing == "remove":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Scheduling construct removed")
+            self.log(logging.DEBUG, "Scheduling construct removed")
         elif scheduling_processing == "error":
             self.warn_or_stop("Scheduling constructs are not allowed!")
         else:  # scheduling_processing == "ok"
             # self.__shell.append(self.AccumulatedShell("sc", pos))
             self.result += "["
             if before is not None:
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug(f"Shell scheduled before with position {pos}")
+                self.log(logging.DEBUG, f"Shell scheduled before with position {pos}")
                 self.__shell.append(self.AccumulatedShell("scb", pos))
                 self.__visit(before)
                 self.__shell.pop()
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug(f"Shell scheduled after with position {pos}")
+            self.log(logging.DEBUG, f"Shell scheduled after with position {pos}")
             self.__shell.append(self.AccumulatedShell("sca", pos))
             self.result += ":"
             self.__visit(after)
             self.__shell.pop()
-            if self.__state.options.cup_emptyconstructs and re.fullmatch(
+            if self.__state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result) + r"\[:\s*", self.result
             ):
                 self.result = start_result
@@ -477,27 +467,24 @@ class TreeProcessor(lark.visitors.Interpreter):
         t1 = time.monotonic_ns()
         alternation_processing = self.__state.host_config.get("alternation", "ok")
         if alternation_processing == "first":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Alternation construct removed, taking first option")
+            self.log(logging.DEBUG, "Alternation construct removed, taking first option")
             self.__visit(tree.children[0])
         elif alternation_processing == "remove":
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Alternation construct removed")
+            self.log(logging.DEBUG, "Alternation construct removed")
         elif alternation_processing == "error":
             self.warn_or_stop("Alternation constructs are not allowed!")
         else:  # alternation_processing == "ok"
             # self.__shell.append(self.AccumulatedShell("al", len(tree.children)))
             self.result += "["
             for i, opt in enumerate(tree.children):
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug(f"Shell alternate option {i+1}")
+                self.log(logging.DEBUG, f"Shell alternate option {i+1}")
                 self.__shell.append(self.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}))
                 if i > 0:
                     self.result += "|"
                 self.__visit(opt)
                 self.__shell.pop()
             self.result += "]"
-            if self.__state.options.cup_emptyconstructs and re.fullmatch(
+            if self.__state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result) + r"\[\s*\]", self.result
             ):
                 self.result = start_result
@@ -525,10 +512,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             weight_kind = 1  # decrease attention
             weight = 0.9
             weight_str = "0.9"
-        if self.__debug_level == DEBUG_LEVEL.full:
-            self.__state.logger.debug(f"Shell attention with weight {weight}")
+        self.log(logging.DEBUG, f"Shell attention with weight {weight}")
         current_tree = tree.children[0]
-        if self.__state.options.cup_mergeattention:
+        if self.__state.options.cup_merge_attention:
             while isinstance(current_tree, lark.Tree) and current_tree.data == "attention":
                 # we merge the weights
                 if len(current_tree.children) == 2:
@@ -554,16 +540,13 @@ class TreeProcessor(lark.visitors.Interpreter):
             if weight_kind == 1:
                 weight_kind = 3
                 weight_str = "0.9"
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug("Converted to parentheses format")
+                self.log(logging.DEBUG, "Converted to parentheses format")
         elif attention_processing == "disable":
             weight_kind = 0
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Attention construct disabled")
+            self.log(logging.DEBUG, "Attention construct disabled")
         elif attention_processing == "remove":
             weight_kind = -1
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Attention construct removed")
+            self.log(logging.DEBUG, "Attention construct removed")
         elif attention_processing == "error":
             self.warn_or_stop("Attention constructs are not allowed!")
         # else: attention_processing == "ok":
@@ -590,7 +573,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
-            if self.__state.options.cup_emptyconstructs and re.fullmatch(
+            if self.__state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result + starttag) + r"\s*", self.result
             ):
                 self.result = start_result
@@ -737,10 +720,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         value = self.__get_user_variable_value(variable, True, True)
         if value is None:
             if default is not None:
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug(
-                        f"Variable '{escape_single_quotes(variable)}' not found, using default value"
-                    )
+                self.log(logging.DEBUG, f"Variable '{escape_single_quotes(variable)}' not found, using default value")
                 v = self.__visit(default, False, True)
                 self.result += v
                 default_value = v
@@ -799,7 +779,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         t1 = time.monotonic_ns()
         start_result = self.result
         extnet = "(ignored)"
-        if not self.__state.options.rem_removeextranetworktags:
+        if not self.__state.options.cup_remove_extranetwork_tags:
             extnet_type: str = (tree.children[0].children[0] or "") + str(tree.children[0].children[1])
             is_mapping = extnet_type.startswith("$")
             if is_mapping:
@@ -871,9 +851,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                         self.__state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                     if found:
                         if found.name:
-                            if not found_in_cache and self.__debug_level != DEBUG_LEVEL.none:
-                                self.__state.logger.info(
-                                    f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to '{escape_single_quotes(extnet_type)}:{escape_single_quotes(found.name)}'"
+                            if not found_in_cache:
+                                self.log(
+                                    logging.INFO,
+                                    f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to '{escape_single_quotes(extnet_type)}:{escape_single_quotes(found.name)}'",
                                 )
                             extnet_id = f"{extnet_type}:{found.name}"
                             f_parameters = found.parameters
@@ -889,15 +870,16 @@ class TreeProcessor(lark.visitors.Interpreter):
                             elif f_parameters is not None and parameters_defaulted:
                                 parameters = f_parameters
                         elif found.triggers:
-                            if not found_in_cache and self.__debug_level != DEBUG_LEVEL.none:
-                                self.__state.logger.info(
-                                    f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to just triggers"
+                            if not found_in_cache:
+                                self.log(
+                                    logging.INFO,
+                                    f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to just triggers",
                                 )
                             extnet_id = None
                         else:
-                            if not found_in_cache and self.__debug_level != DEBUG_LEVEL.none:
-                                self.__state.logger.info(
-                                    f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to nothing"
+                            if not found_in_cache:
+                                self.log(
+                                    logging.INFO, f"Mapping extranetwork '{escape_single_quotes(extnet_id)}' to nothing"
                                 )
                             extnet_id = None
                         if found.triggers:
@@ -921,7 +903,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     extnet = "(only triggers)"
                 if triggers or compiled_extra_triggers:
                     if extnet_id:
-                        if not self.__state.options.cup_extranetworktags:
+                        if not self.__state.options.cup_extranetwork_tags:
                             self.result += " "
                     else:
                         self.result += ", "
@@ -950,14 +932,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             filter_object = tree.children[1].children[1] if tree.children[1] is not None else None
             if filter_object is None:
                 for wc in selected_wildcards:
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug(f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
+                    self.log(logging.DEBUG, f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
                     self.__state.wildcards_obj.set_wildcard_default_filter(wc, None)
             else:
                 filter_specifier = self.__extract_filter_specifiers(filter_object)
                 for wc in selected_wildcards:
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug(f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
+                    self.log(logging.DEBUG, f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
                     self.__state.wildcards_obj.set_wildcard_default_filter(wc, filter_specifier)
         t2 = time.monotonic_ns()
         self.__debug_end("commandsetwcdeffilter", start_result, t2 - t1)
@@ -968,7 +948,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.result
-        if not self.__state.options.rem_removeextranetworktags:
+        if not self.__state.options.cup_remove_extranetwork_tags:
             self.result += f"<{tree.children[0]}"
             self.__visit(tree.children[1])
             self.result += ">"
@@ -1035,11 +1015,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                             )
                             continue
                         self.__seen_wildcards.append(wc.key)
-                        if self.__debug_level == DEBUG_LEVEL.full:
-                            self.__state.logger.debug(f"Seen wildcard '{escape_single_quotes(wc.key)}'")
-                            self.__state.logger.debug(
-                                f"Including choices from wildcard '{escape_single_quotes(wc.key)}'"
-                            )
+                        self.log(logging.DEBUG, f"Seen wildcard '{escape_single_quotes(wc.key)}'")
+                        self.log(logging.DEBUG, f"Including choices from wildcard '{escape_single_quotes(wc.key)}'")
                         (_, choice_values) = self.__check_wildcard_initialization(wc)
                         if choice_values is not None:
                             ch_values = self.__get_choices_internal_get(choice_values, None, wc.key)
@@ -1087,7 +1064,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         else:
             from_value: int = options.get("from", 1)
             to_value: int = options.get("to", 1)
-        separator: str = options.get("separator", self.__state.options.wil_choice_separator)
+        separator: str = options.get("separator", self.__state.options.choice_separator)
         msg_where = f"wildcard '{escape_single_quotes(wildcard_key)}'" if wildcard_key else "choices"
         if sampler != "~":
             self.warn_or_stop(f"Unsupported sampler '{escape_single_quotes(sampler)}' at {msg_where} options!")
@@ -1132,21 +1109,19 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.warn_or_stop(f"Not enough choices found for {msg_where}!")
         if num_choices < 2:
             repeating = False
-        if self.__debug_level == DEBUG_LEVEL.full:
-            self.__state.logger.debug(
-                format_output(
-                    f"Selecting {'optional ' if optional else ''}{'repeating ' if repeating else ''}{num_choices} choice"
-                    + ("s" if num_choices != 1 else "")
-                    + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else "")
-                )
-            )
+        self.log(
+            logging.DEBUG,
+            f"Selecting {'optional ' if optional else ''}{'repeating ' if repeating else ''}{num_choices} choice"
+            + ("s" if num_choices != 1 else "")
+            + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else ""),
+        )
         if num_choices > 0:
             selected_choices: list[dict] = (
                 list(self.__rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
                 if available_choices
                 else []
             )
-            if self.__state.options.wil_keep_choices_order:
+            if self.__state.options.keep_choices_order:
                 selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
             selected_choices_text = []
             prefix: str = (
@@ -1164,11 +1139,11 @@ class TreeProcessor(lark.visitors.Interpreter):
                 else:
                     choice_content = self.__visit(choice_content_obj, False, True)
                 t2 = time.monotonic_ns()
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug(
-                        f"Adding choice {i+1} ({(t2-t1) / 1_000_000_000:.3f} seconds):\n"
-                        + textwrap.indent(re.sub(r"\n$", "", choice_content), "    ")
-                    )
+                self.log(
+                    logging.DEBUG,
+                    f"Adding choice {i+1} ({(t2-t1) / 1_000_000_000:.3f} seconds):\n"
+                    + textwrap.indent(re.sub(r"\n$", "", choice_content), "    "),
+                )
                 selected_choices_text.append(choice_content)
             suffix: str = (
                 self.__visit(options.get("suffix", None), False, True)
@@ -1183,9 +1158,11 @@ class TreeProcessor(lark.visitors.Interpreter):
             prefix = ""
             suffix = ""
             results = []
-        if self.__debug_level == DEBUG_LEVEL.full:
-            list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
-            self.__state.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
+        self.log(
+            logging.DEBUG,
+            "Unseen wildcards: "
+            + ", ".join([f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]),
+        )
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         return (prefix, results, separator, suffix)
 
@@ -1319,8 +1296,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                                 )
                                 cv["content"] = None
                         if cv["content"] is not None:
-                            if self.__debug_level == DEBUG_LEVEL.full:
-                                self.__state.logger.debug(f"Processed choice {cv}")
+                            self.log(logging.DEBUG, f"Processed choice {cv}")
                             choice_values.append(cv)
                         else:
                             self.warn_or_stop(
@@ -1342,10 +1318,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                         )
             wildcard.choices = choice_values
             t2 = time.monotonic_ns()
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug(
-                    f"Processed choices for wildcard '{escape_single_quotes(wildcard.key)}' ({(t2-t1) / 1_000_000_000:.3f} seconds)"
-                )
+            self.log(
+                logging.DEBUG,
+                f"Processed choices for wildcard '{escape_single_quotes(wildcard.key)}' ({(t2-t1) / 1_000_000_000:.3f} seconds)",
+            )
         return (self.__clean_wildcard_options(options), choice_values)
 
     def get_wildcard_options(self, wildcard: PPPWildcard) -> tuple[dict | None, int]:
@@ -1394,8 +1370,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                     n = 1
                 except lark.exceptions.UnexpectedInput:
                     options = None
-        if options is None and self.__debug_level == DEBUG_LEVEL.full:
-            self.__state.logger.debug("Does not have options")
+        if options is None:
+            self.log(logging.DEBUG, "Does not have options")
         wildcard.options = options
         return options, n
 
@@ -1416,9 +1392,8 @@ class TreeProcessor(lark.visitors.Interpreter):
         applied_options = self.__clean_wildcard_options(self.__convert_choices_options(tree.children[0], False))
         wildcard_key: str = self.__visit(tree.children[1], False, True)
         wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
-        if self.__state.options.wil_process_wildcards:
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug(f"Processing wildcard: {wildcard_key}")
+        if self.__state.options.process_wildcards:
+            self.log(logging.DEBUG, f"Processing wildcard: {wildcard_key}")
             selected_wildcards = self.__state.wildcards_obj.get_wildcards(wildcard_key)
             if not selected_wildcards:
                 self.detectedWildcards.append(wc)
@@ -1436,32 +1411,29 @@ class TreeProcessor(lark.visitors.Interpreter):
                 ):
                     filter_wildcard_key = self.__visit(filter_object.children[2], False, True)
                     filter_specifier = self.__wildcard_filters.get(filter_wildcard_key, None)
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug("Filtering choices with inherited filter")
+                    self.log(logging.DEBUG, "Filtering choices with inherited filter")
                 else:
                     filter_specifier = self.__extract_filter_specifiers(filter_object.children[2])
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug("Filtering choices")
+                    self.log(logging.DEBUG, "Filtering choices")
                 self.__wildcard_filters[wildcard_key] = filter_specifier
                 if filter_object.children[1] is not None and "#" in str(
                     filter_object.children[1]
                 ):  # means do not use the filter in this wildcard
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug("Ignoring filter")
+                    self.log(logging.DEBUG, "Ignoring filter")
                     filter_specifier = None
             else:
                 filter_specifier = self.__state.wildcards_obj.get_wildcard_default_filter(wildcard_key)
                 if filter_specifier is not None:
                     self.__wildcard_filters[wildcard_key] = filter_specifier
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug("Applying default filter")
+                    self.log(logging.DEBUG, "Applying default filter")
             if (
                 len(selected_wildcards) > 1
                 and filter_specifier is not None
                 and any(y[0].isdecimal() for x in filter_specifier for y in x)
             ):
-                self.__state.logger.warning(
-                    f"Using a globbing wildcard '{escape_single_quotes(wildcard_key)}' with positional index filters is not recommended!"
+                self.log(
+                    logging.WARNING,
+                    f"Using a globbing wildcard '{escape_single_quotes(wildcard_key)}' with positional index filters is not recommended!",
                 )
             var_object = tree.children[3]
             variablename = None
@@ -1486,17 +1458,15 @@ class TreeProcessor(lark.visitors.Interpreter):
                     )
                     continue
                 self.__seen_wildcards.append(wildcard.key)
-                if self.__debug_level == DEBUG_LEVEL.full:
-                    self.__state.logger.debug(f"Seen wildcard '{escape_single_quotes(wildcard.key)}'")
+                self.log(logging.DEBUG, f"Seen wildcard '{escape_single_quotes(wildcard.key)}'")
                 (options, choice_values) = self.__check_wildcard_initialization(wildcard)
                 if options is not None:
                     if applied_options is None:
                         applied_options = options
                     else:
-                        if self.__debug_level == DEBUG_LEVEL.full:
-                            self.__state.logger.debug(
-                                f"Options for wildcard '{escape_single_quotes(wildcard.key)}' are ignored!"
-                            )
+                        self.log(
+                            logging.DEBUG, f"Options for wildcard '{escape_single_quotes(wildcard.key)}' are ignored!"
+                        )
                 choice_values_all += choice_values
             self.result += self.__get_choices(applied_options, choice_values_all, filter_specifier, wildcard_key)
             if wildcard_key in self.__wildcard_filters:
@@ -1505,12 +1475,12 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.__remove_user_variable(variablename)
                 if variablebackup is not None:
                     self.__state.user_variables[variablename] = variablebackup
-        elif self.__state.options.wil_ifwildcards != IFWILDCARDS_CHOICES.remove:
+        elif self.__state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
             self.detectedWildcards.append(wc)
             self.result += wc
         if self.__debug_level == DEBUG_LEVEL.full:
             list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
-            self.__state.logger.debug(f"Unseen wildcards: {', '.join(list_unseen)}")
+            self.log(logging.DEBUG, f"Unseen wildcards: {', '.join(list_unseen)}")
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         t2 = time.monotonic_ns()
         self.__debug_end("wildcard", start_result, t2 - t1, f"'{escape_single_quotes(wc)}'")
@@ -1538,11 +1508,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         options = self.__convert_choices_options(tree.children[0], False)
         choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
         ch = self.__get_original_node_content(tree, "?{...}")
-        if self.__state.options.wil_process_wildcards:
-            if self.__debug_level == DEBUG_LEVEL.full:
-                self.__state.logger.debug("Processing choices:")
+        if self.__state.options.process_wildcards:
+            self.log(logging.DEBUG, "Processing choices:")
             self.result += self.__get_choices(options, choice_values)
-        elif self.__state.options.wil_ifwildcards != IFWILDCARDS_CHOICES.remove:
+        elif self.__state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
             self.detectedWildcards.append(ch)
             self.result += ch
         t2 = time.monotonic_ns()
@@ -1562,7 +1531,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         attention_processing = self.__state.host_config.get("attention", "ok")
         # process the found negative tags
         for negtag in self.__negtags:
-            if self.__state.options.cup_mergeattention:
+            if self.__state.options.cup_merge_attention:
                 # join consecutive attention elements
                 for i in range(len(negtag.shell) - 1, 0, -1):
                     if negtag.shell[i].type == "at" and negtag.shell[i - 1].type == "at":
@@ -1615,8 +1584,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if content not in self.__already_processed:
                     if self.__state.options.stn_ignore_repeats:
                         self.__already_processed.append(content)
-                    if self.__debug_level == DEBUG_LEVEL.full:
-                        self.__state.logger.debug(format_output(f"Adding content at position {position}: {content}"))
+                    self.log(logging.DEBUG, f"Adding content at position {position}: {content}")
                     if position == "e":
                         self.add_at["end"].append(content)
                     elif position.startswith("p"):
@@ -1625,6 +1593,6 @@ class TreeProcessor(lark.visitors.Interpreter):
                     else:  # position == "s" or invalid
                         self.add_at["start"].append(content)
                 else:
-                    self.__state.logger.warning(format_output(f"Ignoring repeated content: {content}"))
+                    self.log(logging.WARNING, f"Ignoring repeated content: {content}")
         t2 = time.monotonic_ns()
         self.__debug_end("start", "", t2 - t1)

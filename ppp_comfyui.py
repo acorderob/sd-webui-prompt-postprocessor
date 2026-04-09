@@ -1,3 +1,4 @@
+import logging
 import os
 
 import folder_paths  # pylint: disable=import-error # type: ignore
@@ -5,7 +6,7 @@ import nodes  # pylint: disable=import-error # type: ignore
 
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
-from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory
+from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
@@ -69,7 +70,12 @@ class PromptPostProcessorComfyUINode:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
         self.extranetwork_mappings_obj = PPPExtraNetworkMappings(lf.log)
-        self.logger.info(f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized")
+        log(
+            self.logger,
+            DEBUG_LEVEL.minimal,
+            logging.INFO,
+            f"{PromptPostProcessor.NAME} {PromptPostProcessor.VERSION} initialized",
+        )
 
     class SmartType(str):
         def __ne__(self, other):
@@ -134,14 +140,14 @@ class PromptPostProcessorComfyUINode:
                 "on_warnings": (
                     [e.value for e in ONWARNING_CHOICES],
                     {
-                        "default": PromptPostProcessor.DEFAULT_ONWARNING,
+                        "default": PromptPostProcessor.DEFAULT_ON_WARNING,
                         "tooltip": "How to handle invalid content warnings",
                     },
                 ),
                 "process_wildcards": (
                     "BOOLEAN",
                     {
-                        "default": PromptPostProcessor.DEFAULT_WC_PROCESS,
+                        "default": PromptPostProcessor.DEFAULT_PROCESS_WILDCARDS,
                         "tooltip": "Process wildcards in the prompt",
                         "label_on": "Yes",
                         "label_off": "No",
@@ -249,9 +255,19 @@ class PromptPostProcessorComfyUINode:
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
         ) or ""
         if modelclass == "":
-            self.logger.warning("Model class is not provided. System variables might not be properly set.")
+            log(
+                self.logger,
+                DEBUG_LEVEL.minimal,
+                logging.WARNING,
+                "Model class is not provided. System variables might not be properly set.",
+            )
         if modelname == "":
-            self.logger.warning("Modelname is not provided. System variables will not be properly set.")
+            log(
+                self.logger,
+                DEBUG_LEVEL.minimal,
+                logging.WARNING,
+                "Modelname is not provided. System variables will not be properly set.",
+            )
         # model class values in ComfyUI\comfy\supported_models.py
         env_info = {
             "app": SUPPORTED_APPS.comfyui.value,
@@ -265,13 +281,13 @@ class PromptPostProcessorComfyUINode:
 
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(debug_level),
-            gen_onwarning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ONWARNING,
-            wil_process_wildcards=process_wildcards,
-            wil_ifwildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
-            wil_choice_separator=(
+            on_warning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ON_WARNING,
+            process_wildcards=process_wildcards,
+            if_wildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
+            choice_separator=(
                 wc_options["wc_choice_separator"] if wc_options else PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR
             ),
-            wil_keep_choices_order=(
+            keep_choices_order=(
                 wc_options["wc_keep_choices_order"] if wc_options else PromptPostProcessor.DEFAULT_KEEP_CHOICES_ORDER
             ),
             stn_separator=stn_options["stn_separator"] if stn_options else PromptPostProcessor.DEFAULT_STN_SEPARATOR,
@@ -280,21 +296,21 @@ class PromptPostProcessorComfyUINode:
             ),
             cup_do_cleanup=do_cleanup,
             cup_cleanup_variables=cleanup_variables,
-            cup_extraspaces=(
+            cup_extra_spaces=(
                 cup_options["cup_extra_spaces"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EXTRA_SPACES
             ),
-            cup_emptyconstructs=(
+            cup_empty_constructs=(
                 cup_options["cup_empty_constructs"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EMPTY_CONSTRUCTS
             ),
-            cup_extraseparators=(
+            cup_extra_separators=(
                 cup_options["cup_extra_separators"] if cup_options else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS
             ),
-            cup_extraseparators2=(
+            cup_extra_separators2=(
                 cup_options["cup_extra_separators2"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS2
             ),
-            cup_extraseparators_include_eol=(
+            cup_extra_separators_include_eol=(
                 cup_options["cup_extra_separators_include_eol"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRA_SEPARATORS_INCLUDE_EOL
@@ -305,15 +321,15 @@ class PromptPostProcessorComfyUINode:
             ),
             cup_ands=cup_options["cup_ands"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS,
             cup_ands_eol=(cup_options["cup_ands_eol"] if cup_options else PromptPostProcessor.DEFAULT_CUP_ANDS_EOL),
-            cup_extranetworktags=(
+            cup_extranetwork_tags=(
                 cup_options["cup_extranetwork_tags"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_EXTRANETWORK_TAGS
             ),
-            cup_mergeattention=(
+            cup_merge_attention=(
                 cup_options["cup_merge_attention"] if cup_options else PromptPostProcessor.DEFAULT_CUP_MERGE_ATTENTION
             ),
-            rem_removeextranetworktags=(
+            cup_remove_extranetwork_tags=(
                 cup_options["cup_remove_extranetwork_tags"]
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
@@ -321,7 +337,7 @@ class PromptPostProcessorComfyUINode:
         )
         self.wildcards_obj.refresh_wildcards(
             options.debug_level,
-            wildcards_folders if options.wil_process_wildcards else None,
+            wildcards_folders if options.process_wildcards else None,
             wc_options["wc_wildcards_input"] if wc_options else "",
         )
         self.extranetwork_mappings_obj.refresh_extranetwork_mappings(

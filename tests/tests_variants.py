@@ -65,7 +65,7 @@ class TestModelVariants(TestPromptPostProcessorBase):
                 },
                 replace(
                     self.defopts,
-                    gen_onwarning=ONWARNING_CHOICES.warn,
+                    on_warning=ONWARNING_CHOICES.warn,
                 ),
                 self.grammar_content,
                 self.interrupt,
