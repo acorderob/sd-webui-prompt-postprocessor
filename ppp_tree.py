@@ -221,12 +221,12 @@ class TreeProcessor(lark.visitors.Interpreter):
                 val = self.__state.system_variables.get(c, None)
                 if val is None:
                     val = ""
-                    self.warn_or_stop(f"Unknown system variable {c}")
+                    self.warn_or_stop(f"Unknown system variable '{escape_single_quotes(c)}'")
             else:
                 val = self.__get_user_variable_value(c)
                 if val is None:
                     val = ""
-                    self.warn_or_stop(f"Unknown user variable {c}")
+                    self.warn_or_stop(f"Unknown user variable '{escape_single_quotes(c)}'")
             return val.lower() if isinstance(val, str) else val
 
     def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
@@ -249,12 +249,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             var_value = self.__state.system_variables.get(cond_var, None)
             if var_value is None:
                 var_value = ""
-                self.warn_or_stop(f"Unknown system variable {cond_var}")
+                self.warn_or_stop(f"Unknown system variable '{escape_single_quotes(cond_var)}'")
         else:  # user variable
             var_value = self.__get_user_variable_value(cond_var)
             if var_value is None:
                 var_value = ""
-                self.warn_or_stop(f"Unknown user variable {cond_var}")
+                self.warn_or_stop(f"Unknown user variable '{escape_single_quotes(cond_var)}'")
         if isinstance(var_value, str):
             var_value = var_value.lower()
         if isinstance(cond_value, list):

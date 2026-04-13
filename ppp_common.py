@@ -74,6 +74,7 @@ def parse_prompt(
                 re.sub(r"\n$", "", (parsed_prompt.pretty() if isinstance(parsed_prompt, lark.Tree) else parsed_prompt)),
                 "    ",
             ),
+            formatted=False,
         )
     return parsed_prompt
 

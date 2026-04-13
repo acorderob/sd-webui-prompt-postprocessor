@@ -142,6 +142,15 @@ class TestVariables(TestPromptPostProcessorBase):
             PromptPair("YES", ""),
         )
 
+    def test_cmd_if_var_vs_var_lt(self):  # var lt var: var1 less than var2
+        self.process(
+            PromptPair(
+                "<ppp:set lesser>1<ppp:/set><ppp:set greater>2<ppp:/set><ppp:if lesser lt greater>YES<ppp:else>NO<ppp:/if>",
+                "",
+            ),
+            PromptPair("YES", ""),
+        )
+
     # NaN/undefined variable integer comparison tests
 
     def test_cmd_if_undefined_var_int_compare_warn(self):  # undefined var integer compare with on_warning=warn

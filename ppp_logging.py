@@ -98,7 +98,7 @@ class PromptPostProcessorLogCustomAdapter(logging.LoggerAdapter):
         """
         return f"[PPP] {msg}", kwargs
 
-def log(logger: logging.Logger, debug_level: DEBUG_LEVEL, kind: int, message: str, min_level: DEBUG_LEVEL | None = None):
+def log(logger: logging.Logger, debug_level: DEBUG_LEVEL, kind: int, message: str, min_level: DEBUG_LEVEL | None = None, formatted: bool = True):
     if logger:
         if min_level is None:
             if kind == logging.DEBUG:
@@ -110,4 +110,4 @@ def log(logger: logging.Logger, debug_level: DEBUG_LEVEL, kind: int, message: st
         i_debug_level = list(DEBUG_LEVEL).index(debug_level)
         i_min_level = list(DEBUG_LEVEL).index(min_level)
         if i_debug_level >= i_min_level:
-            logger.log(kind, format_output(message))
+            logger.log(kind, format_output(message) if formatted else message)
