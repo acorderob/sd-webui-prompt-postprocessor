@@ -61,14 +61,14 @@ The only command available is `include wildcard`, which will include the choices
 
 These are examples of formats you can use to insert a choice construct:
 
-| Construct                                         | Result |
-| ---------                                         | ------ |
-| `{choice1\|5::choice2\|3::choice3}`               | select 1 choice, two of them have weights |
-| `{3$$choice1\|5 if _is_sd1::choice2\|choice3}`    | select 3 choices, one has a weight and a condition |
-| `{2-3$$2::choice1\|choice2\|choice3}`             | select 2 to 3 choices, one of them has a weight |
-| `{r2-3$$choice1\|choice2\|choice3}`               | select 2 to 3 choices allowing repetition |
-| `{2-3$$ / $$choice1\|choice2\|choice3}`           | select 2 to 3 choices with separator " / " |
-| `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`   | select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional |
+| Construct                                         | Result                                                                                                                                |
+| ---------                                         | ------                                                                                                                                |
+| `{choice1\|5::choice2\|3::choice3}`               | select 1 choice, two of them have weights                                                                                             |
+| `{3$$choice1\|5 if _is_sd1::choice2\|choice3}`    | select 3 choices, one has a weight and a condition                                                                                    |
+| `{2-3$$2::choice1\|choice2\|choice3}`             | select 2 to 3 choices, one of them has a weight                                                                                       |
+| `{r2-3$$choice1\|choice2\|choice3}`               | select 2 to 3 choices allowing repetition                                                                                             |
+| `{2-3$$ / $$choice1\|choice2\|choice3}`           | select 2 to 3 choices with separator " / "                                                                                            |
+| `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`   | select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional                          |
 | `{choice1\|choice2\|%0.5::include path/wildcard}` | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
 
 Notes:
@@ -234,6 +234,30 @@ The *Dynamic Prompts* format is:
 
 An echoed variable that uses the default because it doesn't have a value will be included in the output variables with the last default value used.
 
+## Array variables
+
+There is support for array variables. They use brackets `[]` to differenciate from regular variables. Empty brackets mean the whole array (used when initializing or when echoing the whole array) and a number means an indexed value. These variables can only be set with the *Dynamic Prompts* format.
+
+Some examples of how to use them:
+
+| Construct                  | Meaning                                                          |
+| ---------                  | -------                                                          |
+| `${var[]=value}`           | initialize and set the first value                               |
+| `${var[]+=}`               | add an empty element to the array                                |
+| `${var[]+=value}`          | add a value to the array                                         |
+| `${var[]=*()}`             | initialize an empty array                                        |
+| `${var[]=*var2[]}`         | initialize an array from another array                           |
+| `${var[]=*__wildcard__}`   | initialize an array from a wildcard                              |
+| `${var[]=*('value',var2)}` | initialize an array from a list of values (strings or variables) |
+| `${var[]+=*var2[]}`        | add elements from another array                                  |
+| `${var[]+=*__wildcard__}`  | add elements from a wildcard                                     |
+| `${var[]}`                 | echo all elements with a default separator                       |
+| `${var[' / ']}`            | echo all elements with a specific separator                      |
+| `${var[n]}`                | echo an element from the array                                   |
+| `${var[n]:default}`        | echo an element with a default                                   |
+
+Initialization with the star operator `*` is always with inmediate evaluation.
+
 ## If command
 
 This command allows you to filter content based on conditions.
@@ -244,41 +268,57 @@ The full format is:
 
 Any `elif`s (there can be multiple) and the `else` are optional.
 
-The `conditionN` can be:
+The `conditionN` is a boolean expression, which can use `and`, `or`, `not` and grouping with parentheses, and where the simplest expression can be:
 
-| Construct                                      | Meaning                                     |
-| ---------                                      | -------                                     |
-| `variable`                                     | check truthyness of the variable            |
-| `variable [not] operation value`               | check the variable against a value          |
-| `variable [not] operation (value1,value2,...)` | check the variable against a list of values |
+| Construct                           | Meaning                                                                         |
+| ---------                           | -------                                                                         |
+| `operand`                           | check truthyness of the operand, meaning not zero, empty string nor empty array |
+| `operand1 [not] operation operand2` | compare the operands                                                            |
 
-For a simple value the allowed operations are `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `contains` and the value can be a quoted string, an integer, or another variable name (e.g., `<ppp:if var1 contains var2>`). When the value is a variable name, it is resolved to the variable's current value before comparison. For a list of values the allowed operations are `contains`, `in` and the value of the variable is checked against all the elements of the list until one matches. The operation can be preceded by `not` for readability, instead of using it in the front.
+The operands can be a variable (`variable`, `array[]`, `array[index]`), a quoted string, an integer, a boolean, or a parenthesized list of any of them `('string', 1, variable, false, array[], array[2])`. The allowed operations depend on which operands are used.
 
-When a variable used in an integer comparison is undefined or cannot be converted to an integer (e.g. it contains non-numeric text or is an empty string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised.
+Variable values `true` and `false` are considered a boolean, and a digits value is an integer.
 
-You can also build complex conditions joining them with boolean operators and/or/not and parentheses.
+The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in` and `contains`.
 
-The variable can be one set with the `set` or `add` commands (user variables) or you can use system variables like these (names starting with an underscore are reserved for system variables):
+| Operation  | Supported operands                                                   |
+| ---------  | ------------------                                                   |
+| `eq`       | single or array but both of the same kind                            |
+| `ne`       | single or array but both of the same kind                            |
+| `gt`       | single or array but both of the same kind                            |
+| `lt`       | single or array but both of the same kind                            |
+| `ge`       | single or array but both of the same kind                            |
+| `le`       | single or array but both of the same kind                            |
+| `in`       | single or array, if only one is an array it should be the second one |
+| `contains` | single or array, if only one is an array it should be the first one  |
 
-| System variable    | Value |
-| ---------------    | ----- |
-| `_model`           | the loaded model identifier (`"sd1"`, `"sd2"`, `"sdxl"`, `"sd3"`, `"flux"`, `"auraflow"`). `_sd` also works but is deprecated. |
-| `_modelname`       | the loaded model filename (without path). `_sdname` also works but is deprecated. |
-| `_modelfullname`   | the loaded model filename (with path). `_sdfullname` also works but is deprecated. |
+Two arrays are compared element by element, except with `in` and `contains` which are considered like set operations.
+
+When an operand is a variable name, it is resolved to the variable's current value before comparison. The operation can be preceded by `not` for readability, instead of using it in the front.
+
+When a comparison tries to compare undefined variables or the values have different types (f.e. an integer and a string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised.
+
+The variable can be one set with the `set` command (user variables) or you can use system variables like these (names starting with an underscore are reserved for system variables):
+
+| System variable    | Value                                                                                                                                                                                                                                                                                                                                 |
+| ---------------    | -----                                                                                                                                                                                                                                                                                                                                 |
+| `_model`           | the loaded model identifier (`"sd1"`, `"sd2"`, `"sdxl"`, `"sd3"`, `"flux"`, `"auraflow"`). `_sd` also works but is deprecated.                                                                                                                                                                                                        |
+| `_modelname`       | the loaded model filename (without path). `_sdname` also works but is deprecated.                                                                                                                                                                                                                                                     |
+| `_modelfullname`   | the loaded model filename (with path). `_sdfullname` also works but is deprecated.                                                                                                                                                                                                                                                    |
 | `_modelclass`      | the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. |
-| `_is_sd`           | true if the loaded model version is any version of SD |
-| `_is_sd1`          | true if the loaded model version is SD 1.x |
-| `_is_sd2`          | true if the loaded model version is SD 2.x |
-| `_is_sdxl`         | true if the loaded model version is SDXL (includes Pony models) |
-| `_is_sd3`          | true if the loaded model version is SD 3.x |
-| `_is_flux`         | true if the loaded model is Flux |
-| `_is_auraflow`     | true if the loaded model is AuraFlow |
-| `_is_ssd`          | true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true. |
-| `_is_sdxl_no_ssd`  | true if the loaded model version is SDXL and not an SSD model. |
-| `_is_sdxl_no_pony` | true if the loaded model version is SDXL and not a Pony model (the "pony" variant must be defined in settings). Kept to maintain compatibility with previous versions. |
-| `_is_vvvv`         | true if the loaded model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true. |
-| `_is_pure_kkkk`    | true if the loaded model is of kind *kkkk* (f.e. sdxl) and not a variant. |
-| `_is_variant_kkkk` | true if the loaded model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.|
+| `_is_sd`           | true if the loaded model version is any version of SD                                                                                                                                                                                                                                                                                 |
+| `_is_sd1`          | true if the loaded model version is SD 1.x                                                                                                                                                                                                                                                                                            |
+| `_is_sd2`          | true if the loaded model version is SD 2.x                                                                                                                                                                                                                                                                                            |
+| `_is_sdxl`         | true if the loaded model version is SDXL (includes Pony models)                                                                                                                                                                                                                                                                       |
+| `_is_sd3`          | true if the loaded model version is SD 3.x                                                                                                                                                                                                                                                                                            |
+| `_is_flux`         | true if the loaded model is Flux                                                                                                                                                                                                                                                                                                      |
+| `_is_auraflow`     | true if the loaded model is AuraFlow                                                                                                                                                                                                                                                                                                  |
+| `_is_ssd`          | true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                       |
+| `_is_sdxl_no_ssd`  | true if the loaded model version is SDXL and not an SSD model.                                                                                                                                                                                                                                                                        |
+| `_is_sdxl_no_pony` | true if the loaded model version is SDXL and not a Pony model (the "pony" variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                |
+| `_is_vvvv`         | true if the loaded model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                              |
+| `_is_pure_kkkk`    | true if the loaded model is of kind *kkkk* (f.e. sdxl) and not a variant.                                                                                                                                                                                                                                                             |
+| `_is_variant_kkkk` | true if the loaded model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                             |
 
 ### Example
 

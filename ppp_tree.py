@@ -33,7 +33,7 @@ class TreeProcessor(lark.visitors.Interpreter):
 
     def __init__(self, state: PPPState, rng: np.random.Generator):
         super().__init__()
-        self.__state = state
+        self.state = state
         self.__debug_level = state.options.debug_level
         self.__rng = rng
         self.AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
@@ -50,10 +50,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.result = ""
 
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None):
-        log(self.__state.logger, self.__state.options.debug_level, kind, message, min_level)
+        log(self.state.logger, self.state.options.debug_level, kind, message, min_level)
 
     def warn_or_stop(self, message: str, e: Exception = None):
-        warn_or_stop(self.__state, self.__is_negative, message, e)
+        warn_or_stop(self.state, self.__is_negative, message, e)
 
     def start_visit(self, prompt_description: str, parsed_prompt: lark.Tree, is_negative: bool = False) -> str:
         """
@@ -102,8 +102,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             backup_add_at = self.add_at.copy()
             backup_insertion_at = self.insertion_at.copy()
             backup_detectedwildcards = self.detectedWildcards.copy()
-            backup_user_variables = self.__state.user_variables.copy()
-            backup_echoed_variables = self.__state.echoed_variables.copy()
+            backup_user_variables = self.state.user_variables.copy()
+            backup_echoed_variables = self.state.echoed_variables.copy()
         if node is not None:
             if isinstance(node, list):
                 for child in node:
@@ -127,10 +127,10 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.add_at = backup_add_at
             self.insertion_at = backup_insertion_at
             self.detectedWildcards = backup_detectedwildcards
-            self.__state.user_variables.clear()
-            self.__state.user_variables.update(backup_user_variables)
-            self.__state.echoed_variables.clear()
-            self.__state.echoed_variables.update(backup_echoed_variables)
+            self.state.user_variables.clear()
+            self.state.user_variables.update(backup_user_variables)
+            self.state.echoed_variables.clear()
+            self.state.echoed_variables.update(backup_echoed_variables)
         return added_result
 
     def __get_original_node_content(self, node: lark.Tree | lark.Token, default=None) -> str:
@@ -146,43 +146,130 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         return node.meta.content if hasattr(node, "meta") and node.meta is not None and not node.meta.empty else default
 
-    def __get_user_variable_value(self, name: str, evaluate=True, visit=False) -> str:
+    def __idxsep_to_idx_sep(self, idxsep: str | None) -> tuple[Optional[int], Optional[str]]:
+        """
+        Convert an index or separator string to an index and a separator.
+
+        Args:
+            idxsep (str|None): The index or separator string.
+
+        Returns:
+            tuple: A tuple containing the index and separator.
+        """
+        if idxsep is None:
+            return None, None
+        is_quoted = idxsep.startswith(("'", '"')) and idxsep.endswith(("'", '"'))
+        if not idxsep.isdigit() and not is_quoted:
+            # bare identifier: resolve as variable
+            idxsep = self.get_final_user_variable(idxsep)
+            is_quoted = False
+        if idxsep.isdigit():
+            return int(idxsep), None
+        # separator: strip surrounding quotes if present
+        return None, idxsep[1:-1] if is_quoted else idxsep
+
+    def __get_user_variable_value(
+        self, name: str, idxsep: str | None = None, evaluate=True, visit=False
+    ) -> str | list[str] | None:
         """
         Get the value of a user variable.
 
         Args:
             name (str): The name of the user variable.
+            idxsep (str|None): The index for an array variable or a separator.
             evaluate (bool): Whether to evaluate the variable.
             visit (bool): Whether to also visit the variable (add to result).
 
         Returns:
-            str: The value of the user variable.
+            str|list[str]|None: The value of the user variable.
         """
-        v = self.__state.user_variables.get(name, None)
-        if v is not None:
+
+        def visit_value(v):
             visited = False
             if isinstance(v, lark.Tree):
                 if evaluate:
-                    v = self.__visit(v, not visit)
+                    v = self.__visit(v, restore_state=not visit, discard_content=not visit)
                     visited = visit
                 else:
-                    v = self.__get_original_node_content(v, "not evaluated yet")
+                    v = self.__get_original_node_content(v, "")
             if visit and not visited:
                 self.result += v
+            return v
+
+        v = self.state.user_variables.get(name, None)
+        if v is None:
+            return None
+        is_array = name[-2:] == "[]"
+        if is_array:
+            if isinstance(v, list):
+                idx, sep = self.__idxsep_to_idx_sep(idxsep)
+                if idx is not None:
+                    if 0 <= idx < len(v):
+                        v = visit_value(v[idx])
+                    else:
+                        v = None  # invalid index
+                else:
+                    if sep is None:
+                        sep = self.state.options.choice_separator
+                    v2 = []
+                    for i, item in enumerate(v):
+                        v2.append(visit_value(item))
+                        if visit and i < len(v) - 1:
+                            self.result += sep
+                    v = v2
+            else:
+                v = None  # error
+        elif idxsep is not None:
+            v = None  # error
+        else:
+            v = visit_value(v)
         return v
 
-    def get_final_user_variable(self, name: str) -> str:
-        return self.__get_user_variable_value(name, True, False)
+    def __separate_arrayref(self, nameidx: str):
+        """
+        Separate the name and index/sep part of a variable reference.
 
-    def __set_user_variable_value(self, name: str, value: str):
+        Args:
+            nameidx (str): The variable reference string.
+
+        Returns:
+            tuple: A tuple containing the name and index/sep part.
+        """
+        name, isarray, idxsep = re.match(r"^([^\[]+)(\[([^[]*)\])?$", nameidx).groups()
+        if isarray:
+            name += "[]"
+        if idxsep == "":
+            idxsep = None
+        return name, idxsep
+
+    def get_final_user_variable(self, nameidx: str) -> str:
+        """
+        Get the final value of a user variable, resolving any references if needed.
+
+        Args:
+            nameidx (str): The variable reference string.
+
+        Returns:
+            str: The final value of the user variable.
+        """
+        name, idxsep = self.__separate_arrayref(nameidx)
+        v = self.__get_user_variable_value(name, idxsep, True, False)
+        if isinstance(v, list):
+            _, sep = self.__idxsep_to_idx_sep(idxsep)
+            if sep is None:
+                sep = self.state.options.choice_separator
+            v = sep.join(str(item) for item in v)
+        return v
+
+    def __set_user_variable_value(self, name: str, value: str | lark.Tree | list):
         """
         Set the value of a user variable.
 
         Args:
             name (str): The name of the user variable.
-            value (str): The value to be set.
+            value (str|lark.Tree|list): The value to be set.
         """
-        self.__state.user_variables[name] = value
+        self.state.user_variables[name] = value
 
     def __remove_user_variable(self, name: str):
         """
@@ -191,8 +278,8 @@ class TreeProcessor(lark.visitors.Interpreter):
         Args:
             name (str): The name of the user variable.
         """
-        if name in self.__state.user_variables:
-            del self.__state.user_variables[name]
+        if name in self.state.user_variables:
+            del self.state.user_variables[name]
 
     def __debug_end(self, construct: str, start_result: str, duration: int, info=None):
         """
@@ -211,110 +298,237 @@ class TreeProcessor(lark.visitors.Interpreter):
                 output = f" >> '{escape_single_quotes(output)}'"
             self.log(logging.DEBUG, f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
 
-    def __resolve_cond_value(self, c: str):
-        """Resolve a condition value: try int first, fall back to variable lookup."""
-        try:
-            return int(c)
-        except ValueError:
-            # Bare identifier - resolve as variable reference
-            if c.startswith("_"):
-                val = self.__state.system_variables.get(c, None)
-                if val is None:
-                    val = ""
-                    self.warn_or_stop(f"Unknown system variable '{escape_single_quotes(c)}'")
-            else:
-                val = self.__get_user_variable_value(c)
-                if val is None:
-                    val = ""
-                    self.warn_or_stop(f"Unknown user variable '{escape_single_quotes(c)}'")
-            return val.lower() if isinstance(val, str) else val
-
-    def __eval_basiccondition(self, cond_var: str, cond_comp: str, cond_value: str | list[str]) -> bool:
+    def __adjust_strnum(self, s: str) -> str | int:
         """
-        Evaluate a condition based on the given variable, comparison, and value.
+        Adjust a string that may represent a number to its appropriate type.
+        If it is a digit and does not have leading zeros (unless it's just "0"), it is converted to an integer.
 
         Args:
-            cond_var (str): The variable to be compared.
-            cond_comp (str): The comparison operator.
-            cond_value (str or list[str]): The value to be compared with.
+            s (str): The string to adjust.
+
+        Returns:
+            str | int: The adjusted string or integer.
+        """
+        if s.isdigit() and not (s.startswith("0") and len(s) > 1):
+            return int(s)
+        return s.lower()
+
+    def warn_mixedtype(self, desc: str, operand1, operand2, operation):
+        """
+        Warn the user if mixed type values are used in a comparison.
+
+        Args:
+            desc (str): Description of the comparison.
+            operand1: The first operand.
+            operand2: The second operand.
+            operation: The operation to perform if the types are compatible.
+        """
+        if operand1 is None or operand2 is None:
+            self.warn_or_stop(f"Undefined value used in comparison: '{escape_single_quotes(desc)}'")
+            return False
+        if (
+            isinstance(operand1, (str, int, bool))
+            and isinstance(operand2, (str, int, bool))
+            and operand1.__class__ != operand2.__class__
+        ):
+            self.warn_or_stop(f"Mixed type values used in comparison: '{escape_single_quotes(desc)}'")
+            return False
+        return operation(operand1, operand2)
+
+    def __resolve_operand(self, c: str) -> str | bool | int:
+        """
+        Resolve an operand value.
+
+        Args:
+            c (str): The operand value to resolve.
+
+        Returns:
+            str | bool | int: The resolved operand value (in lowercase for strings).
+        """
+        if c.startswith('"') and c.endswith('"') or c.startswith("'") and c.endswith("'"):
+            return self.__adjust_strnum(c[1:-1])
+        if c.isdigit():
+            return int(c)
+        if c.lower() in ("false", ""):
+            return False
+        if c.lower() == "true":
+            return True
+        # Bare identifier - resolve as variable reference
+        if c.startswith("_"):
+            vartype = "system"
+            val = self.state.system_variables.get(c, None)
+        else:
+            vartype = "user"
+            varname, varidxsep = self.__separate_arrayref(c)
+            val = self.__get_user_variable_value(varname, varidxsep)
+        if val is None:
+            val = ""
+            self.warn_or_stop(f"Unknown {vartype} variable '{escape_single_quotes(c)}'")
+        if isinstance(val, str):
+            if val.isdigit():
+                val = int(val)
+            else:
+                val = self.__adjust_strnum(val)
+                if val in ("false", ""):
+                    return False
+                if val == "true":
+                    return True
+        return val
+
+    def __eval_basiccondition(
+        self,
+        operand1: str | list[str],
+        operator: str,
+        operand2: str | list[str],
+    ) -> bool:
+        """
+        Evaluate a condition based on the given operands and operator.
+
+        Args:
+            operand1 (str | list[str]): The first operand.
+            operator (str): The operator.
+            operand2 (str | list[str]): The second operand.
 
         Returns:
             bool: The result of the condition evaluation.
         """
-        if cond_var.lower() == "false":
-            var_value = "false"
-        elif cond_var.lower() == "true":
-            var_value = "true"
-        elif cond_var.startswith("_"):  # system variable
-            var_value = self.__state.system_variables.get(cond_var, None)
-            if var_value is None:
-                var_value = ""
-                self.warn_or_stop(f"Unknown system variable '{escape_single_quotes(cond_var)}'")
-        else:  # user variable
-            var_value = self.__get_user_variable_value(cond_var)
-            if var_value is None:
-                var_value = ""
-                self.warn_or_stop(f"Unknown user variable '{escape_single_quotes(cond_var)}'")
-        if isinstance(var_value, str):
-            var_value = var_value.lower()
-        if isinstance(cond_value, list):
-            comp_ops = {
-                "contains": lambda x, y: y in x,
-                "in": lambda x, y: x == y,
-            }
+        if isinstance(operand1, list):
+            operand1_value = list(self.__resolve_operand(c) for c in operand1)
         else:
-            cond_value = [cond_value]
-            comp_ops = {
-                "eq": lambda x, y: x == y,
-                "ne": lambda x, y: x != y,
-                "gt": lambda x, y: x > y,
-                "lt": lambda x, y: x < y,
-                "ge": lambda x, y: x >= y,
-                "le": lambda x, y: x <= y,
-                "contains": lambda x, y: y in x,
-                "truthy": lambda x, y: bool(x),
-            }
-        if cond_comp not in comp_ops:
-            return False
-        cond_value_adjusted = list(
-            (
-                c[1:-1].lower()
-                if c.startswith('"') or c.startswith("'")
-                else (
-                    True
-                    if c.lower() == "true"
-                    else False if c.lower() == "false" or c == "" else self.__resolve_cond_value(c)
+            operand1_value = self.__resolve_operand(operand1)
+        operand1_isarray = isinstance(operand1_value, list)
+        if isinstance(operand2, list):
+            operand2_value = list(self.__resolve_operand(c) for c in operand2)
+        else:
+            operand2_value = self.__resolve_operand(operand2)
+        operand2_isarray = isinstance(operand2_value, list)
+
+        if operator == "truthy":
+            result = bool(operand1_value)
+        else:
+            op1_desc = f"[{', '.join(operand1)}]" if operand1_isarray else operand1
+            op2_desc = f"[{', '.join(operand2)}]" if operand2_isarray else operand2
+            condition_desc = f"{op1_desc} {operator} {op2_desc}"
+
+            def pairwise_all(op):
+                return len(operand1_value) == len(operand2_value) and all(
+                    op(a, b) for a, b in zip(operand1_value, operand2_value)
                 )
-            )
-            for c in cond_value
-        )
-        result = False
-        for c in cond_value_adjusted:
-            if isinstance(c, str):
-                var_value_adjusted = var_value
-            elif isinstance(c, bool) and var_value != "false" and var_value != "" and var_value is not False:
-                var_value_adjusted = True
-            elif isinstance(c, bool) and (var_value != "true" or var_value is False):
-                var_value_adjusted = False
+
+            def wmt(a, b, op):
+                return self.warn_mixedtype(condition_desc, a, b, op)
+
+            if not operand1_isarray and not operand2_isarray:
+                operations = {
+                    "eq": lambda: wmt(operand1_value, operand2_value, lambda x, y: x == y),
+                    "ne": lambda: wmt(operand1_value, operand2_value, lambda x, y: x != y),
+                    "gt": lambda: wmt(operand1_value, operand2_value, lambda x, y: x > y),
+                    "lt": lambda: wmt(operand1_value, operand2_value, lambda x, y: x < y),
+                    "ge": lambda: wmt(operand1_value, operand2_value, lambda x, y: x >= y),
+                    "le": lambda: wmt(operand1_value, operand2_value, lambda x, y: x <= y),
+                    "in": lambda: wmt(str(operand1_value), str(operand2_value), lambda x, y: x in y),
+                    "contains": lambda: wmt(str(operand1_value), str(operand2_value), lambda x, y: y in x),
+                }
+            elif operand1_isarray and operand2_isarray:
+                operations = {
+                    "eq": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x == y)),
+                    "ne": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x != y)),
+                    "gt": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x > y)),
+                    "lt": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x < y)),
+                    "ge": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x >= y)),
+                    "le": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x <= y)),
+                    "in": lambda: all(wmt(a, operand2_value, lambda x, y: x in y) for a in operand1_value),
+                    "contains": lambda: all(wmt(a, operand1_value, lambda x, y: x in y) for a in operand2_value),
+                }
+            elif operand1_isarray and not operand2_isarray:
+                operations = {
+                    "eq": lambda: False,
+                    "ne": lambda: True,
+                    # "gt": lambda: False,
+                    # "lt": lambda: False,
+                    # "ge": lambda: False,
+                    # "le": lambda: False,
+                    "contains": lambda: wmt(operand1_value, operand2_value, lambda x, y: y in x),
+                }
+            elif not operand1_isarray and operand2_isarray:
+                operations = {
+                    "eq": lambda: False,
+                    "ne": lambda: True,
+                    # "gt": lambda: False,
+                    # "lt": lambda: False,
+                    # "ge": lambda: False,
+                    # "le": lambda: False,
+                    "in": lambda: wmt(operand1_value, operand2_value, lambda x, y: x in y),
+                }
             else:
-                try:
-                    var_value_adjusted = int(var_value)
-                except (ValueError, TypeError):
-                    self.warn_or_stop(
-                        f"Cannot convert variable value '{escape_single_quotes(var_value)}' to integer for comparison"
-                    )
-                    return False
-            result = comp_ops[cond_comp](var_value_adjusted, c)
-            if result:
-                break
+                operations = {}
+            if operator not in operations:
+                self.warn_or_stop(
+                    f"Unsupported operator '{escape_single_quotes(operator)}' in condition '{escape_single_quotes(condition_desc)}'"
+                )
+                return False
+            result = operations[operator]()
         return result
+
+    def __separate_vardescriptor(self, vardescriptor: lark.Tree) -> tuple[str, str | None]:
+        """
+        Separate the name and index/sep part of a variable descriptor.
+
+        Args:
+            vardescriptor (lark.Tree): The variable descriptor tree.
+
+        Returns:
+            tuple[str, str | None]: A tuple containing the name and index/sep part of the variable descriptor.
+        """
+        vardescriptor_name = str(vardescriptor.children[0])
+        vardescriptor_idx = None
+        if vardescriptor.children[1] is not None:
+            vardescriptor_name += "[]"
+            if vardescriptor.children[2] is not None:
+                vardescriptor_idx = vardescriptor.children[2]
+        return vardescriptor_name, vardescriptor_idx
+
+    def __get_complex_element(self, value_node: lark.Tree | lark.Token) -> str:
+        """
+        Return in string form the value of a complex value node, which can be either a simple value or a variable descriptor. Does not evaluate variables.
+
+        Args:
+            value_node (lark.Tree | lark.Token): The complex value node to be evaluated.
+
+        Returns:
+            str: The value.
+        """
+        if isinstance(value_node, lark.Tree):
+            # it's a vardescriptor_get
+            vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(value_node)
+            return (
+                vardescriptor_name[0:-2] + f"[{vardescriptor_idx}]"
+                if vardescriptor_idx is not None
+                else vardescriptor_name
+            )
+        # it's a SIMPLEVALUE
+        return str(value_node)
+
+    def __get_cond_operand(self, value_node: lark.Tree) -> str | list[str]:
+        """
+        Returns a simple value or a list of simple values or variables. Does not evaluate them.
+
+        Args:
+            value_node (lark.Tree): The value tree to be evaluated.
+
+        Returns:
+            str or list[str]: The result.
+        """
+        if isinstance(value_node, lark.Tree) and value_node.data == "listvalue":
+            return list(self.__get_complex_element(v) for v in value_node.children)
+        return self.__get_complex_element(value_node)
 
     def __eval_condition(self, condition: lark.Tree) -> bool:
         """
         Evaluate an if condition based on the given condition tree.
 
         Args:
-            condition (Node): The condition tree to be evaluated.
+            condition (lark.Tree): The condition tree to be evaluated.
 
         Returns:
             bool: The result of the if condition evaluation.
@@ -334,30 +548,26 @@ class TreeProcessor(lark.visitors.Interpreter):
                     break
         elif condition.data == "operation_not":
             cond_result = not self.__eval_condition(condition.children[0])
-        else:  # truthy_operand / comparison_simple_value / comparison_list_value
+        else:  # truthy_operand / comparison
             # we get the name of the variable
-            cond_var = str(condition.children[0])
+            cond_operand1 = self.__get_cond_operand(condition.children[0])
             poscomp = 1
             invert = False
             if poscomp >= len(condition.children):
                 # no condition, just a variable
-                cond_comp = "truthy"
-                cond_value = "true"
+                cond_operation = "truthy"
+                cond_operand2 = "true"
             else:
                 # we get the comparison (with possible not) and the value
-                cond_comp = str(condition.children[poscomp])
-                if cond_comp == "not":
+                cond_operation = str(condition.children[poscomp])
+                if cond_operation == "not":
                     invert = not invert
                     poscomp += 1
-                    cond_comp = str(condition.children[poscomp])
+                    cond_operation = str(condition.children[poscomp])
                 poscomp += 1
                 cond_value_node = condition.children[poscomp]
-                cond_value = (
-                    list(str(v) for v in cond_value_node.children)
-                    if isinstance(cond_value_node, (lark.Tree, list))
-                    else str(cond_value_node) if isinstance(cond_value_node, lark.Token) else cond_value_node
-                )
-            cond_result = self.__eval_basiccondition(cond_var, cond_comp, cond_value)
+                cond_operand2 = self.__get_cond_operand(cond_value_node)
+            cond_result = self.__eval_basiccondition(cond_operand1, cond_operation, cond_operand2)
             if invert:
                 cond_result = not cond_result
         return cond_result
@@ -369,7 +579,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         start_result = self.result
         t1 = time.monotonic_ns()
         self.__visit(tree.children[0])
-        and_processing = self.__state.host_config.get("and", "ok")
+        and_processing = self.state.host_config.get("and", "ok")
         if len(tree.children) > 1:
             and_replacements = {
                 "eol": ("replaced with EOL", "\n"),
@@ -389,13 +599,13 @@ class TreeProcessor(lark.visitors.Interpreter):
                 elif and_processing == "error":
                     self.warn_or_stop("AND constructs are not allowed!")
                 else:  # and_processing == "ok":
-                    if self.__state.options.cup_ands:
-                        self.result = re.sub(r"[, ]+$", "\n" if self.__state.options.cup_ands_eol else " ", self.result)
+                    if self.state.options.cup_ands:
+                        self.result = re.sub(r"[, ]+$", "\n" if self.state.options.cup_ands_eol else " ", self.result)
                     if self.result[-1:].isalnum():  # add space if needed
                         self.result += " "
                     self.result += "AND"
                     added_result = self.__visit(tree.children[i + 1], False, True)
-                    if self.__state.options.cup_ands:
+                    if self.state.options.cup_ands:
                         added_result = re.sub(r"^[, ]+", " ", added_result)
                     if added_result[0:1].isalnum():  # add space if needed
                         added_result = " " + added_result
@@ -417,7 +627,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         pos = float(pos_str)
         if pos >= 1:
             pos = int(pos)
-        scheduling_processing = self.__state.host_config.get("scheduling", "ok")
+        scheduling_processing = self.state.host_config.get("scheduling", "ok")
         if scheduling_processing == "before":
             self.log(logging.DEBUG, "Scheduling construct removed, taking before option")
             if before is not None:
@@ -449,7 +659,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.result += ":"
             self.__visit(after)
             self.__shell.pop()
-            if self.__state.options.cup_empty_constructs and re.fullmatch(
+            if self.state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result) + r"\[:\s*", self.result
             ):
                 self.result = start_result
@@ -465,7 +675,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         start_result = self.result
         t1 = time.monotonic_ns()
-        alternation_processing = self.__state.host_config.get("alternation", "ok")
+        alternation_processing = self.state.host_config.get("alternation", "ok")
         if alternation_processing == "first":
             self.log(logging.DEBUG, "Alternation construct removed, taking first option")
             self.__visit(tree.children[0])
@@ -484,7 +694,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.__visit(opt)
                 self.__shell.pop()
             self.result += "]"
-            if self.__state.options.cup_empty_constructs and re.fullmatch(
+            if self.state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result) + r"\[\s*\]", self.result
             ):
                 self.result = start_result
@@ -514,7 +724,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             weight_str = "0.9"
         self.log(logging.DEBUG, f"Shell attention with weight {weight}")
         current_tree = tree.children[0]
-        if self.__state.options.cup_merge_attention:
+        if self.state.options.cup_merge_attention:
             while isinstance(current_tree, lark.Tree) and current_tree.data == "attention":
                 # we merge the weights
                 if len(current_tree.children) == 2:
@@ -535,7 +745,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 weight_kind = 2
             else:
                 weight_kind = 3
-        attention_processing = self.__state.host_config.get("attention", "ok")
+        attention_processing = self.state.host_config.get("attention", "ok")
         if attention_processing == "parentheses":
             if weight_kind == 1:
                 weight_kind = 3
@@ -573,7 +783,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
-            if self.__state.options.cup_empty_constructs and re.fullmatch(
+            if self.state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result + starttag) + r"\s*", self.result
             ):
                 self.result = start_result
@@ -630,7 +840,8 @@ class TreeProcessor(lark.visitors.Interpreter):
     def __varset(
         self,
         command: str,
-        variable: str,
+        variable_name: str,
+        variable_idx: str | None,
         modifiers: lark.Tree | None,
         content: lark.Tree | None,
     ):
@@ -639,53 +850,139 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.result
-        if variable.startswith("_"):
+        if variable_name.startswith("_"):
             self.warn_or_stop(
-                f"Invalid variable name '{escape_single_quotes(variable)}' detected! System variables cannot be set."
+                f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
             )
             return
-        info = variable
+        info = variable_name
+        is_array = variable_name[-2:] == "[]"
+        if variable_idx is not None:
+            if not is_array:
+                self.warn_or_stop(
+                    f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! Only array variables can be indexed."
+                )
+                return
+            info = f"{variable_name[0:-2]}[{variable_idx}]"
         value_description = self.__get_original_node_content(content, None)
         value = content
-        modifiers_str: list[str] = [str(m) for m in modifiers.children] if modifiers is not None else []
-        if any(item in modifiers_str for item in ["+", "add"]):
-            info += f" += '{escape_single_quotes(value_description or '')}'"
-            raw_oldvalue = self.__state.user_variables.get(variable, None)
-            if raw_oldvalue is None:
-                newvalue = value
-                self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable)}")
-            elif isinstance(raw_oldvalue, str):
-                newvalue = lark.Tree(
-                    lark.Token("RULE", "varvalue"),
-                    [lark.Token("plain", raw_oldvalue), value],
-                    # Meta should be {"content": raw_oldvalue + value},
+        raw_oldvalue = self.state.user_variables.get(variable_name, None)
+        newvalue = None
+        some_error = False
+        if variable_idx is not None:
+            if (
+                is_array
+                and raw_oldvalue is not None
+                and isinstance(raw_oldvalue, list)
+                and not 0 <= int(variable_idx) < len(raw_oldvalue)
+            ):
+                self.warn_or_stop(
+                    f"Invalid index {variable_idx} for variable '{escape_single_quotes(variable_name)}'! Index out of bounds."
                 )
-            else:
-                newvalue = lark.Tree(
-                    lark.Token("RULE", "varvalue"),
-                    [raw_oldvalue, value],
-                    # Meta should be {"content": raw_oldvalue.meta.content + value.meta.content},
+                some_error = True
+            if not is_array:
+                self.warn_or_stop(
+                    f"Invalid index for '{escape_single_quotes(variable_name)}'! Only array variables can be indexed."
                 )
-        elif any(item in modifiers_str for item in ["?", "ifundefined"]):
-            info += f" ?= '{escape_single_quotes(value_description or '')}'"
-            raw_oldvalue = self.__state.user_variables.get(variable, None)
-            if raw_oldvalue is None:
-                newvalue = value
+                some_error = True
+            if raw_oldvalue is None or not isinstance(raw_oldvalue, list):
+                self.warn_or_stop(
+                    f"Invalid index for '{escape_single_quotes(variable_name)}'! Cannot set index of an undefined or non-array variable."
+                )
+                some_error = True
+        adding = False
+        if not some_error:
+            modifiers_str: list[str] = [str(m) for m in modifiers.children] if modifiers is not None else []
+            if any(item in modifiers_str for item in ["+", "add"]):
+                adding = True
+                info += f" += '{escape_single_quotes(value_description or '')}'"
+                if raw_oldvalue is None:
+                    newvalue = value
+                    self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable_name)}")
+                elif is_array:
+                    if not isinstance(raw_oldvalue, list):
+                        self.warn_or_stop(
+                            f"Invalid variable value for '{escape_single_quotes(variable_name)}'! Cannot add to a non-array value."
+                        )
+                    else:
+                        newvalue = value
+                elif isinstance(raw_oldvalue, str):
+                    newvalue = lark.Tree(
+                        lark.Token("RULE", "varvalue"),
+                        [lark.Token("plain", raw_oldvalue), value],
+                        # Meta should be {"content": raw_oldvalue + value},
+                    )
+                else:  # lark.Tree
+                    newvalue = lark.Tree(
+                        lark.Token("RULE", "varvalue"),
+                        [raw_oldvalue, value],
+                        # Meta should be {"content": raw_oldvalue.meta.content + value.meta.content},
+                    )
+            elif any(item in modifiers_str for item in ["?", "ifundefined"]):
+                info += f" ?= '{escape_single_quotes(value_description or '')}'"
+                if raw_oldvalue is None:
+                    newvalue = value
+                else:
+                    info += " (not set)"
             else:
-                info += " (not set)"
-                newvalue = None
-        else:
-            newvalue = value
+                newvalue = value
         if newvalue is not None:
+            is_starred = isinstance(newvalue, lark.Tree) and newvalue.data == "starredvalue"
+            access_full_array = is_array and variable_idx is None
             if any(item in modifiers_str for item in ["!", "evaluate"]):
                 newvalue = self.__visit(newvalue, False, True)
                 info += " =! "
             else:
                 info += " = "
-            self.__set_user_variable_value(variable, newvalue)
-            currentvalue = self.__get_user_variable_value(variable, False)
+            if is_starred:
+                if access_full_array and isinstance(newvalue.children[0], lark.Tree):
+                    if newvalue.children[0].data == "vardescriptor_get":
+                        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(newvalue.children[0])
+                        if vardescriptor_idx is not None:
+                            newvalue = None
+                        else:
+                            newvalue = self.__get_user_variable_value(vardescriptor_name, None)
+                    elif newvalue.children[0].data == "listvalue":
+                        newvalue = list(
+                            self.__resolve_operand(c) for c in self.__get_cond_operand(newvalue.children[0])
+                        )
+                    elif newvalue.children[0].data == "wildcard":
+                        backup_result = self.result
+                        newvalue = self.__process_wildcard(newvalue.children[0])
+                        self.result = backup_result
+                    else:
+                        newvalue = None
+                else:
+                    newvalue = None
+                if newvalue is None:
+                    self.warn_or_stop(
+                        f"Invalid use of starred value for '{escape_single_quotes(variable_name)}'! Starred values can only be assigned or added to unindexed array variables."
+                    )
+                    newvalue = ""
+            if is_array:
+                if variable_idx is not None:
+                    # Accessing an existing index, we need to update the array
+                    newarray = raw_oldvalue.copy()
+                    newarray[int(variable_idx)] = newvalue
+                    newvalue = newarray
+                else:
+                    # Accessing the whole array
+                    if isinstance(newvalue, list):
+                        if raw_oldvalue is None or not adding:
+                            pass
+                        else:
+                            newvalue = raw_oldvalue + newvalue
+                    else:
+                        if raw_oldvalue is None or not adding:
+                            newvalue = [newvalue]
+                        else:
+                            newvalue = raw_oldvalue + [newvalue]
+            self.__set_user_variable_value(variable_name, newvalue)
+            currentvalue = self.__get_user_variable_value(variable_name, variable_idx, False)
             if currentvalue is None:
-                info += "not evaluated yet"
+                info += "error"
+            elif isinstance(currentvalue, list):
+                info += "[" + ", ".join(f"'{escape_single_quotes(str(v))}'" for v in currentvalue) + "]"
             else:
                 info += f"'{escape_single_quotes(currentvalue)}'"
         t2 = time.monotonic_ns()
@@ -700,15 +997,23 @@ class TreeProcessor(lark.visitors.Interpreter):
         if immediate is not None:
             modifiers.children = modifiers.children.copy()
             modifiers.children.append(immediate)
-        self.__varset("variableset", str(tree.children[0]), modifiers, tree.children[3])
+        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(tree.children[0])
+        self.__varset("variableset", vardescriptor_name, vardescriptor_idx, modifiers, tree.children[3])
 
     def commandset(self, tree: lark.Tree):
         """
         Process a set command in the tree and add it to the dictionary of variables.
         """
-        self.__varset("commandset", str(tree.children[0]), tree.children[1], tree.children[2])
+        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(tree.children[0])
+        self.__varset("commandset", vardescriptor_name, vardescriptor_idx, tree.children[1], tree.children[2])
 
-    def __varecho(self, command: str, variable: str, default: lark.Tree | None):
+    def __varecho(
+        self,
+        command: str,
+        variable_name: str,
+        variable_idxsep: str | None,
+        default: lark.Tree | None,
+    ):
         """
         Process a generic echo command in the tree.
         """
@@ -717,22 +1022,26 @@ class TreeProcessor(lark.visitors.Interpreter):
         default_value = None
         # if default is not None:
         #     default_value = self.__visit(default, True)  # for log
-        value = self.__get_user_variable_value(variable, True, True)
+        is_array = variable_name[-2:] == "[]"
+        vname = f"{variable_name[0:-2]}[{variable_idxsep}]" if variable_idxsep is not None else variable_name
+        value = self.__get_user_variable_value(variable_name, variable_idxsep, True, True)
         if value is None:
             if default is not None:
-                self.log(logging.DEBUG, f"Variable '{escape_single_quotes(variable)}' not found, using default value")
+                self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
                 v = self.__visit(default, False, True)
                 self.result += v
                 default_value = v
-                self.__state.echoed_variables[variable] = v
+                self.state.echoed_variables[vname] = v
             else:
-                self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable)}")
+                self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
                 default_value = ""
-                self.__state.echoed_variables[variable] = ""
+                self.state.echoed_variables[vname] = ""
         else:
-            self.__state.echoed_variables[variable] = value
+            self.state.echoed_variables[vname] = value
         t2 = time.monotonic_ns()
-        info = variable
+        info = variable_name
+        if is_array and variable_idxsep is not None:
+            info = info[0:-2] + f"[{variable_idxsep}]"
         if default_value is not None:
             info += f" with default '{escape_single_quotes(default_value)}'"
         self.__debug_end(command, start_result, t2 - t1, info)
@@ -741,13 +1050,25 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a DP use variable command in the tree.
         """
-        self.__varecho("variableuse", str(tree.children[0]), tree.children[1] if len(tree.children) > 1 else None)
+        vardescriptor_name, vardescriptor_idxsep = self.__separate_vardescriptor(tree.children[0])
+        self.__varecho(
+            "variableuse",
+            vardescriptor_name,
+            vardescriptor_idxsep,
+            tree.children[1] if len(tree.children) > 1 else None,
+        )
 
     def commandecho(self, tree: lark.Tree):
         """
         Process an echo command in the tree.
         """
-        self.__varecho("commandecho", str(tree.children[0]), tree.children[1] if len(tree.children) > 1 else None)
+        vardescriptor_name, vardescriptor_idxsep = self.__separate_vardescriptor(tree.children[0])
+        self.__varecho(
+            "commandecho",
+            vardescriptor_name,
+            vardescriptor_idxsep,
+            tree.children[1] if len(tree.children) > 1 else None,
+        )
 
     def commandif(self, tree: lark.Tree):
         """
@@ -779,7 +1100,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         t1 = time.monotonic_ns()
         start_result = self.result
         extnet = "(ignored)"
-        if not self.__state.options.cup_remove_extranetwork_tags:
+        if not self.state.options.cup_remove_extranetwork_tags:
             extnet_type: str = (tree.children[0].children[0] or "") + str(tree.children[0].children[1])
             is_mapping = extnet_type.startswith("$")
             if is_mapping:
@@ -805,25 +1126,23 @@ class TreeProcessor(lark.visitors.Interpreter):
                 extra_triggers = None
                 compiled_extra_triggers = None
                 if is_mapping:
-                    found = self.__state.extranetwork_mappings_obj.cached_mappings.get(extnet_id, None)
+                    found = self.state.extranetwork_mappings_obj.cached_mappings.get(extnet_id, None)
                     # we assume the conditions do not change inside the prompt
                     found_in_cache = found is not None
                     if found is None:
                         found_mappings: list[PPPENMappingVariant] = []
                         else_mapping = None
-                        if self.__state.extranetwork_mappings_obj:
-                            enmapping = self.__state.extranetwork_mappings_obj.extranetwork_mappings.get(
-                                extnet_id, None
-                            )
+                        if self.state.extranetwork_mappings_obj:
+                            enmapping = self.state.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
                             if enmapping:
                                 for v in enmapping.variants:
                                     if v.condition:
                                         try:
                                             cnd = parse_prompt(
-                                                self.__state,
+                                                self.state,
                                                 "condition",
                                                 v.condition,
-                                                self.__state.parsers["condition"],
+                                                self.state.parsers["condition"],
                                                 True,
                                             )
                                         except lark.exceptions.UnexpectedInput as e:
@@ -848,7 +1167,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                             ]
                         else:
                             found = else_mapping
-                        self.__state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
+                        self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                     if found:
                         if found.name:
                             if not found_in_cache:
@@ -886,7 +1205,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                             extra_triggers = ", ".join(found.triggers)
                             try:
                                 compiled_extra_triggers = parse_prompt(
-                                    self.__state, "triggers", extra_triggers, self.__state.parsers["content"], True
+                                    self.state, "triggers", extra_triggers, self.state.parsers["content"], True
                                 )
                             except lark.exceptions.UnexpectedInput as e:
                                 self.warn_or_stop(
@@ -903,7 +1222,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     extnet = "(only triggers)"
                 if triggers or compiled_extra_triggers:
                     if extnet_id:
-                        if not self.__state.options.cup_extranetwork_tags:
+                        if not self.state.options.cup_extranetwork_tags:
                             self.result += " "
                     else:
                         self.result += ", "
@@ -925,7 +1244,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         t1 = time.monotonic_ns()
         start_result = self.result
         wildcard_key: str = self.__visit(tree.children[0].children[1], False, True)
-        selected_wildcards = [x.key for x in self.__state.wildcards_obj.get_wildcards(wildcard_key)]
+        selected_wildcards = [x.key for x in self.state.wildcards_obj.get_wildcards(wildcard_key)]
         if not selected_wildcards:
             self.warn_or_stop(f"Wildcard '{escape_single_quotes(wildcard_key)}' not found for default filter setting!")
         else:
@@ -933,12 +1252,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             if filter_object is None:
                 for wc in selected_wildcards:
                     self.log(logging.DEBUG, f"Removed default filter for wildcard '{escape_single_quotes(wc)}'")
-                    self.__state.wildcards_obj.set_wildcard_default_filter(wc, None)
+                    self.state.wildcards_obj.set_wildcard_default_filter(wc, None)
             else:
                 filter_specifier = self.__extract_filter_specifiers(filter_object)
                 for wc in selected_wildcards:
                     self.log(logging.DEBUG, f"Set default filter for wildcard '{escape_single_quotes(wc)}'")
-                    self.__state.wildcards_obj.set_wildcard_default_filter(wc, filter_specifier)
+                    self.state.wildcards_obj.set_wildcard_default_filter(wc, filter_specifier)
         t2 = time.monotonic_ns()
         self.__debug_end("commandsetwcdeffilter", start_result, t2 - t1)
 
@@ -948,7 +1267,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.result
-        if not self.__state.options.cup_remove_extranetwork_tags:
+        if not self.state.options.cup_remove_extranetwork_tags:
             self.result += f"<{tree.children[0]}"
             self.__visit(tree.children[1])
             self.result += ">"
@@ -1002,7 +1321,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 content_text = self.__visit(c.get("content", ""), False, True).strip()
                 (cmd, cmd_args) = content_text.split()
                 if cmd == "include":
-                    wcs = self.__state.wildcards_obj.get_wildcards(cmd_args)
+                    wcs = self.state.wildcards_obj.get_wildcards(cmd_args)
                     if not wcs:
                         self.warn_or_stop(
                             f"Included wildcard '{escape_single_quotes(cmd_args)}' not found at {msg_where}!"
@@ -1033,7 +1352,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 expanded_choice_values.append(c)
         return expanded_choice_values
 
-    def __get_choices_internal_select(
+    def __get_choices_select(
         self,
         options: dict | None,
         choice_values: list[dict],
@@ -1064,7 +1383,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         else:
             from_value: int = options.get("from", 1)
             to_value: int = options.get("to", 1)
-        separator: str = options.get("separator", self.__state.options.choice_separator)
+        separator: str = options.get("separator", self.state.options.choice_separator)
         msg_where = f"wildcard '{escape_single_quotes(wildcard_key)}'" if wildcard_key else "choices"
         if sampler != "~":
             self.warn_or_stop(f"Unsupported sampler '{escape_single_quotes(sampler)}' at {msg_where} options!")
@@ -1121,7 +1440,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if available_choices
                 else []
             )
-            if self.__state.options.keep_choices_order:
+            if self.state.options.keep_choices_order:
                 selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
             selected_choices_text = []
             prefix: str = (
@@ -1165,18 +1484,6 @@ class TreeProcessor(lark.visitors.Interpreter):
         )
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         return (prefix, results, separator, suffix)
-
-    def __get_choices(
-        self,
-        options: dict | None,
-        choice_values: list[dict],
-        filter_specifier: Optional[list[list[str]]] = None,
-        wildcard_key: str = None,
-    ) -> str:
-        r = self.__get_choices_internal_select(options, choice_values, filter_specifier, wildcard_key)
-        if r[1]:
-            return r[0] + r[2].join(r[1]) + r[3]
-        return ""
 
     def __convert_choices_options(self, options: Optional[lark.Tree], is_wcdef: bool = False) -> dict:
         """
@@ -1267,12 +1574,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             # we process the choices
             for cv in wildcard.unprocessed_choices[n:]:
                 if isinstance(cv, dict):
-                    if self.__state.wildcards_obj.is_dict_choice_options(cv):
+                    if self.state.wildcards_obj.is_dict_choice_options(cv):
                         condition = cv.get("if", None)
                         if condition is not None and isinstance(condition, str):
                             try:
                                 cv["if"] = parse_prompt(
-                                    self.__state, "condition", condition, self.__state.parsers["condition"], True
+                                    self.state, "condition", condition, self.state.parsers["condition"], True
                                 )
                             except lark.exceptions.UnexpectedInput as e:
                                 self.warn_or_stop(
@@ -1287,7 +1594,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         if content is not None and isinstance(content, str):
                             try:
                                 cv["content"] = parse_prompt(
-                                    self.__state, "choicevalue", content, self.__state.parsers["choicevalue"], True
+                                    self.state, "choicevalue", content, self.state.parsers["choicevalue"], True
                                 )
                             except lark.exceptions.UnexpectedInput as e:
                                 self.warn_or_stop(
@@ -1308,7 +1615,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     try:
                         choice_values.append(
                             self.__convert_choice(
-                                parse_prompt(self.__state, "choice", cv, self.__state.parsers["choice"], True)
+                                parse_prompt(self.state, "choice", cv, self.state.parsers["choice"], True)
                             )
                         )
                     except lark.exceptions.UnexpectedInput as e:
@@ -1329,13 +1636,13 @@ class TreeProcessor(lark.visitors.Interpreter):
         n = 0
         # we check the first choice to see if it is actually options
         if isinstance(wildcard.unprocessed_choices[0], dict):
-            if self.__state.wildcards_obj.is_dict_wcdef_options(wildcard.unprocessed_choices[0]):
+            if self.state.wildcards_obj.is_dict_wcdef_options(wildcard.unprocessed_choices[0]):
                 options = wildcard.unprocessed_choices[0]
                 prefix = options.get("prefix", None)
                 if prefix is not None and isinstance(prefix, str):
                     try:
                         options["prefix"] = parse_prompt(
-                            self.__state, "choicevalue", prefix, self.__state.parsers["choicevalue"], True
+                            self.state, "choicevalue", prefix, self.state.parsers["choicevalue"], True
                         )
                     except lark.exceptions.UnexpectedInput as e:
                         self.warn_or_stop(
@@ -1346,7 +1653,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if suffix is not None and isinstance(suffix, str):
                     try:
                         options["suffix"] = parse_prompt(
-                            self.__state, "choicevalue", suffix, self.__state.parsers["choicevalue"], True
+                            self.state, "choicevalue", suffix, self.state.parsers["choicevalue"], True
                         )
                     except lark.exceptions.UnexpectedInput as e:
                         self.warn_or_stop(
@@ -1359,10 +1666,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                 try:
                     options = self.__convert_choices_options(
                         parse_prompt(
-                            self.__state,
+                            self.state,
                             "as wildcard options",
                             wildcard.unprocessed_choices[0][:-2].strip(),
-                            self.__state.parsers["wcdefoptions"],
+                            self.state.parsers["wcdefoptions"],
                             True,
                         ),
                         True,
@@ -1382,25 +1689,29 @@ class TreeProcessor(lark.visitors.Interpreter):
                 options = None
         return options
 
-    def wildcard(self, tree: lark.Tree):
+    def __process_wildcard(self, tree: lark.Tree) -> list:
         """
-        Process a wildcard construct in the tree.
+        Process a wildcard in the tree.
+
+        Returns:
+            list: A list containing the selected elements.
         """
         t1 = time.monotonic_ns()
-        seen_wildcards_len = len(self.__seen_wildcards)
+        chosen_choices = []
         start_result = self.result
+        seen_wildcards_len = len(self.__seen_wildcards)
         applied_options = self.__clean_wildcard_options(self.__convert_choices_options(tree.children[0], False))
         wildcard_key: str = self.__visit(tree.children[1], False, True)
         wc = self.__get_original_node_content(tree, f"?__{wildcard_key}__")
-        if self.__state.options.process_wildcards:
+        if self.state.options.process_wildcards:
             self.log(logging.DEBUG, f"Processing wildcard: {wildcard_key}")
-            selected_wildcards = self.__state.wildcards_obj.get_wildcards(wildcard_key)
+            selected_wildcards = self.state.wildcards_obj.get_wildcards(wildcard_key)
             if not selected_wildcards:
                 self.detectedWildcards.append(wc)
                 self.result += wc
                 t2 = time.monotonic_ns()
                 self.__debug_end("wildcard", start_result, t2 - t1, wc)
-                return
+                return []
             filter_specifier: list[list[str]] = None
             filter_object = tree.children[2]
             if filter_object is not None:
@@ -1422,7 +1733,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     self.log(logging.DEBUG, "Ignoring filter")
                     filter_specifier = None
             else:
-                filter_specifier = self.__state.wildcards_obj.get_wildcard_default_filter(wildcard_key)
+                filter_specifier = self.state.wildcards_obj.get_wildcard_default_filter(wildcard_key)
                 if filter_specifier is not None:
                     self.__wildcard_filters[wildcard_key] = filter_specifier
                     self.log(logging.DEBUG, "Applying default filter")
@@ -1439,11 +1750,13 @@ class TreeProcessor(lark.visitors.Interpreter):
             variablename = None
             variablebackup = None
             if var_object is not None:
-                variablename = str(var_object.children[0])
-                variablevalue = self.__visit(var_object.children[1], False, True)
-                variablebackup = self.__state.user_variables.get(variablename, None)
-                self.__remove_user_variable(variablename)
-                self.__set_user_variable_value(variablename, variablevalue)
+                vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(var_object.children[0])
+                variablename = vardescriptor_name
+                # variablevalue = self.__visit(var_object.children[1], False, True)
+                variablebackup = self.state.user_variables.get(variablename, None)
+                # self.__remove_user_variable(variablename)
+                # self.__set_user_variable_value(variablename, variablevalue)
+                self.__varset("wildcard", variablename, vardescriptor_idx, None, var_object.children[1])
             choice_values_all = []
             for wildcard in selected_wildcards:
                 if wildcard is None:
@@ -1451,7 +1764,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     self.result += wc
                     t2 = time.monotonic_ns()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
-                    return
+                    return []
                 if wildcard.key in self.__seen_wildcards:
                     self.warn_or_stop(
                         f"Circular reference detected with wildcard '{escape_single_quotes(self.__seen_wildcards[-1])}' (chain starts at '{escape_single_quotes(self.__seen_wildcards[0])}')!"
@@ -1468,14 +1781,18 @@ class TreeProcessor(lark.visitors.Interpreter):
                             logging.DEBUG, f"Options for wildcard '{escape_single_quotes(wildcard.key)}' are ignored!"
                         )
                 choice_values_all += choice_values
-            self.result += self.__get_choices(applied_options, choice_values_all, filter_specifier, wildcard_key)
+            prefix, chosen_choices, separator, suffix = self.__get_choices_select(
+                applied_options, choice_values_all, filter_specifier, wildcard_key
+            )
+            if chosen_choices:
+                self.result += prefix + separator.join(chosen_choices) + suffix
             if wildcard_key in self.__wildcard_filters:
                 del self.__wildcard_filters[wildcard_key]
             if variablename is not None:
                 self.__remove_user_variable(variablename)
                 if variablebackup is not None:
-                    self.__state.user_variables[variablename] = variablebackup
-        elif self.__state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
+                    self.state.user_variables[variablename] = variablebackup
+        elif self.state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
             self.detectedWildcards.append(wc)
             self.result += wc
         if self.__debug_level == DEBUG_LEVEL.full:
@@ -1484,6 +1801,13 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         t2 = time.monotonic_ns()
         self.__debug_end("wildcard", start_result, t2 - t1, f"'{escape_single_quotes(wc)}'")
+        return chosen_choices
+
+    def wildcard(self, tree: lark.Tree):
+        """
+        Process a wildcard construct in the tree.
+        """
+        self.__process_wildcard(tree)
 
     def __extract_filter_specifiers(self, filters: lark.Tree) -> list[list[str]]:
         filter_specifier = []
@@ -1508,10 +1832,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         options = self.__convert_choices_options(tree.children[0], False)
         choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
         ch = self.__get_original_node_content(tree, "?{...}")
-        if self.__state.options.process_wildcards:
+        if self.state.options.process_wildcards:
             self.log(logging.DEBUG, "Processing choices:")
-            self.result += self.__get_choices(options, choice_values)
-        elif self.__state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
+            prefix, chosen_choices, separator, suffix = self.__get_choices_select(options, choice_values)
+            if chosen_choices:
+                self.result += prefix + separator.join(chosen_choices) + suffix
+        elif self.state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
             self.detectedWildcards.append(ch)
             self.result += ch
         t2 = time.monotonic_ns()
@@ -1528,10 +1854,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.result = ""
         t1 = time.monotonic_ns()
         self.__visit(tree.children)
-        attention_processing = self.__state.host_config.get("attention", "ok")
+        attention_processing = self.state.host_config.get("attention", "ok")
         # process the found negative tags
         for negtag in self.__negtags:
-            if self.__state.options.cup_merge_attention:
+            if self.state.options.cup_merge_attention:
                 # join consecutive attention elements
                 for i in range(len(negtag.shell) - 1, 0, -1):
                     if negtag.shell[i].type == "at" and negtag.shell[i - 1].type == "at":
@@ -1582,7 +1908,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.insertion_at[n] = [negtag.start, negtag.end]
             elif len(content) > 0:
                 if content not in self.__already_processed:
-                    if self.__state.options.stn_ignore_repeats:
+                    if self.state.options.stn_ignore_repeats:
                         self.__already_processed.append(content)
                     self.log(logging.DEBUG, f"Adding content at position {position}: {content}")
                     if position == "e":

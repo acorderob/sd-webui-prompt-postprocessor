@@ -343,8 +343,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
         self.__init_sysvars()
 
-    def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None):
-        log(self.logger, self.debug_level, kind, message, min_level)
+    def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info: bool = False):
+        log(self.logger, self.debug_level, kind, message, min_level, exc_info=exc_info)
 
     def __merge_configuration(self, user_config):
         """
@@ -1088,6 +1088,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
             return prompt, negative_prompt, all_variables
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            self.log(logging.ERROR, f"Unexpected error: {e}")
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.log(logging.ERROR, "Unexpected error", exc_info=True)
             return original_prompt, original_negative_prompt, all_variables

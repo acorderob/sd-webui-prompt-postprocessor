@@ -9,7 +9,7 @@ INDEX:               INT
 FILTER:              INDEX | IDENTIFIER
 IDENTIFIER:          CNAME
 SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
-COMPVALUE:           SIMPLEVALUE | IDENTIFIER
+VARNAME:             /(?!__)[a-zA-Z_][a-zA-Z0-9_]*/
 
 // plain text and weights
 ?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
@@ -94,19 +94,22 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
 ?encontent.3: content_en
 
 //#if ALLOW_COMMVARS or ALLOW_CHOICES or ALLOW_WILDCARDS
+    vardescriptor_get.8: VARNAME [ /\[/ [ SIGNED_NUMBER | STRING | IDENTIFIER ] /\]/ ]
+    vardescriptor_set.9: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER ] /\]/ ]
+
     // conditions
     ?condition: grouped_condition | ungrouped_condition
     ?ungrouped_condition: operation | basic_condition
     ?grouped_condition.8: "(" _WHITESPACE? condition _WHITESPACE? ")"
-    ?basic_condition: comparison_simple_value | comparison_list_value | truthy_operand
+    ?basic_condition: comparison | truthy_operand
     ?operation: operation_not | operation_and | operation_or
     operation_and: condition _WHITESPACE "and" _WHITESPACE condition
     operation_or: condition _WHITESPACE "or" _WHITESPACE condition
     operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
-    truthy_operand: IDENTIFIER
-    comparison_simple_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains/ _WHITESPACE COMPVALUE
-    comparison_list_value: IDENTIFIER _WHITESPACE ( /not/ _WHITESPACE )? /contains|in/ _WHITESPACE listvalue
-    listvalue.9: "(" _WHITESPACE? COMPVALUE ( _WHITESPACE? "," _WHITESPACE? COMPVALUE )* _WHITESPACE? ")"
+    ?complexvalue: vardescriptor_get | SIMPLEVALUE
+    truthy_operand: vardescriptor_get
+    comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains|in/ _WHITESPACE ( complexvalue | listvalue )
+    listvalue.9: "(" ( _WHITESPACE? complexvalue ( _WHITESPACE? "," _WHITESPACE? complexvalue )* )? _WHITESPACE? ")"
 //#endif
 
 //#if ALLOW_COMMVARS
@@ -122,13 +125,25 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     ifvalue.3: content
 
     // command: set
-    commandset: "<ppp:set" _WHITESPACE IDENTIFIER [ commandsetmodifiers ] _WHITESPACE? ">" commandsetcontent "<ppp:/set>"
+    commandset: "<ppp:set" _WHITESPACE vardescriptor_set [ commandsetmodifiers ] _WHITESPACE? ">" commandsetcontent "<ppp:/set>"
     commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
     ?commandsetcontent.3: content
 
+    // variable set
+    //#if ALLOW_WILDCARDS
+    starredvalue.9: "*" ( wildcard | vardescriptor_get | listvalue )
+    //#else
+    starredvalue.9: "*" ( vardescriptor_get | listvalue )
+    //#endif
+    variableset.2: "${" _WHITESPACE? vardescriptor_set [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] ( starredvalue | varvalue ) "}"
+    variablesetmodifiers: /[+?!]+/
+
     // command: echo
-    commandecho: "<ppp:echo" _WHITESPACE IDENTIFIER _WHITESPACE? ( ">" [ commandechodefault "<ppp:/echo>" ] | "/>" )
+    commandecho: "<ppp:echo" _WHITESPACE vardescriptor_get _WHITESPACE? ( ">" [ commandechodefault "<ppp:/echo>" ] | "/>" )
     ?commandechodefault.3: content
+
+    // variable use
+    variableuse.2: "${" _WHITESPACE? vardescriptor_get _WHITESPACE? [ ":" varvalue ] "}"
 
     // command: ext
     commandext: "<ppp:ext" _WHITESPACE commandexttype _WHITESPACE commandextid [ _WHITESPACE? commandextparams ] [ _WHITESPACE? commandextif ] _WHITESPACE? ( ">" [ commandexttriggers "<ppp:/ext>" ] | "/>" )
@@ -137,13 +152,6 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     ?commandextparams.2: STRING | SIGNED_NUMBER
     ?commandextif: "if" _WHITESPACE condition
     ?commandexttriggers.3: content
-
-    // variable set
-    variableset.2: "${" _WHITESPACE? IDENTIFIER [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] varvalue "}"
-    variablesetmodifiers: /[+?!]+/
-
-    // variable use
-    variableuse.2: "${" _WHITESPACE? IDENTIFIER _WHITESPACE? [ ":" varvalue ] "}"
 //#endif
 varvalue: content_var
 
@@ -187,7 +195,7 @@ varvalue: content_var
     wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /["']/
     wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
     wc_filter_and: wc_filter_simple ( _WHITESPACE? "+" _WHITESPACE? wc_filter_simple )*
-    wildcardvar.7: "(" _WHITESPACE? IDENTIFIER _WHITESPACE? "=" varvalue ")"
+    wildcardvar.7: "(" _WHITESPACE? vardescriptor_get _WHITESPACE? "=" varvalue ")"
 
     //#if ALLOW_COMMVARS
         // command: setwcdeffilter
