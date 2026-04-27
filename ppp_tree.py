@@ -346,7 +346,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             str | bool | int: The resolved operand value (in lowercase for strings).
         """
         if c.startswith('"') and c.endswith('"') or c.startswith("'") and c.endswith("'"):
-            return self.__adjust_strnum(c[1:-1])
+            return c[1:-1].lower() # self.__adjust_strnum(c[1:-1])
         if c.isdigit():
             return int(c)
         if c.lower() in ("false", ""):
@@ -377,6 +377,7 @@ class TreeProcessor(lark.visitors.Interpreter):
 
     def __eval_basiccondition(
         self,
+        cond_desc: str,
         operand1: str | list[str],
         operator: str,
         operand2: str | list[str],
@@ -385,6 +386,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Evaluate a condition based on the given operands and operator.
 
         Args:
+            cond_desc (str): The description of the condition (for logging).
             operand1 (str | list[str]): The first operand.
             operator (str): The operator.
             operand2 (str | list[str]): The second operand.
@@ -406,17 +408,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         if operator == "truthy":
             result = bool(operand1_value)
         else:
-            op1_desc = f"[{', '.join(operand1)}]" if operand1_isarray else operand1
-            op2_desc = f"[{', '.join(operand2)}]" if operand2_isarray else operand2
-            condition_desc = f"{op1_desc} {operator} {op2_desc}"
-
             def pairwise_all(op):
-                return len(operand1_value) == len(operand2_value) and all(
-                    op(a, b) for a, b in zip(operand1_value, operand2_value)
-                )
+                return all(op(a, b) for a, b in zip(operand1_value, operand2_value))
 
             def wmt(a, b, op):
-                return self.warn_mixedtype(condition_desc, a, b, op)
+                return self.warn_mixedtype(cond_desc, a, b, op)
 
             if not operand1_isarray and not operand2_isarray:
                 operations = {
@@ -431,12 +427,18 @@ class TreeProcessor(lark.visitors.Interpreter):
                 }
             elif operand1_isarray and operand2_isarray:
                 operations = {
-                    "eq": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x == y)),
-                    "ne": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x != y)),
-                    "gt": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x > y)),
-                    "lt": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x < y)),
-                    "ge": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x >= y)),
-                    "le": lambda: pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x <= y)),
+                    "eq": lambda: len(operand1_value) == len(operand2_value)
+                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x == y)),
+                    "ne": lambda: len(operand1_value) != len(operand2_value)
+                    or pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x != y)),
+                    "gt": lambda: len(operand1_value) == len(operand2_value)
+                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x > y)),
+                    "lt": lambda: len(operand1_value) == len(operand2_value)
+                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x < y)),
+                    "ge": lambda: len(operand1_value) == len(operand2_value)
+                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x >= y)),
+                    "le": lambda: len(operand1_value) == len(operand2_value)
+                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x <= y)),
                     "in": lambda: all(wmt(a, operand2_value, lambda x, y: x in y) for a in operand1_value),
                     "contains": lambda: all(wmt(a, operand1_value, lambda x, y: x in y) for a in operand2_value),
                 }
@@ -448,6 +450,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     # "lt": lambda: False,
                     # "ge": lambda: False,
                     # "le": lambda: False,
+                    "in": lambda: any(wmt(str(a), str(operand2_value), lambda x, y: x in y) for a in operand1_value),
                     "contains": lambda: wmt(operand1_value, operand2_value, lambda x, y: y in x),
                 }
             elif not operand1_isarray and operand2_isarray:
@@ -459,15 +462,19 @@ class TreeProcessor(lark.visitors.Interpreter):
                     # "ge": lambda: False,
                     # "le": lambda: False,
                     "in": lambda: wmt(operand1_value, operand2_value, lambda x, y: x in y),
+                    "contains": lambda: all(
+                        wmt(str(operand1_value), str(a), lambda x, y: y in x) for a in operand2_value
+                    ),
                 }
             else:
                 operations = {}
-            if operator not in operations:
+            operation = operations.get(operator, None)
+            if operation is None:
                 self.warn_or_stop(
-                    f"Unsupported operator '{escape_single_quotes(operator)}' in condition '{escape_single_quotes(condition_desc)}'"
+                    f"Unsupported operator '{escape_single_quotes(operator)}' in condition '{escape_single_quotes(cond_desc)}'"
                 )
                 return False
-            result = operations[operator]()
+            result = operation()
         return result
 
     def __separate_vardescriptor(self, vardescriptor: lark.Tree) -> tuple[str, str | None]:
@@ -517,7 +524,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             value_node (lark.Tree): The value tree to be evaluated.
 
         Returns:
-            str or list[str]: The result.
+            str | list[str]: The result.
+
         """
         if isinstance(value_node, lark.Tree) and value_node.data == "listvalue":
             return list(self.__get_complex_element(v) for v in value_node.children)
@@ -557,6 +565,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 # no condition, just a variable
                 cond_operation = "truthy"
                 cond_operand2 = "true"
+                cond_desc = cond_operand1 if isinstance(cond_operand1, str) else "(" + ", ".join(str(c) for c in cond_operand1) + ")"
             else:
                 # we get the comparison (with possible not) and the value
                 cond_operation = str(condition.children[poscomp])
@@ -567,7 +576,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                 poscomp += 1
                 cond_value_node = condition.children[poscomp]
                 cond_operand2 = self.__get_cond_operand(cond_value_node)
-            cond_result = self.__eval_basiccondition(cond_operand1, cond_operation, cond_operand2)
+                cond_desc = f"{cond_operand1} {cond_operation} {cond_operand2 if isinstance(cond_operand2, str) else '(' + ', '.join(str(c) for c in cond_operand2) + ')'}"
+            cond_result = self.__eval_basiccondition(cond_desc, cond_operand1, cond_operation, cond_operand2)
             if invert:
                 cond_result = not cond_result
         return cond_result
@@ -579,7 +589,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         start_result = self.result
         t1 = time.monotonic_ns()
         self.__visit(tree.children[0])
-        and_processing = self.state.host_config.get("and", "ok")
+        and_processing = self.state.host_config.and_
         if len(tree.children) > 1:
             and_replacements = {
                 "eol": ("replaced with EOL", "\n"),
@@ -627,7 +637,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         pos = float(pos_str)
         if pos >= 1:
             pos = int(pos)
-        scheduling_processing = self.state.host_config.get("scheduling", "ok")
+        scheduling_processing = self.state.host_config.scheduling
         if scheduling_processing == "before":
             self.log(logging.DEBUG, "Scheduling construct removed, taking before option")
             if before is not None:
@@ -675,7 +685,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         start_result = self.result
         t1 = time.monotonic_ns()
-        alternation_processing = self.state.host_config.get("alternation", "ok")
+        alternation_processing = self.state.host_config.alternation
         if alternation_processing == "first":
             self.log(logging.DEBUG, "Alternation construct removed, taking first option")
             self.__visit(tree.children[0])
@@ -745,7 +755,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 weight_kind = 2
             else:
                 weight_kind = 3
-        attention_processing = self.state.host_config.get("attention", "ok")
+        attention_processing = self.state.host_config.attention
         if attention_processing == "parentheses":
             if weight_kind == 1:
                 weight_kind = 3
@@ -1854,7 +1864,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.result = ""
         t1 = time.monotonic_ns()
         self.__visit(tree.children)
-        attention_processing = self.state.host_config.get("attention", "ok")
+        attention_processing = self.state.host_config.attention
         # process the found negative tags
         for negtag in self.__negtags:
             if self.state.options.cup_merge_attention:

@@ -277,24 +277,24 @@ The `conditionN` is a boolean expression, which can use `and`, `or`, `not` and g
 
 The operands can be a variable (`variable`, `array[]`, `array[index]`), a quoted string, an integer, a boolean, or a parenthesized list of any of them `('string', 1, variable, false, array[], array[2])`. The allowed operations depend on which operands are used.
 
-Variable values `true` and `false` are considered a boolean, and a digits value is an integer.
+When an operand is or contains a variable, it is resolved to the variable's current value before the operation.
 
-The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in` and `contains`.
+Variable values `true` and `false` are considered a boolean, and an all digits value is an integer. Except in substring operations indicated below.
 
-| Operation  | Supported operands                                                   |
-| ---------  | ------------------                                                   |
-| `eq`       | single or array but both of the same kind                            |
-| `ne`       | single or array but both of the same kind                            |
-| `gt`       | single or array but both of the same kind                            |
-| `lt`       | single or array but both of the same kind                            |
-| `ge`       | single or array but both of the same kind                            |
-| `le`       | single or array but both of the same kind                            |
-| `in`       | single or array, if only one is an array it should be the second one |
-| `contains` | single or array, if only one is an array it should be the first one  |
+The operation can be preceded by `not` for readability, instead of using it in the front.
 
-Two arrays are compared element by element, except with `in` and `contains` which are considered like set operations.
+The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in` and `contains`. This list shows what they do depending on the kind of operand (R = regular variable, A = array variable).
 
-When an operand is a variable name, it is resolved to the variable's current value before comparison. The operation can be preceded by `not` for readability, instead of using it in the front.
+| Operation  | R1 op R2                 | A1 op A2          | A1 op R2                       | R1 op A2                     |
+| ---------  | --------                 | --------          | --------                       | --------                     |
+| `eq`       | OK                       | OK (pairwise)     | Always False                   | Always False                 |
+| `ne`       | OK                       | OK (pairwise)     | Always True                    | Always True                  |
+| `gt`       | OK                       | OK (pairwise)     | Error                          | Error                        |
+| `lt`       | OK                       | OK (pairwise)     | Error                          | Error                        |
+| `ge`       | OK                       | OK (pairwise)     | Error                          | Error                        |
+| `le`       | OK                       | OK (pairwise)     | Error                          | Error                        |
+| `in`       | OK (substring, R1 in R2) | OK (all A1 in A2) | OK (any substring in A1 in R2) | OK (R1 in A2)                |
+| `contains` | OK (substring, R2 in R1) | OK (all A2 in A1) | OK (R2 in A1)                  | OK (all substrings A2 in R1) |
 
 When a comparison tries to compare undefined variables or the values have different types (f.e. an integer and a string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised.
 

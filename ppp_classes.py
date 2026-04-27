@@ -43,63 +43,6 @@ class ONWARNING_CHOICES(Enum):
     warn = "warn"
     stop = "stop"
 
-
-@dataclass(frozen=True)
-class PPPStateOptions:
-    """Options that can be set for prompt processing."""
-
-    debug_level: DEBUG_LEVEL = DEBUG_LEVEL.minimal
-    on_warning: ONWARNING_CHOICES = ONWARNING_CHOICES.warn
-    process_wildcards: bool = True
-    keep_choices_order: bool = True
-    choice_separator: str = ", "
-    if_wildcards: IFWILDCARDS_CHOICES = IFWILDCARDS_CHOICES.stop
-    stn_ignore_repeats: bool = True
-    stn_separator: str = ", "
-    cup_do_cleanup: bool = True  # whether to do cleanup at all (if False, all other cleanup options are ignored)
-    cup_cleanup_variables: bool = True
-    cup_extra_spaces: bool = True
-    cup_empty_constructs: bool = True
-    cup_extra_separators: bool = True
-    cup_extra_separators2: bool = True
-    cup_extra_separators_include_eol: bool = False
-    cup_breaks: bool = False
-    cup_breaks_eol: bool = False
-    cup_ands: bool = False
-    cup_ands_eol: bool = False
-    cup_extranetwork_tags: bool = False
-    cup_merge_attention: bool = True
-    cup_remove_extranetwork_tags: bool = False
-
-
-@dataclass(frozen=True)
-class PPPState:
-    """State object passed to various PPP components during prompt processing."""
-
-    logger: Logger
-    host_config: dict[str, str] = field(default_factory=dict)
-    options: PPPStateOptions = field(default_factory=PPPStateOptions)
-    system_variables: dict[str, Any] = field(default_factory=dict)
-    user_variables: dict[str, Any] = field(default_factory=dict)
-    echoed_variables: dict[str, Any] = field(default_factory=dict)
-    wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
-    extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)
-    parsers: dict[str, Lark] = field(default_factory=dict)
-
-
-class PPPInterrupt(Exception):
-    """
-    Custom exception to handle interruptions in the PromptPostProcessor.
-    This exception can be raised to stop the processing of prompts.
-    """
-
-    def __init__(self, message: str = "Processing interrupted.", pos_prefix: str = "", neg_prefix: str = ""):
-        super().__init__(message)
-        self.message = message
-        self.pos_prefix = pos_prefix
-        self.neg_prefix = neg_prefix
-
-
 # ------------------- Host configuration -------------------
 
 AttentionOption = Literal["ok", "parentheses", "disable", "remove", "error"]
@@ -227,3 +170,60 @@ class PPPConfig(BaseModel):
         if self.hosts is None and self.models is None:
             raise ValueError("at least one of 'hosts' or 'models' must be specified")
         return self
+
+# ------------------- State object -------------------
+
+@dataclass(frozen=True)
+class PPPStateOptions:
+    """Options that can be set for prompt processing."""
+
+    debug_level: DEBUG_LEVEL = DEBUG_LEVEL.minimal
+    on_warning: ONWARNING_CHOICES = ONWARNING_CHOICES.warn
+    process_wildcards: bool = True
+    keep_choices_order: bool = True
+    choice_separator: str = ", "
+    if_wildcards: IFWILDCARDS_CHOICES = IFWILDCARDS_CHOICES.stop
+    stn_ignore_repeats: bool = True
+    stn_separator: str = ", "
+    cup_do_cleanup: bool = True  # whether to do cleanup at all (if False, all other cleanup options are ignored)
+    cup_cleanup_variables: bool = True
+    cup_extra_spaces: bool = True
+    cup_empty_constructs: bool = True
+    cup_extra_separators: bool = True
+    cup_extra_separators2: bool = True
+    cup_extra_separators_include_eol: bool = False
+    cup_breaks: bool = False
+    cup_breaks_eol: bool = False
+    cup_ands: bool = False
+    cup_ands_eol: bool = False
+    cup_extranetwork_tags: bool = False
+    cup_merge_attention: bool = True
+    cup_remove_extranetwork_tags: bool = False
+
+
+@dataclass(frozen=True)
+class PPPState:
+    """State object passed to various PPP components during prompt processing."""
+
+    logger: Logger
+    host_config: HostConfig = field(default_factory=HostConfig)
+    options: PPPStateOptions = field(default_factory=PPPStateOptions)
+    system_variables: dict[str, Any] = field(default_factory=dict)
+    user_variables: dict[str, Any] = field(default_factory=dict)
+    echoed_variables: dict[str, Any] = field(default_factory=dict)
+    wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
+    extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)
+    parsers: dict[str, Lark] = field(default_factory=dict)
+
+
+class PPPInterrupt(Exception):
+    """
+    Custom exception to handle interruptions in the PromptPostProcessor.
+    This exception can be raised to stop the processing of prompts.
+    """
+
+    def __init__(self, message: str = "Processing interrupted.", pos_prefix: str = "", neg_prefix: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.pos_prefix = pos_prefix
+        self.neg_prefix = neg_prefix

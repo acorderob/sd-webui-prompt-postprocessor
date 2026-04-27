@@ -44,7 +44,6 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "${v1}",
                 "",
             ),
-            # v3 is echoed withs two defaults, the output prompt has both but the variable value is the last default
             PromptPair("", ""),
             variables={"v1": ""},
             ppp=PromptPostProcessor(
@@ -186,48 +185,433 @@ class TestVarCommands(TestPromptPostProcessorBase):
             variables={"v1[]": "one, two, three, four", "v2": "three"},
         )
 
-    # Variable-vs-variable comparison tests
+    # Operator tests
 
-    def test_cmd_if_var_vs_var_eq(self):  # var eq var: both set to same value, if-branch taken
+    ## R vs R
+
+    def test_operator_ReqR(self):
         self.process(
             PromptPair(
-                "<ppp:set v1>hello<ppp:/set><ppp:set v2>hello<ppp:/set><ppp:if v1 eq v2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=hello}${r2=hello}<ppp:if r1 eq r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
         )
 
-    def test_cmd_if_var_vs_var_ne(self):  # var ne var: different values, ne condition true
+    def test_operator_RnoteqR(self):  # test for the not before the operator
         self.process(
             PromptPair(
-                "<ppp:set v1>apple<ppp:/set><ppp:set v2>orange<ppp:/set><ppp:if v1 ne v2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=hello}${r2=bye}<ppp:if r1 not eq r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
         )
 
-    def test_cmd_if_var_vs_var_contains(self):  # var contains var: var1 contains var2's value
+    def test_operator_RneR(self):
         self.process(
             PromptPair(
-                "<ppp:set v1>hello world<ppp:/set><ppp:set v2>hello<ppp:/set><ppp:if v1 contains v2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=hello}${r2=bye}<ppp:if r1 ne r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
         )
 
-    def test_cmd_if_var_vs_var_not_contains(self):  # var not contains var: var1 does not contain var2's value
+    def test_operator_RltR(self):
         self.process(
             PromptPair(
-                "<ppp:set v1>hello world<ppp:/set><ppp:set v2>goodbye<ppp:/set><ppp:if v1 not contains v2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=01}${r2=2}<ppp:if r1 lt r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
         )
 
-    def test_cmd_if_var_vs_var_lt(self):  # var lt var: var1 less than var2
+    def test_operator_RgtR(self):
         self.process(
             PromptPair(
-                "<ppp:set lesser>1<ppp:/set><ppp:set greater>2<ppp:/set><ppp:if lesser lt greater>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=2}${r2=01}<ppp:if r1 gt r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RleR(self):
+        self.process(
+            PromptPair(
+                "${r1=01}${r2=1}<ppp:if r1 le r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RgeR(self):
+        self.process(
+            PromptPair(
+                "${r1=1}${r2=01}<ppp:if r1 ge r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RinR(self):
+        self.process(
+            PromptPair(
+                "${r1=hello}${r2=hello world}<ppp:if r1 in r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RcontainsR(self):
+        self.process(
+            PromptPair(
+                "${r1=hello world}${r2=hello}<ppp:if r1 contains r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    ## A vs A
+
+    def test_operator_AeqA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${a2[]=*('hello','world')}<ppp:if a1[] eq a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AneA_1(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello')}${a2[]=*('bye')}<ppp:if a1[] ne a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AneA_2(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${a2[]=*('hello')}<ppp:if a1[] ne a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AneA_3(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${a2[]=*('world','hello')}<ppp:if a1[] ne a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AltA_1(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(01,2,3)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AltA_2(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(01,2)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+        )
+
+    def test_operator_AgtA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(2,3,4)}${a2[]=*(01,2,3)}<ppp:if a1[] gt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AleA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(01,2)}${a2[]=*(1,3)}<ppp:if a1[] le a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AgeA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(1,3)}${a2[]=*(01,2)}<ppp:if a1[] ge a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AinA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello')}${a2[]=*('hello', 'world')}<ppp:if a1[] in a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AcontainsA(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${a2[]=*('hello')}<ppp:if a1[] contains a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    ## A vs R
+
+    def test_operator_AeqR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${r2=hello}<ppp:if a1[] eq r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+        )
+
+    def test_operator_AneR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello')}${r2=bye}<ppp:if a1[] ne r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AltR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(01,2,3)}${r2=2}<ppp:if a1[] lt r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_AgtR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(2,3,4)}${r2=2}<ppp:if a1[] gt r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_AleR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(01,2)}${r2=2}<ppp:if a1[] le r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_AgeR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*(1,3)}${r2=2}<ppp:if a1[] ge r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_AinR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello', 'world')}${r2=hello world)}<ppp:if a1[] in r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_AcontainsR(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}${r2=hello}<ppp:if a1[] contains r2>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    ## R vs A
+
+    def test_operator_ReqA(self):
+        self.process(
+            PromptPair(
+                "${r1=hello}${a2[]=*('hello','world')}<ppp:if r1 eq a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+        )
+
+    def test_operator_RneA(self):
+        self.process(
+            PromptPair(
+                "${r1=bye}${a2[]=*('hello')}<ppp:if r1 ne a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RltA(self):
+        self.process(
+            PromptPair(
+                "${r1=2}${a2[]=*(01,2,3)}<ppp:if r1 lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_RgtA(self):
+        self.process(
+            PromptPair(
+                "${r1=2}${a2[]=*(2,3,4)}<ppp:if r1 gt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_RleA(self):
+        self.process(
+            PromptPair(
+                "${r1=2}${a2[]=*(01,2)}<ppp:if r1 le a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_RgeA(self):
+        self.process(
+            PromptPair(
+                "${r1=2}${a2[]=*(1,3)}<ppp:if r1 ge a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_RinA(self):
+        self.process(
+            PromptPair(
+                "${r1=hello}${a2[]=*('hello', 'world')}<ppp:if r1 in a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_RcontainsA(self):
+        self.process(
+            PromptPair(
+                "${r1=hello world}${a2[]=*('hello','world')}<ppp:if r1 contains a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    ## R vs V
+
+    def test_operator_ReqV_str(self):
+        self.process(
+            PromptPair(
+                "${r1=hello}<ppp:if r1 eq 'hello'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_ReqV_str_fail(self):
+        self.process(
+            PromptPair(
+                "${r1=hello}<ppp:if r1 eq 42>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_ReqV_num(self):
+        self.process(
+            PromptPair(
+                "${r1=42}<ppp:if r1 eq 42>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_ReqV_num_fail(self):
+        self.process(
+            PromptPair(
+                "${r1=42}<ppp:if r1 eq '42'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    def test_operator_ReqV_bool(self):
+        self.process(
+            PromptPair(
+                "${r1=true}<ppp:if r1 eq true>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_operator_ReqV_bool_fail(self):
+        self.process(
+            PromptPair(
+                "${r1=true}<ppp:if r1 eq 'true'>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("not OK", ""),
+            interrupted=True,
+        )
+
+    # List operands
+
+    def test_listoperand_AinL(self):
+        self.process(
+            PromptPair(
+                "${a1[]=*('hello','world')}<ppp:if a1[] in ('hello','world')>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    def test_listoperand_LinA(self):
+        self.process(
+            PromptPair(
+                "${a2[]=*('hello','world')}<ppp:if ('hello','world') in a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
+    # Indexed operands
+
+    def test_indexedoperand_RinA(self):
+        self.process(
+            PromptPair(
+                "${a2[]=*('hello','world')}<ppp:if a2[0] in a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -428,7 +812,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_cmd_set_if_complex_conditions_5(self):  # complex conditions (not, precedence, comparison)
         self.process(
             PromptPair(
-                "<ppp:set v1>1<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not(v1 eq '1' and v2)>OK<ppp:else>not OK<ppp:/if>",
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>false<ppp:/set>this test is <ppp:if not(v1 eq 1 and v2)>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("this test is OK", ""),
@@ -437,7 +821,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_cmd_set_if_complex_conditions_6(self):  # complex conditions
         self.process(
             PromptPair(
-                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 eq '2' and v3 eq '3'>OK<ppp:else>not OK<ppp:/if>",
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq 1 and v2 eq 2 and v3 eq 3>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("this test is OK", ""),
@@ -446,7 +830,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_cmd_set_if_complex_conditions_7(self):  # complex conditions
         self.process(
             PromptPair(
-                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq '1' and v2 not eq '2' or v3 eq '3'>OK<ppp:else>not OK<ppp:/if>",
+                "<ppp:set v1>1<ppp:/set><ppp:set v2>2<ppp:/set><ppp:set v3>3<ppp:/set>this test is <ppp:if v1 eq 1 and v2 not eq 2 or v3 eq 3>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("this test is OK", ""),

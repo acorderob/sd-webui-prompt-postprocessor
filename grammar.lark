@@ -108,7 +108,7 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
     ?complexvalue: vardescriptor_get | SIMPLEVALUE
     truthy_operand: vardescriptor_get
-    comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|gt|lt|ge|le|contains|in/ _WHITESPACE ( complexvalue | listvalue )
+    comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|lt|gt|le|ge|contains|in/ _WHITESPACE ( complexvalue | listvalue )
     listvalue.9: "(" ( _WHITESPACE? complexvalue ( _WHITESPACE? "," _WHITESPACE? complexvalue )* )? _WHITESPACE? ")"
 //#endif
 

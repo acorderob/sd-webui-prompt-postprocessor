@@ -5,4 +5,5 @@
 !.vscode/launch.json
 
 tests/tests_local.py
+tests/local_wildcards
 tests/logs

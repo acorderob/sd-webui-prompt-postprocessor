@@ -8,7 +8,20 @@ import lark
 import numpy as np
 import yaml
 
-from ppp_classes import IFWILDCARDS_CHOICES, SUPPORTED_APPS, PPPInterrupt, PPPState, PPPStateOptions
+from pydantic import ValidationError  # pylint: disable=import-error
+from ppp_classes import (
+    FindInFilenamePattern,
+    HostConfig,
+    ModelConfig,
+    ModelDetectConfig,
+    VariantConfig,
+    PPPConfig,
+    IFWILDCARDS_CHOICES,
+    SUPPORTED_APPS,
+    PPPInterrupt,
+    PPPState,
+    PPPStateOptions,
+)  # pylint: disable=import-error
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes
@@ -102,25 +115,24 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         default_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml.defaults")
         try:
             with open(default_config_file, "r", encoding="utf-8") as f:
-                self.config: dict[str, Any] = yaml.safe_load(f)
+                default_raw: dict[str, Any] = yaml.safe_load(f)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self.config = {}
             raise PPPInterrupt(
                 f"Failed to load default configuration from '{escape_single_quotes(default_config_file)}'."
             ) from exc
-        validate_def_cfg = self.__validate_normalize_configuration(self.config, "default configuration file")
-        if validate_def_cfg != 0:
+        self.config, def_result = self.__parse_configuration(default_raw, "default configuration file")
+        if def_result != 0:
             errmsg = "Default configuration file has errors. Please restore the default configuration file and, per instructions, use a copy to adapt it."
-            if validate_def_cfg == 2:
+            if def_result == 2:
                 raise PPPInterrupt(errmsg)
             self.log(logging.WARNING, errmsg)
 
         user_config_file = self.env_info.get("ppp_config", "")
-        user_config: dict[str, Any] = {}
         if isinstance(user_config_file, dict):
-            user_config = user_config_file
-            self.__validate_normalize_configuration(user_config, "forced configuration")
+            user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
         else:
+            user_raw: dict[str, Any] = {}
             if user_config_file == "":
                 if self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
                     try:
@@ -135,23 +147,29 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     user_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml")
             if user_config_file and os.path.exists(user_config_file):
                 with open(user_config_file, "r", encoding="utf-8") as f:
-                    user_config = yaml.safe_load(f)
-                self.__validate_normalize_configuration(user_config, "user configuration")
-        if user_config:
-            self.__merge_configuration(user_config)
+                    user_raw = yaml.safe_load(f)
+                user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
+            else:
+                user_cfg = None
+        if user_cfg is not None:
+            self.__merge_configuration(user_cfg)
 
-        self.models_config: dict[str, dict[str, Any] | None] = self.config.get("models") or {}
+        self.models_config: dict[str, ModelConfig | None] = self.config.models or {}
         self.known_models: list[str] = list(self.models_config.keys())
 
         # Patch for tests (copy comfyui)
         if self.env_info.get("app", "") == "tests":
-            self.config.setdefault("hosts", {}).setdefault("tests", {})
+            if self.config.hosts is None:
+                self.config.hosts = {}
+            self.config.hosts.setdefault("tests", HostConfig())
             for m in self.known_models:
-                self.models_config.setdefault(m, {}).setdefault("detect", {})["tests"] = (
-                    self.models_config[m].get("detect", {}).get("comfyui", None)
-                )
+                model = self.models_config.get(m)
+                if model is not None:
+                    if model.detect is None:
+                        model.detect = {}
+                    model.detect.setdefault("tests", model.detect.get("comfyui", None))
 
-        host_config: dict[str, Any] = (self.config.get("hosts") or {}).get(self.env_info.get("app", ""))
+        host_config: HostConfig | None = (self.config.hosts or {}).get(self.env_info.get("app", ""))
         if host_config is None:
             raise PPPInterrupt(
                 f"No host configuration found for app '{escape_single_quotes(self.env_info.get('app', ''))}'. Please check your configuration."
@@ -160,23 +178,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         # Update env_info with model detection
         prop_base = self.env_info.get("property_base", None)
         model_class = self.env_info.get("model_class", "")
+        app = self.env_info.get("app", "")
         for m in self.known_models:
             self.env_info["is_" + m] = False
-            model_config = (self.models_config.get(m) or {}).get("detect", {}).get(self.env_info.get("app", ""), {})
-            if model_config is not None:
-                cls_list = model_config.get("class", [])
+            model_obj = self.models_config.get(m)
+            model_detect = (model_obj.detect if model_obj else None) or {}
+            model_detect_for_app: ModelDetectConfig | None = model_detect.get(app)
+            if model_detect_for_app is not None:
+                cls_list = model_detect_for_app.class_ or []
                 if model_class in cls_list:
                     self.env_info["is_" + m] = True
-                elif "property" in model_config and prop_base is not None:
-                    prop = model_config["property"]
+                elif model_detect_for_app.property is not None and prop_base is not None:
+                    prop = model_detect_for_app.property
                     attr = getattr(prop_base, prop, None)
                     if isinstance(attr, bool) and attr:
                         self.env_info["is_" + m] = True
-        self.variants_definitions = {}
+        self.variants_definitions: dict[str, tuple[str, list[FindInFilenamePattern]]] = {}
         for m in self.known_models:
-            for v, vo in (((self.models_config or {}).get(m) or {}).get("variants") or {}).items():
+            model_obj = self.models_config.get(m)
+            for v, vo in ((model_obj.variants if model_obj else None) or {}).items():
                 if v not in self.known_models:
-                    self.variants_definitions[v] = (m, vo["find_in_filename"])
+                    self.variants_definitions[v] = (m, vo.find_in_filename)
                 else:
                     self.log(
                         logging.WARNING,
@@ -346,230 +368,157 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info: bool = False):
         log(self.logger, self.debug_level, kind, message, min_level, exc_info=exc_info)
 
-    def __merge_configuration(self, user_config):
+    def __merge_configuration(self, user_config: PPPConfig):
         """
         Merges the user configuration into the default configuration.
 
         Args:
-            user_config: The user configuration dictionary to merge.
+            user_config: The parsed user PPPConfig to merge into self.config.
         """
-        if "hosts" in user_config:
+        if user_config.hosts:
+            if self.config.hosts is None:
+                self.config.hosts = {}
             # Options are replaced by host
-            for host_key, host_value in user_config["hosts"].items():
-                self.config["hosts"].setdefault(host_key, {}).update(host_value)
-        if "models" in user_config:
-            for model_key, model_value in user_config["models"].items():
-                # We independently update the detection and variants for each model in the user configuration
-                usr_mdetect = model_value.get("detect", "")
-                # Detections are replaced by host
-                cfg_detect = self.config["models"].setdefault(model_key, {}).get("detect")
-                if cfg_detect is not None:
-                    for host, hdetect in usr_mdetect.items():
-                        cfg_detect[host] = hdetect
-                # Variants are fully replaced if specified
-                usr_mvariants = model_value.get("variants", "")
-                if usr_mvariants is None:
-                    del self.config["models"].setdefault(model_key, {})["variants"]
+            for host_key, host_value in user_config.hosts.items():
+                self.config.hosts[host_key] = host_value
+        if user_config.models:
+            if self.config.models is None:
+                self.config.models = {}
+            for model_key, user_model in user_config.models.items():
+                cfg_model = self.config.models.get(model_key)
+                if user_model is None:
+                    # User wants to disable this model: remove it
+                    if cfg_model is not None:
+                        self.config.models.pop(model_key, None)
+                elif cfg_model is None:
+                    # New model from user config: add with whatever was specified
+                    self.config.models[model_key] = user_model
                 else:
-                    self.config["models"].setdefault(model_key, {})["variants"] = usr_mvariants
+                    # Merge detect per-host
+                    if "detect" in user_model.model_fields_set and user_model.detect is not None:
+                        if cfg_model.detect is None:
+                            cfg_model.detect = {}
+                        for host, hdetect in user_model.detect.items():
+                            cfg_model.detect[host] = hdetect
+                    # Variants are fully replaced
+                    if user_model.variants is not None:
+                        cfg_model.variants = user_model.variants
 
-    def __re_flags_from_list(self, flags_list: list[str]) -> int:
-        flag_value = 0
-        for flag in flags_list:
-            if hasattr(re, flag):
-                flag_value |= getattr(re, flag)
-            else:
-                return 0
-        return flag_value
-
-    def __validate_find_in_filename_element(
-        self,
-        where: str,
-        model_key: str,
-        variant_key: str,
-        find_in_filename: str | dict,
-    ) -> dict | None:
-        if isinstance(find_in_filename, str):
-            try:
-                re.compile(find_in_filename, re.IGNORECASE)
-                return {"regex": find_in_filename, "flags": re.IGNORECASE}
-            except re.error:
-                self.log(
-                    logging.WARNING,
-                    f"{where.title()}: Invalid regex pattern for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                )
-        elif isinstance(find_in_filename, dict):
-            regex = find_in_filename.get("regex", "")
-            flags = find_in_filename.get("flags", [])
-            if not isinstance(regex, str) or not isinstance(flags, list) or not all(isinstance(f, str) for f in flags):
-                self.log(
-                    logging.WARNING,
-                    f"{where.title()}: Invalid format for 'find_in_filename' for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                )
-            else:
-                fl = self.__re_flags_from_list(flags)
-                if fl == 0 and len(flags):
-                    self.log(
-                        logging.WARNING,
-                        f"{where.title()}: Invalid regex flags for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                    )
-                try:
-                    re.compile(regex, fl)
-                    return {"regex": regex, "flags": fl}
-                except re.error:
-                    self.log(
-                        logging.WARNING,
-                        f"{where.title()}: Invalid regex pattern for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                    )
-        return None
-
-    def __validate_normalize_configuration(self, cfg: dict[str, Any] | Any, where: str) -> int:
+    def __parse_configuration(self, cfg: dict[str, Any] | Any, where: str) -> tuple[PPPConfig, int]:
         """
-        Validates the configuration dictionary and normalizes it.
+        Parses and validates a raw configuration dict into a PPPConfig object.
+        Logs warnings for invalid entries and discards them.
 
         Args:
-            cfg (dict): The configuration dictionary to validate.
+            cfg: The raw configuration value to parse (expected to be a dict).
+            where: Description of where this config came from (for logging).
 
         Returns:
-            int: 0 if the configuration is valid, 1 if there are warnings, 2 if there are fatal errors.
+            tuple[PPPConfig, int]: The parsed config and a result code:
+                0 = valid, 1 = non-fatal warnings, 2 = fatal errors.
         """
-        fatal_errors = False
         if not isinstance(cfg, dict):
-            self.log(logging.ERROR, f"{where.capitalize()}: is not a dictionary.")
-            fatal_errors = True
-        else:
-            if cfg.get("hosts") and not isinstance(cfg["hosts"], dict):
-                self.log(logging.ERROR, f"{where.capitalize()}: 'hosts' is not a valid dictionary.")
-                fatal_errors = True
-            if cfg.get("models") and not isinstance(cfg.get("models"), dict):
-                self.log(logging.ERROR, f"{where.capitalize()}: 'models' is not a valid dictionary.")
-                fatal_errors = True
-        if fatal_errors:
-            return 2
+            if cfg is not None:
+                self.logger.error(f"{where.capitalize()}: is not a dictionary.")
+                return PPPConfig(), 2
+            return PPPConfig(), 0
+        if cfg.get("hosts") and not isinstance(cfg["hosts"], dict):
+            self.logger.error(f"{where.capitalize()}: 'hosts' is not a valid dictionary.")
+            return PPPConfig(), 2
+        if cfg.get("models") and not isinstance(cfg.get("models"), dict):
+            self.logger.error(f"{where.capitalize()}: 'models' is not a valid dictionary.")
+            return PPPConfig(), 2
         result = 0
-        defcfg_hosts: dict[str, Any] = cfg.get("hosts", {})
-        for host_key, host_value in dict(defcfg_hosts).items():
+        parsed_hosts: dict[str, HostConfig | None] = {}
+        raw_hosts: dict[str, dict | None] = cfg.get("hosts") or {}
+        for host_key, host_value in raw_hosts.items():
             if host_key not in SUPPORTED_APPS._value2member_map_:  # pylint: disable=protected-access
-                self.log(
-                    logging.WARNING,
-                    f"{where.capitalize()}: Unsupported host '{escape_single_quotes(host_key)}'. Discarding host.",
+                self.logger.warning(
+                    f"{where.capitalize()}: Unsupported host '{escape_single_quotes(host_key)}'. Discarding host."
                 )
-                defcfg_hosts.pop(host_key, None)
                 result = 1
-            elif host_value is not None and (
-                not isinstance(host_value, dict)
-                or not all(k in ["attention", "scheduling", "alternation", "and", "break"] for k in host_value)
-            ):
-                self.log(
-                    logging.WARNING,
-                    f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}'. Discarding host.",
-                )
-                defcfg_hosts.pop(host_key, None)
-                result = 1
-        defcfg_models: dict[str, Any] = cfg.get("models", {})
-        for model_key, model_value in dict(defcfg_models).items():
-            if (
-                not isinstance(model_value, dict)
-                or model_value.get("detect") is None
-                or not isinstance(model_value["detect"], dict)
-            ):
-                self.log(
-                    logging.WARNING,
-                    f"{where.capitalize()}: Invalid format for model '{escape_single_quotes(model_key)}'. Discarding model.",
-                )
-                defcfg_models.pop(model_key, None)
-                result = 1
+            elif host_value is None:
+                parsed_hosts[host_key] = None
             else:
-                defcfg_m_detect: dict[str, Any] = model_value["detect"]
-                for host_key, host_value in dict(defcfg_m_detect).items():
+                try:
+                    parsed_hosts[host_key] = HostConfig.model_validate(host_value)
+                except ValidationError as exc:
+                    self.logger.warning(
+                        f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}': {exc}. Discarding host."
+                    )
+                    result = 1
+        parsed_models: dict[str, ModelConfig | None] = {}
+        raw_models: dict[str, dict | None] = cfg.get("models") or {}
+        for model_key, model_value in raw_models.items():
+            if not isinstance(model_value, dict) or not any(k in model_value for k in ("detect", "variants")):
+                self.logger.warning(
+                    f"{where.capitalize()}: Invalid format for model '{escape_single_quotes(model_key)}'. Discarding model."
+                )
+                result = 1
+                continue
+            parsed_detect: dict[str, ModelDetectConfig | None] | None = None
+            if "detect" in model_value:
+                if not isinstance(model_value["detect"], dict):
+                    self.logger.warning(
+                        f"{where.capitalize()}: Invalid format for 'detect' in model '{escape_single_quotes(model_key)}'. Discarding model."
+                    )
+                    result = 1
+                    continue
+                parsed_detect = {}
+                for host_key, host_value in model_value["detect"].items():
                     if host_key not in SUPPORTED_APPS._value2member_map_:  # pylint: disable=protected-access
                         self.log(
                             logging.WARNING,
                             f"{where.capitalize()}: Unsupported host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host.",
                         )
-                        defcfg_m_detect.pop(host_key, None)
                         result = 1
-                    elif host_value is not None:
-                        if not isinstance(host_value, dict):
-                            self.log(
-                                logging.WARNING,
-                                f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host.",
+                    elif host_value is None:
+                        parsed_detect[host_key] = None
+                    else:
+                        try:
+                            parsed_detect[host_key] = ModelDetectConfig.model_validate(host_value)
+                        except ValidationError as exc:
+                            self.logger.warning(
+                                f"{where.capitalize()}: Invalid format for host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}': {exc}. Discarding host."
                             )
-                            defcfg_m_detect.pop(host_key, None)
                             result = 1
-                        elif "class" in host_value:
-                            if not isinstance(host_value["class"], list) or not all(
-                                isinstance(c, str) for c in host_value["class"]
-                            ):
-                                self.log(
-                                    logging.WARNING,
-                                    f"{where.capitalize()}: Invalid format for 'class' in host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host.",
-                                )
-                                defcfg_m_detect.pop(host_key, None)
-                                result = 1
-                        elif "property" in host_value:
-                            if not isinstance(host_value["property"], str):
-                                self.log(
-                                    logging.WARNING,
-                                    f"{where.capitalize()}: Invalid format for 'property' in host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host.",
-                                )
-                                defcfg_m_detect.pop(host_key, None)
-                                result = 1
-                        else:
-                            self.log(
-                                logging.WARNING,
-                                f"{where.capitalize()}: Neither 'class' nor 'property' specified for host '{escape_single_quotes(host_key)}' in 'detect' for model '{escape_single_quotes(model_key)}'. Discarding host.",
-                            )
-                            defcfg_m_detect.pop(host_key, None)
-                            result = 1
-                if "variants" in model_value:
-                    if not isinstance(model_value["variants"], dict):
-                        self.log(
-                            logging.WARNING,
-                            f"{where.capitalize()}: Invalid format for 'variants' in model '{escape_single_quotes(model_key)}'. Discarding model.",
+            model_fields: dict[str, dict | None] = {}
+            if parsed_detect is not None:
+                model_fields["detect"] = parsed_detect
+            if "variants" in model_value:
+                if not isinstance(model_value["variants"], dict):
+                    self.logger.warning(
+                        f"{where.capitalize()}: Invalid format for 'variants' in model '{escape_single_quotes(model_key)}'. Discarding model."
+                    )
+                    result = 1
+                    continue
+                parsed_variants: dict[str, VariantConfig | None] = {}
+                skip_model = False
+                for variant_key, variant_value in model_value["variants"].items():
+                    if not isinstance(variant_key, str) or not variant_key.isidentifier():
+                        self.logger.warning(
+                            f"{where.capitalize()}: Invalid variant name '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant."
                         )
-                        defcfg_models.pop(model_key, None)
                         result = 1
                     else:
-                        defcfg_m_variants: dict[str, Any] = model_value["variants"]
-                        for variant_key, variant_value in dict(defcfg_m_variants).items():
-                            if not isinstance(variant_key, str) or not variant_key.isidentifier():
-                                self.log(
-                                    logging.WARNING,
-                                    f"{where.capitalize()}: Invalid variant name '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                                )
-                                defcfg_m_variants.pop(variant_key, None)
-                                result = 1
-                            elif not isinstance(variant_value, dict) or not isinstance(
-                                variant_value.get("find_in_filename"), (str, dict, list)
-                            ):
-                                self.log(
-                                    logging.WARNING,
-                                    f"{where.capitalize()}: Invalid format for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}'. Discarding variant.",
-                                )
-                                defcfg_m_variants.pop(variant_key, None)
-                                result = 1
-                            else:
-                                if isinstance(variant_value["find_in_filename"], list):
-                                    normalized_list = []
-                                    for elem in variant_value["find_in_filename"]:
-                                        validated_elem = self.__validate_find_in_filename_element(
-                                            where, model_key, variant_key, elem
-                                        )
-                                        if validated_elem is not None:
-                                            normalized_list.append(validated_elem)
-                                    if len(normalized_list) != len(variant_value["find_in_filename"]):
-                                        defcfg_m_variants.pop(variant_key, None)
-                                        result = 1
-                                    else:
-                                        variant_value["find_in_filename"] = normalized_list
-                                else:
-                                    variant_value["find_in_filename"] = [
-                                        self.__validate_find_in_filename_element(
-                                            where, model_key, variant_key, variant_value["find_in_filename"]
-                                        )
-                                    ]
-        return result
+                        try:
+                            parsed_variants[variant_key] = VariantConfig.model_validate(variant_value)
+                        except ValidationError as exc:
+                            self.logger.warning(
+                                f"{where.capitalize()}: Invalid format for variant '{escape_single_quotes(variant_key)}' in model '{escape_single_quotes(model_key)}': {exc}. Discarding variant."
+                            )
+                            result = 1
+                if skip_model:
+                    continue
+                model_fields["variants"] = parsed_variants or None
+            parsed_models[model_key] = ModelConfig(**model_fields)
+        return (
+            PPPConfig(
+                hosts=parsed_hosts or None,
+                models=parsed_models or None,
+            ),
+            result,
+        )
 
     def envinfo_hash(self) -> str:
         """
@@ -615,7 +564,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 is_models[model_name] = False
             else:
                 is_models[model_name] = any(
-                    (re.search(dre["regex"], model_filename, dre["flags"]) is not None)
+                    (re.search(dre.regex, model_filename, dre.flags) is not None)
                     for dre in model_type_and_substrings[1]
                 )
         is_models_true = [k for k, v in is_models.items() if v]
@@ -738,7 +687,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             str: The resulting text.
         """
-        break_processing = self.state.host_config.get("break", "ok")
+        break_processing = self.state.host_config.break_
         # break_processing == "ok" (and always)
         if self.state.options.cup_breaks_eol:
             # replace spaces before break with EOL
