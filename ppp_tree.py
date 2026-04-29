@@ -146,39 +146,39 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         return node.meta.content if hasattr(node, "meta") and node.meta is not None and not node.meta.empty else default
 
-    def __parse_idxsep(self, idxsep: str | None) -> tuple[Optional[int], Optional[str], Optional[bool]]:
+    def __parse_array_specifier(self, specifier: str | None) -> tuple[Optional[int], Optional[str], Optional[bool]]:
         """
         Convert an index/separator/count string to a specific type.
 
         Args:
-            idxsep (str|None): The index or separator string.
+            specifier (str|None): The specifier string.
 
         Returns:
             tuple: A tuple containing the index, separator and count boolean.
         """
-        if idxsep is None:
+        if specifier is None:
             return None, None, None
-        is_quoted = idxsep.startswith(("'", '"')) and idxsep.endswith(("'", '"'))
-        if idxsep == "#":  # special value to indicate length of the array variable
+        if specifier == "#":  # special value to indicate length of the array variable
             return None, None, True
-        if not idxsep.isdecimal() and not is_quoted:
+        if specifier.startswith("&"): # special value to indicate a separator
+            return None, specifier[2:-1], False
+        if not specifier.isdecimal():
             # bare identifier: resolve as variable
-            idxsep = self.get_final_user_variable(idxsep)
-            is_quoted = False
-        if idxsep.isdecimal():
-            return int(idxsep), None, False
-        # separator: strip surrounding quotes if present
-        return None, idxsep[1:-1] if is_quoted else idxsep, False
+            specifier = self.get_final_user_variable(specifier)
+        if specifier.isdecimal():
+            return int(specifier), None, False
+        # invalid specifier
+        return None, None, False
 
     def __get_user_variable_value(
-        self, name: str, idxsep: str | None = None, evaluate=True, visit=False
+        self, name: str, specifier: str | None = None, evaluate=True, visit=False
     ) -> str | list[str] | None:
         """
         Get the value of a user variable.
 
         Args:
             name (str): The name of the user variable.
-            idxsep (str|None): The index for an array variable or a separator.
+            specifier (str|None): The specifier for an array variable.
             evaluate (bool): Whether to evaluate the variable.
             visit (bool): Whether to also visit the variable (add to result).
 
@@ -206,7 +206,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         is_array = name[-2:] == "[]"
         if is_array:
             if isinstance(v, list):
-                idx, sep, cnt = self.__parse_idxsep(idxsep)
+                idx, sep, cnt = self.__parse_array_specifier(specifier)
                 if cnt:
                     v = len(v)
                     if visit:
@@ -227,43 +227,43 @@ class TreeProcessor(lark.visitors.Interpreter):
                     v = v2
             else:
                 v = None  # error
-        elif idxsep is not None:
+        elif specifier is not None:
             v = None  # error
         else:
             v = visit_value(v)
         return v
 
-    def __separate_arrayref(self, nameidx: str):
+    def __separate_arrayref(self, name_specifier: str):
         """
-        Separate the name and index/sep part of a variable reference.
+        Separate the name and specifier part of a variable reference.
 
         Args:
-            nameidx (str): The variable reference string.
+            name_specifier (str): The variable reference string.
 
         Returns:
-            tuple: A tuple containing the name and index/sep part.
+            tuple: A tuple containing the name and specifier part.
         """
-        name, isarray, idxsep = re.match(r"^([^\[]+)(\[([^[]*)\])?$", nameidx).groups()
+        name, isarray, specifier = re.match(r"^([^\[]+)(\[([^[]*)\])?$", name_specifier).groups()
         if isarray:
             name += "[]"
-        if idxsep == "":
-            idxsep = None
-        return name, idxsep
+        if specifier == "":
+            specifier = None
+        return name, specifier
 
-    def get_final_user_variable(self, nameidx: str) -> str:
+    def get_final_user_variable(self, name_specifier: str) -> str:
         """
         Get the final value of a user variable, resolving any references if needed.
 
         Args:
-            nameidx (str): The variable reference string.
+            name_specifier (str): The variable reference string.
 
         Returns:
             str: The final value of the user variable.
         """
-        name, idxsep = self.__separate_arrayref(nameidx)
-        v = self.__get_user_variable_value(name, idxsep, True, False)
+        name, specifier = self.__separate_arrayref(name_specifier)
+        v = self.__get_user_variable_value(name, specifier, True, False)
         if isinstance(v, list):
-            _, sep, _ = self.__parse_idxsep(idxsep)
+            _, sep, _ = self.__parse_array_specifier(specifier)
             if sep is None:
                 sep = self.state.options.choice_separator
             v = sep.join(str(item) for item in v)
@@ -375,8 +375,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             val = self.state.system_variables.get(c, None)
         else:
             vartype = "user"
-            varname, varidxsep = self.__separate_arrayref(c)
-            val = self.__get_user_variable_value(varname, varidxsep)
+            varname, varspecifier = self.__separate_arrayref(c)
+            val = self.__get_user_variable_value(varname, varspecifier)
         if val is None:
             val = ""
             self.warn_or_stop(f"Unknown {vartype} variable '{escape_single_quotes(c)}'")
@@ -605,12 +605,15 @@ class TreeProcessor(lark.visitors.Interpreter):
             tuple[str, str | None]: A tuple containing the name and index/sep part of the variable descriptor.
         """
         vardescriptor_name = str(vardescriptor.children[0])
-        vardescriptor_idx = None
+        vardescriptor_specifier = None
         if vardescriptor.children[1] is not None:
             vardescriptor_name += "[]"
             if vardescriptor.children[2] is not None:
-                vardescriptor_idx = vardescriptor.children[2]
-        return vardescriptor_name, vardescriptor_idx
+                if isinstance(vardescriptor.children[2], lark.Token):
+                    vardescriptor_specifier = str(vardescriptor.children[2])
+                else:
+                    vardescriptor_specifier = "".join(vardescriptor.children[2].children)
+        return vardescriptor_name, vardescriptor_specifier
 
     def __get_complex_element(self, value_node: lark.Tree | lark.Token) -> str:
         """
@@ -624,10 +627,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         if isinstance(value_node, lark.Tree):
             # it's a vardescriptor_get
-            vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(value_node)
+            vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(value_node)
             return (
-                vardescriptor_name[0:-2] + f"[{vardescriptor_idx}]"
-                if vardescriptor_idx is not None
+                vardescriptor_name[0:-2] + f"[{vardescriptor_specifier}]"
+                if vardescriptor_specifier is not None
                 else vardescriptor_name
             )
         # it's a SIMPLEVALUE
@@ -972,7 +975,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         self,
         command: str,
         variable_name: str,
-        variable_idx: str | None,
+        variable_specifier: str | None,
         modifiers: lark.Tree | None,
         content: lark.Tree | None,
     ):
@@ -988,27 +991,27 @@ class TreeProcessor(lark.visitors.Interpreter):
             return
         info = variable_name
         is_array = variable_name[-2:] == "[]"
-        if variable_idx is not None:
+        if variable_specifier is not None:
             if not is_array:
                 self.warn_or_stop(
                     f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! Only array variables can be indexed."
                 )
                 return
-            info = f"{variable_name[0:-2]}[{variable_idx}]"
+            info = f"{variable_name[0:-2]}[{variable_specifier}]"
         value_description = self.__get_original_node_content(content, None)
         value = content
         raw_oldvalue = self.state.user_variables.get(variable_name, None)
         newvalue = None
         some_error = False
-        if variable_idx is not None:
+        if variable_specifier is not None:
             if (
                 is_array
                 and raw_oldvalue is not None
                 and isinstance(raw_oldvalue, list)
-                and not 0 <= int(variable_idx) < len(raw_oldvalue)
+                and not 0 <= int(variable_specifier) < len(raw_oldvalue)
             ):
                 self.warn_or_stop(
-                    f"Invalid index {variable_idx} for variable '{escape_single_quotes(variable_name)}'! Index out of bounds."
+                    f"Invalid index {variable_specifier} for variable '{escape_single_quotes(variable_name)}'! Index out of bounds."
                 )
                 some_error = True
             if not is_array:
@@ -1059,7 +1062,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 newvalue = value
         if newvalue is not None:
             is_starred = isinstance(newvalue, lark.Tree) and newvalue.data == "starredvalue"
-            access_full_array = is_array and variable_idx is None
+            access_full_array = is_array and variable_specifier is None
             if any(item in modifiers_str for item in ["!", "evaluate"]):
                 newvalue = self.__visit(newvalue, False, True)
                 info += " =! "
@@ -1068,8 +1071,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             if is_starred:
                 if access_full_array and isinstance(newvalue.children[0], lark.Tree):
                     if newvalue.children[0].data == "vardescriptor_get":
-                        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(newvalue.children[0])
-                        if vardescriptor_idx is not None:
+                        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(newvalue.children[0])
+                        if vardescriptor_specifier is not None:
                             newvalue = None
                         else:
                             newvalue = self.__get_user_variable_value(vardescriptor_name, None)
@@ -1091,10 +1094,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                     )
                     newvalue = ""
             if is_array:
-                if variable_idx is not None:
+                if variable_specifier is not None:
                     # Accessing an existing index, we need to update the array
                     newarray = raw_oldvalue.copy()
-                    newarray[int(variable_idx)] = newvalue
+                    newarray[int(variable_specifier)] = newvalue
                     newvalue = newarray
                 else:
                     # Accessing the whole array
@@ -1109,7 +1112,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         else:
                             newvalue = raw_oldvalue + [newvalue]
             self.__set_user_variable_value(variable_name, newvalue)
-            currentvalue = self.__get_user_variable_value(variable_name, variable_idx, False)
+            currentvalue = self.__get_user_variable_value(variable_name, variable_specifier, False)
             if currentvalue is None:
                 info += "error"
             elif isinstance(currentvalue, list):
@@ -1128,21 +1131,21 @@ class TreeProcessor(lark.visitors.Interpreter):
         if immediate is not None:
             modifiers.children = modifiers.children.copy()
             modifiers.children.append(immediate)
-        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(tree.children[0])
-        self.__varset("variableset", vardescriptor_name, vardescriptor_idx, modifiers, tree.children[3])
+        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(tree.children[0])
+        self.__varset("variableset", vardescriptor_name, vardescriptor_specifier, modifiers, tree.children[3])
 
     def commandset(self, tree: lark.Tree):
         """
         Process a set command in the tree and add it to the dictionary of variables.
         """
-        vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(tree.children[0])
-        self.__varset("commandset", vardescriptor_name, vardescriptor_idx, tree.children[1], tree.children[2])
+        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(tree.children[0])
+        self.__varset("commandset", vardescriptor_name, vardescriptor_specifier, tree.children[1], tree.children[2])
 
     def __varecho(
         self,
         command: str,
         variable_name: str,
-        variable_idxsep: str | None,
+        variable_specifier: str | None,
         default: lark.Tree | None,
     ):
         """
@@ -1154,7 +1157,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         # if default is not None:
         #     default_value = self.__visit(default, True)  # for log
         is_array = variable_name[-2:] == "[]"
-        vname = f"{variable_name[0:-2]}[{variable_idxsep}]" if variable_idxsep is not None else variable_name
+        vname = f"{variable_name[0:-2]}[{variable_specifier}]" if variable_specifier is not None else variable_name
         if variable_name.startswith("_"):
             is_systemvar = True
             value = self.state.system_variables.get(variable_name, None)
@@ -1162,7 +1165,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.result += value
         else:
             is_systemvar = False
-            value = self.__get_user_variable_value(variable_name, variable_idxsep, True, True)
+            value = self.__get_user_variable_value(variable_name, variable_specifier, True, True)
         if value is None:
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
@@ -1177,8 +1180,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.state.echoed_variables[vname] = value
         t2 = time.monotonic_ns()
         info = variable_name
-        if is_array and variable_idxsep is not None:
-            info = info[0:-2] + f"[{variable_idxsep}]"
+        if is_array and variable_specifier is not None:
+            info = info[0:-2] + f"[{variable_specifier}]"
         if default_value is not None:
             info += f" with default '{escape_single_quotes(default_value)}'"
         self.__debug_end(command, start_result, t2 - t1, info)
@@ -1187,11 +1190,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a DP use variable command in the tree.
         """
-        vardescriptor_name, vardescriptor_idxsep = self.__separate_vardescriptor(tree.children[0])
+        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(tree.children[0])
         self.__varecho(
             "variableuse",
             vardescriptor_name,
-            vardescriptor_idxsep,
+            vardescriptor_specifier,
             tree.children[1] if len(tree.children) > 1 else None,
         )
 
@@ -1199,11 +1202,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process an echo command in the tree.
         """
-        vardescriptor_name, vardescriptor_idxsep = self.__separate_vardescriptor(tree.children[0])
+        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(tree.children[0])
         self.__varecho(
             "commandecho",
             vardescriptor_name,
-            vardescriptor_idxsep,
+            vardescriptor_specifier,
             tree.children[1] if len(tree.children) > 1 else None,
         )
 
@@ -1887,13 +1890,13 @@ class TreeProcessor(lark.visitors.Interpreter):
             variablename = None
             variablebackup = None
             if var_object is not None:
-                vardescriptor_name, vardescriptor_idx = self.__separate_vardescriptor(var_object.children[0])
+                vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(var_object.children[0])
                 variablename = vardescriptor_name
                 # variablevalue = self.__visit(var_object.children[1], False, True)
                 variablebackup = self.state.user_variables.get(variablename, None)
                 # self.__remove_user_variable(variablename)
                 # self.__set_user_variable_value(variablename, variablevalue)
-                self.__varset("wildcard", variablename, vardescriptor_idx, None, var_object.children[1])
+                self.__varset("wildcard", variablename, vardescriptor_specifier, None, var_object.children[1])
             choice_values_all = []
             for wildcard in selected_wildcards:
                 if wildcard is None:

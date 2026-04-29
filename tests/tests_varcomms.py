@@ -108,11 +108,11 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_array_variable_1(self):  # array variable set with += and test of index value and full array with and without default separator
         self.process(
             PromptPair(
-                "${v1[]=val1}${v1[]+=val2}${v1[]+=val3}${v1[1]:defval},${v1[]:defval2},${v1['.']:defval3}",
+                "${v1[]=val1}${v1[]+=val2}${v1[]+=val3}${v1[1]:defval},${v1[]:defval2},${v1[&'.']:defval3}",
                 "",
             ),
             PromptPair("val2,val1, val2, val3,val1.val2.val3", ""),
-            variables={"v1[]": "val1, val2, val3", "v1[1]": "val2", "v1['.']": "val1.val2.val3"},
+            variables={"v1[]": "val1, val2, val3", "v1[1]": "val2", "v1[&'.']": "val1.val2.val3"},
         )
 
     def test_array_variable_2(self):  # override of array variable value, test of default value when array variable is empty, test of default value when array variable is not set
@@ -128,11 +128,11 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_array_variable_3(self):  # access array index by variable, set array variable to expanded array variable and add expanded array
         self.process(
             PromptPair(
-                "${v1[]=val1}${v1[]+=val2}${v2=1}${v1[v2]:defval1}${v3[]=${v1[]}}${v3[]+=${v1[]}}, ${v3['.']}",
+                "${v1[]=val1}${v1[]+=val2}${v2=1}${v1[v2]:defval1}${v3[]=${v1[]}}${v3[]+=${v1[]}}, ${v3[&'.']}",
                 "",
             ),
             PromptPair("val2, val1, val2.val1, val2", ""),
-            variables={"v1[]": "val1, val2", "v2": "1", "v1[v2]": "val2", "v3[]": "val1, val2, val1, val2"},
+            variables={"v1[]": "val1, val2", "v2": "1", "v1[v2]": "val2", "v3[]": "val1, val2, val1, val2", "v3[&'.']": "val1, val2.val1, val2"},
         )
 
     def test_array_variable_4(self):  # test list in array

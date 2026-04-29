@@ -94,7 +94,8 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
 ?encontent.3: content_en
 
 //#if ALLOW_COMMVARS or ALLOW_CHOICES or ALLOW_WILDCARDS
-    vardescriptor_get.8: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER | STRING | /#/ ] /\]/ ]
+    vardescriptor_get.8: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER | separator_descriptor | /#/ ] /\]/ ]
+    separator_descriptor: /&/ STRING
     vardescriptor_set.9: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER ] /\]/ ]
 
     // conditions

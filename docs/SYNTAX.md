@@ -252,19 +252,19 @@ They can be initialized in several ways:
 | `${var[]+=*var2[]}`        | add elements from another array                                  |
 | `${var[]+=*__wildcard__}`  | add elements from a wildcard                                     |
 
-The star operator `*` is always with inmediate evaluation, and can only be used with the *Dynamic Prompts* format.
+The star operator `*` is always with inmediate evaluation.
 
 And can be accesed/echoed with:
 
 * Empty brackets mean the whole array (used when initializing or when echoing the whole array)
 * An integer inside the brackets means an indexed value
 * A hash inside the brackets is used to get the length of the array
-* A string inside the brackets (with quotes) is used to get the full array joined with a separator.
+* An ampersand followed by a string inside the brackets (with quotes) is used to get the full array joined with a separator.
 
 | Construct                  | Meaning                                                          |
 | ---------                  | -------                                                          |
 | `${var[]}`                 | echo all elements with a default separator                       |
-| `${var[' / ']}`            | echo all elements with a specific separator                      |
+| `${var[&' / ']}`           | echo all elements with a specific separator                      |
 | `${var[n]}`                | echo an element from the array                                   |
 | `${var[n]:default}`        | echo an element with a default                                   |
 | `${var[#]}`                | echo the length of the array                                     |
