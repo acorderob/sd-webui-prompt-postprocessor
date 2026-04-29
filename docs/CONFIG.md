@@ -25,6 +25,7 @@ Inputs:
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
 * **debug_level**: What to write to the console.
 * **on_warnings**: Warn on the console or stop the generation.
+* **strict_mode**: Sets the strict mode in comparison operations.
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
@@ -130,7 +131,8 @@ Options for extranetworks mapping, in case you want to change them from the defa
 ### General settings
 
 * **Debug level**: What to write to the console. Note: in *SD.Next* debug messages only show if you launch it with the `--debug` argument.
-* **What to do on invalid content warnings?**: Warn on the console or stop the generation. This also affects the use of unknown variables, and integer comparisons with undefined or non-numeric variables: in *warn* mode the comparison evaluates to false, in *stop* mode the generation is stopped with an error.
+* **What to do on invalid content warnings**: Warn on the console or stop the generation. This also affects the use of unknown variables, and integer comparisons with undefined or non-numeric variables: in *warn* mode the comparison evaluates to false, in *stop* mode the generation is stopped with an error.
+* **Use strict operators**: Sets strict operations in comparisons.
 * **Apply in img2img**: Check if you want to do the processing in img2img processes.
 * **Add original prompts to metadata**: Adds original prompts to the metadata if they have changed.
 * **Extranetwork Mappings folders**: You can enter multiple folders separated by commas.

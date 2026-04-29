@@ -146,27 +146,29 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         return node.meta.content if hasattr(node, "meta") and node.meta is not None and not node.meta.empty else default
 
-    def __idxsep_to_idx_sep(self, idxsep: str | None) -> tuple[Optional[int], Optional[str]]:
+    def __parse_idxsep(self, idxsep: str | None) -> tuple[Optional[int], Optional[str], Optional[bool]]:
         """
-        Convert an index or separator string to an index and a separator.
+        Convert an index/separator/count string to a specific type.
 
         Args:
             idxsep (str|None): The index or separator string.
 
         Returns:
-            tuple: A tuple containing the index and separator.
+            tuple: A tuple containing the index, separator and count boolean.
         """
         if idxsep is None:
-            return None, None
+            return None, None, None
         is_quoted = idxsep.startswith(("'", '"')) and idxsep.endswith(("'", '"'))
-        if not idxsep.isdigit() and not is_quoted:
+        if idxsep == "#":  # special value to indicate length of the array variable
+            return None, None, True
+        if not idxsep.isdecimal() and not is_quoted:
             # bare identifier: resolve as variable
             idxsep = self.get_final_user_variable(idxsep)
             is_quoted = False
-        if idxsep.isdigit():
-            return int(idxsep), None
+        if idxsep.isdecimal():
+            return int(idxsep), None, False
         # separator: strip surrounding quotes if present
-        return None, idxsep[1:-1] if is_quoted else idxsep
+        return None, idxsep[1:-1] if is_quoted else idxsep, False
 
     def __get_user_variable_value(
         self, name: str, idxsep: str | None = None, evaluate=True, visit=False
@@ -192,6 +194,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                     visited = visit
                 else:
                     v = self.__get_original_node_content(v, "")
+            elif isinstance(v, lark.Token):
+                v = str(v)
             if visit and not visited:
                 self.result += v
             return v
@@ -202,8 +206,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         is_array = name[-2:] == "[]"
         if is_array:
             if isinstance(v, list):
-                idx, sep = self.__idxsep_to_idx_sep(idxsep)
-                if idx is not None:
+                idx, sep, cnt = self.__parse_idxsep(idxsep)
+                if cnt:
+                    v = len(v)
+                    if visit:
+                        self.result += str(v)
+                elif idx is not None:
                     if 0 <= idx < len(v):
                         v = visit_value(v[idx])
                     else:
@@ -255,11 +263,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         name, idxsep = self.__separate_arrayref(nameidx)
         v = self.__get_user_variable_value(name, idxsep, True, False)
         if isinstance(v, list):
-            _, sep = self.__idxsep_to_idx_sep(idxsep)
+            _, sep, _ = self.__parse_idxsep(idxsep)
             if sep is None:
                 sep = self.state.options.choice_separator
             v = sep.join(str(item) for item in v)
-        return v
+        return str(v)
 
     def __set_user_variable_value(self, name: str, value: str | lark.Tree | list):
         """
@@ -298,22 +306,26 @@ class TreeProcessor(lark.visitors.Interpreter):
                 output = f" >> '{escape_single_quotes(output)}'"
             self.log(logging.DEBUG, f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
 
-    def __adjust_strnum(self, s: str) -> str | int:
+    def __adjust_strnum(self, s: str) -> str | int | float:
         """
         Adjust a string that may represent a number to its appropriate type.
-        If it is a digit and does not have leading zeros (unless it's just "0"), it is converted to an integer.
+        If it is a number, it is converted to an integer or float.
 
         Args:
             s (str): The string to adjust.
 
         Returns:
-            str | int: The adjusted string or integer.
+            str | int | float: The adjusted string, integer, or float.
         """
-        if s.isdigit() and not (s.startswith("0") and len(s) > 1):
+        try:
             return int(s)
+        except ValueError:
+            pass
+        if bool(re.match(r"^[+-]?\d+\.\d+$", s)):
+            return float(s)
         return s.lower()
 
-    def warn_mixedtype(self, desc: str, operand1, operand2, operation):
+    def __warn_mixedtype(self, desc: str, operand1, operand2, operation):
         """
         Warn the user if mixed type values are used in a comparison.
 
@@ -327,15 +339,15 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.warn_or_stop(f"Undefined value used in comparison: '{escape_single_quotes(desc)}'")
             return False
         if (
-            isinstance(operand1, (str, int, bool))
-            and isinstance(operand2, (str, int, bool))
+            isinstance(operand1, (str, int, float, bool))
+            and isinstance(operand2, (str, int, float, bool))
             and operand1.__class__ != operand2.__class__
         ):
             self.warn_or_stop(f"Mixed type values used in comparison: '{escape_single_quotes(desc)}'")
             return False
         return operation(operand1, operand2)
 
-    def __resolve_operand(self, c: str) -> str | bool | int:
+    def __resolve_operand(self, c: str) -> str | bool | int | float:
         """
         Resolve an operand value.
 
@@ -343,12 +355,16 @@ class TreeProcessor(lark.visitors.Interpreter):
             c (str): The operand value to resolve.
 
         Returns:
-            str | bool | int: The resolved operand value (in lowercase for strings).
+            str | bool | int | float: The resolved operand value (in lowercase for strings).
         """
         if c.startswith('"') and c.endswith('"') or c.startswith("'") and c.endswith("'"):
-            return c[1:-1].lower() # self.__adjust_strnum(c[1:-1])
-        if c.isdigit():
+            return c[1:-1].lower() if self.state.options.strict_operators else self.__adjust_strnum(c[1:-1])
+        try:
             return int(c)
+        except ValueError:
+            pass
+        if bool(re.match(r"^[+-]?\d+\.\d+$", c)):
+            return float(c)
         if c.lower() in ("false", ""):
             return False
         if c.lower() == "true":
@@ -365,15 +381,36 @@ class TreeProcessor(lark.visitors.Interpreter):
             val = ""
             self.warn_or_stop(f"Unknown {vartype} variable '{escape_single_quotes(c)}'")
         if isinstance(val, str):
-            if val.isdigit():
-                val = int(val)
-            else:
-                val = self.__adjust_strnum(val)
-                if val in ("false", ""):
-                    return False
-                if val == "true":
-                    return True
+            try:
+                return int(val)
+            except ValueError:
+                pass
+            if bool(re.match(r"^[+-]?\d+\.\d+$", val)):
+                return float(val)
+            if val in ("false", ""):
+                return False
+            if val == "true":
+                return True
+            val = val.lower()
         return val
+
+    def __wmt(self, cond_desc, a, b, op):
+        return self.__warn_mixedtype(cond_desc, a, b, op)
+
+    def __pairwise_all(self, cond_desc, op1v, op2v, op):
+        return all(self.__wmt(cond_desc, a, b, op) for a, b in zip(op1v, op2v))
+
+    def __alltoone_all(self, cond_desc, op1v, op2v, op):
+        if isinstance(op1v, list):
+            return all(self.__wmt(cond_desc, a, op2v, op) for a in op1v)
+        else:
+            return all(self.__wmt(cond_desc, op1v, b, op) for b in op2v)
+
+    def __alltoone_any(self, cond_desc, op1v, op2v, op):
+        if isinstance(op1v, list):
+            return any(self.__wmt(cond_desc, a, op2v, op) for a in op1v)
+        else:
+            return any(self.__wmt(cond_desc, op1v, b, op) for b in op2v)
 
     def __eval_basiccondition(
         self,
@@ -408,64 +445,144 @@ class TreeProcessor(lark.visitors.Interpreter):
         if operator == "truthy":
             result = bool(operand1_value)
         else:
-            def pairwise_all(op):
-                return all(op(a, b) for a, b in zip(operand1_value, operand2_value))
-
-            def wmt(a, b, op):
-                return self.warn_mixedtype(cond_desc, a, b, op)
-
             if not operand1_isarray and not operand2_isarray:
                 operations = {
-                    "eq": lambda: wmt(operand1_value, operand2_value, lambda x, y: x == y),
-                    "ne": lambda: wmt(operand1_value, operand2_value, lambda x, y: x != y),
-                    "gt": lambda: wmt(operand1_value, operand2_value, lambda x, y: x > y),
-                    "lt": lambda: wmt(operand1_value, operand2_value, lambda x, y: x < y),
-                    "ge": lambda: wmt(operand1_value, operand2_value, lambda x, y: x >= y),
-                    "le": lambda: wmt(operand1_value, operand2_value, lambda x, y: x <= y),
-                    "in": lambda: wmt(str(operand1_value), str(operand2_value), lambda x, y: x in y),
-                    "contains": lambda: wmt(str(operand1_value), str(operand2_value), lambda x, y: y in x),
+                    "eq": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x == y),
+                    "ne": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x != y),
+                    "gt": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x > y),
+                    "lt": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x < y),
+                    "ge": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x >= y),
+                    "le": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x <= y),
+                    "in": lambda: self.__wmt(cond_desc, str(operand1_value), str(operand2_value), lambda x, y: x in y),
+                    "any_in": None,  # does not make sense
+                    "contains": lambda: self.__wmt(
+                        cond_desc, str(operand1_value), str(operand2_value), lambda x, y: y in x
+                    ),
+                    "contains_any": None,  # does not make sense
                 }
             elif operand1_isarray and operand2_isarray:
                 operations = {
                     "eq": lambda: len(operand1_value) == len(operand2_value)
-                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x == y)),
+                    and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x == y),
                     "ne": lambda: len(operand1_value) != len(operand2_value)
-                    or pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x != y)),
+                    or self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x != y),
                     "gt": lambda: len(operand1_value) == len(operand2_value)
-                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x > y)),
+                    and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x > y),
                     "lt": lambda: len(operand1_value) == len(operand2_value)
-                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x < y)),
+                    and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x < y),
                     "ge": lambda: len(operand1_value) == len(operand2_value)
-                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x >= y)),
+                    and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x >= y),
                     "le": lambda: len(operand1_value) == len(operand2_value)
-                    and pairwise_all(lambda a, b: wmt(a, b, lambda x, y: x <= y)),
-                    "in": lambda: all(wmt(a, operand2_value, lambda x, y: x in y) for a in operand1_value),
-                    "contains": lambda: all(wmt(a, operand1_value, lambda x, y: x in y) for a in operand2_value),
+                    and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x <= y),
+                    "in": lambda: self.__alltoone_all(cond_desc, operand1_value, operand2_value, lambda x, y: x in y),
+                    # all(
+                    #     self.__wmt(cond_desc, a, operand2_value, lambda x, y: x in y) for a in operand1_value
+                    # ),
+                    "any_in": lambda: self.__alltoone_any(
+                        cond_desc, operand1_value, operand2_value, lambda x, y: x in y
+                    ),
+                    # any(
+                    #     self.__wmt(cond_desc, a, operand2_value, lambda x, y: x in y) for a in operand1_value
+                    # ),
+                    "contains": lambda: self.__alltoone_all(
+                        cond_desc, operand2_value, operand1_value, lambda x, y: x in y
+                    ),
+                    # all(
+                    #     self.__wmt(cond_desc, a, operand1_value, lambda x, y: x in y) for a in operand2_value
+                    # ),
+                    "contains_any": lambda: self.__alltoone_any(
+                        cond_desc, operand2_value, operand1_value, lambda x, y: x in y
+                    ),
+                    # any(
+                    #     self.__wmt(cond_desc, a, operand1_value, lambda x, y: x in y) for a in operand2_value
+                    # ),
                 }
             elif operand1_isarray and not operand2_isarray:
-                operations = {
-                    "eq": lambda: False,
-                    "ne": lambda: True,
-                    # "gt": lambda: False,
-                    # "lt": lambda: False,
-                    # "ge": lambda: False,
-                    # "le": lambda: False,
-                    "in": lambda: any(wmt(str(a), str(operand2_value), lambda x, y: x in y) for a in operand1_value),
-                    "contains": lambda: wmt(operand1_value, operand2_value, lambda x, y: y in x),
-                }
+                if self.state.options.strict_operators:
+                    operations = {
+                        "eq": None,  # does not make sense
+                        "ne": None,  # does not make sense
+                        "gt": None,  # does not make sense
+                        "lt": None,  # does not make sense
+                        "ge": None,  # does not make sense
+                        "le": None,  # does not make sense
+                    }
+                else:
+                    operations = {
+                        "eq": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x == y
+                        ),
+                        "ne": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x != y
+                        ),
+                        "gt": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x > y
+                        ),
+                        "lt": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x < y
+                        ),
+                        "ge": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x >= y
+                        ),
+                        "le": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x <= y
+                        ),
+                    }
+                operations.update(
+                    {
+                        "in": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: str(x) in str(y)
+                        ),
+                        "any_in": lambda: self.__alltoone_any(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: str(x) in str(y)
+                        ),
+                        "contains": lambda: self.__wmt(cond_desc, operand2_value, operand1_value, lambda x, y: x in y),
+                        "contains_any": None,  # does not make sense
+                    }
+                )
             elif not operand1_isarray and operand2_isarray:
-                operations = {
-                    "eq": lambda: False,
-                    "ne": lambda: True,
-                    # "gt": lambda: False,
-                    # "lt": lambda: False,
-                    # "ge": lambda: False,
-                    # "le": lambda: False,
-                    "in": lambda: wmt(operand1_value, operand2_value, lambda x, y: x in y),
-                    "contains": lambda: all(
-                        wmt(str(operand1_value), str(a), lambda x, y: y in x) for a in operand2_value
-                    ),
-                }
+                if self.state.options.strict_operators:
+                    operations = {
+                        "eq": None,  # does not make sense
+                        "ne": None,  # does not make sense
+                        "gt": None,  # does not make sense
+                        "lt": None,  # does not make sense
+                        "ge": None,  # does not make sense
+                        "le": None,  # does not make sense
+                    }
+                else:
+                    operations = {
+                        "eq": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x == y
+                        ),
+                        "ne": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x != y
+                        ),
+                        "gt": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x > y
+                        ),
+                        "lt": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x < y
+                        ),
+                        "ge": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x >= y
+                        ),
+                        "le": lambda: self.__alltoone_all(
+                            cond_desc, operand1_value, operand2_value, lambda x, y: x <= y
+                        ),
+                    }
+                operations.update(
+                    {
+                        "in": lambda: self.__wmt(cond_desc, operand1_value, operand2_value, lambda x, y: x in y),
+                        "any_in": None,  # does not make sense
+                        "contains": lambda: self.__alltoone_all(
+                            cond_desc, operand2_value, operand1_value, lambda x, y: str(x) in str(y)
+                        ),
+                        "contains_any": lambda: self.__alltoone_any(
+                            cond_desc, operand2_value, operand1_value, lambda x, y: str(x) in str(y)
+                        ),
+                    }
+                )
             else:
                 operations = {}
             operation = operations.get(operator, None)
@@ -565,7 +682,11 @@ class TreeProcessor(lark.visitors.Interpreter):
                 # no condition, just a variable
                 cond_operation = "truthy"
                 cond_operand2 = "true"
-                cond_desc = cond_operand1 if isinstance(cond_operand1, str) else "(" + ", ".join(str(c) for c in cond_operand1) + ")"
+                cond_desc = (
+                    cond_operand1
+                    if isinstance(cond_operand1, str)
+                    else "(" + ", ".join(str(c) for c in cond_operand1) + ")"
+                )
             else:
                 # we get the comparison (with possible not) and the value
                 cond_operation = str(condition.children[poscomp])
@@ -1034,19 +1155,25 @@ class TreeProcessor(lark.visitors.Interpreter):
         #     default_value = self.__visit(default, True)  # for log
         is_array = variable_name[-2:] == "[]"
         vname = f"{variable_name[0:-2]}[{variable_idxsep}]" if variable_idxsep is not None else variable_name
-        value = self.__get_user_variable_value(variable_name, variable_idxsep, True, True)
+        if variable_name.startswith("_"):
+            is_systemvar = True
+            value = self.state.system_variables.get(variable_name, None)
+            if value is not None:
+                self.result += value
+        else:
+            is_systemvar = False
+            value = self.__get_user_variable_value(variable_name, variable_idxsep, True, True)
         if value is None:
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
-                v = self.__visit(default, False, True)
-                self.result += v
-                default_value = v
-                self.state.echoed_variables[vname] = v
+                value = self.__visit(default, False, True)
+                self.result += value
+                default_value = value
             else:
                 self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
                 default_value = ""
-                self.state.echoed_variables[vname] = ""
-        else:
+                value = ""
+        if not is_systemvar:
             self.state.echoed_variables[vname] = value
         t2 = time.monotonic_ns()
         info = variable_name

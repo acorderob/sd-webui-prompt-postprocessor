@@ -185,6 +185,17 @@ class TestVarCommands(TestPromptPostProcessorBase):
             variables={"v1[]": "one, two, three, four", "v2": "three"},
         )
 
+    def test_array_variable_9(self):  # array variable length
+        self.process(
+            PromptPair(
+                "${v1[]=val1}${v1[]+=val2}${v1[]+=val3}${v1[#]:defval}, <ppp:if v1[#] eq 3>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("3, OK", ""),
+            variables={"v1[]": "val1, val2, val3", "v1[#]": "3"},
+        )
+
+
     # Operator tests
 
     ## R vs R
@@ -219,7 +230,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_RltR(self):
         self.process(
             PromptPair(
-                "${r1=01}${r2=2}<ppp:if r1 lt r2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=1}${r2=2}<ppp:if r1 lt r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -228,7 +239,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_RgtR(self):
         self.process(
             PromptPair(
-                "${r1=2}${r2=01}<ppp:if r1 gt r2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=2}${r2=1}<ppp:if r1 gt r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -237,7 +248,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_RleR(self):
         self.process(
             PromptPair(
-                "${r1=01}${r2=1}<ppp:if r1 le r2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=1}${r2=1}<ppp:if r1 le r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -246,7 +257,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_RgeR(self):
         self.process(
             PromptPair(
-                "${r1=1}${r2=01}<ppp:if r1 ge r2>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=1}${r2=1}<ppp:if r1 ge r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -311,7 +322,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_AltA_1(self):
         self.process(
             PromptPair(
-                "${a1[]=*(01,2,3)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,2,3)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -320,7 +331,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_AltA_2(self):
         self.process(
             PromptPair(
-                "${a1[]=*(01,2)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,2)}${a2[]=*(2,3,4)}<ppp:if a1[] lt a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("not OK", ""),
@@ -329,7 +340,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_AgtA(self):
         self.process(
             PromptPair(
-                "${a1[]=*(2,3,4)}${a2[]=*(01,2,3)}<ppp:if a1[] gt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(2,3,4)}${a2[]=*(1,2,3)}<ppp:if a1[] gt a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -338,7 +349,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_AleA(self):
         self.process(
             PromptPair(
-                "${a1[]=*(01,2)}${a2[]=*(1,3)}<ppp:if a1[] le a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,2)}${a2[]=*(1,3)}<ppp:if a1[] le a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -347,7 +358,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
     def test_operator_AgeA(self):
         self.process(
             PromptPair(
-                "${a1[]=*(1,3)}${a2[]=*(01,2)}<ppp:if a1[] ge a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,3)}${a2[]=*(1,2)}<ppp:if a1[] ge a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("OK", ""),
@@ -380,6 +391,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
+            ppp="nostrict",
         )
 
     def test_operator_AneR(self):
@@ -389,16 +401,17 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("OK", ""),
+            ppp="nostrict",
         )
 
     def test_operator_AltR(self):
         self.process(
             PromptPair(
-                "${a1[]=*(01,2,3)}${r2=2}<ppp:if a1[] lt r2>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,2,3)}${r2=2}<ppp:if a1[] lt r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_AgtR(self):
@@ -408,17 +421,17 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_AleR(self):
         self.process(
             PromptPair(
-                "${a1[]=*(01,2)}${r2=2}<ppp:if a1[] le r2>OK<ppp:else>not OK<ppp:/if>",
+                "${a1[]=*(1,2)}${r2=2}<ppp:if a1[] le r2>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
-            PromptPair("not OK", ""),
-            interrupted=True,
+            PromptPair("OK", ""),
+            ppp="nostrict",
         )
 
     def test_operator_AgeR(self):
@@ -428,7 +441,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_AinR(self):
@@ -458,6 +471,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
+            ppp="nostrict",
         )
 
     def test_operator_RneA(self):
@@ -467,16 +481,17 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("OK", ""),
+            ppp="nostrict",
         )
 
     def test_operator_RltA(self):
         self.process(
             PromptPair(
-                "${r1=2}${a2[]=*(01,2,3)}<ppp:if r1 lt a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=2}${a2[]=*(1,2,3)}<ppp:if r1 lt a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_RgtA(self):
@@ -486,17 +501,17 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_RleA(self):
         self.process(
             PromptPair(
-                "${r1=2}${a2[]=*(01,2)}<ppp:if r1 le a2[]>OK<ppp:else>not OK<ppp:/if>",
+                "${r1=2}${a2[]=*(1,2)}<ppp:if r1 le a2[]>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_RgeA(self):
@@ -506,7 +521,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("not OK", ""),
-            interrupted=True,
+            ppp="nostrict",
         )
 
     def test_operator_RinA(self):
@@ -920,6 +935,15 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             PromptPair("this test is OK", ""),
+        )
+
+    def test_cmd_echo_sysvar(self):
+        self.process(
+            PromptPair(
+                "${_model:defval}",
+                "",
+            ),
+            PromptPair("sdxl", ""),
         )
 
     def test_cmd_ext(self):  # ext

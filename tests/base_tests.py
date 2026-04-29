@@ -46,6 +46,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.defopts = PPPStateOptions(
             debug_level=DEBUG_LEVEL.full,
             on_warning=ONWARNING_CHOICES.stop,
+            strict_operators=True,
             process_wildcards=True,
             if_wildcards=IFWILDCARDS_CHOICES.ignore,
             choice_separator=", ",
@@ -148,6 +149,19 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         cup_ands_eol=False,
                         cup_extranetwork_tags=False,
                         cup_merge_attention=False,
+                    ),
+                    self.grammar_content,
+                    self.interrupt,
+                    self.wildcards_obj,
+                    self.extranetwork_maps_obj,
+                )
+            elif ppp == "nostrict":
+                the_obj = PromptPostProcessor(
+                    self.ppp_logger,
+                    self.def_env_info,
+                    replace(
+                        self.defopts,
+                        strict_operators=False,
                     ),
                     self.grammar_content,
                     self.interrupt,

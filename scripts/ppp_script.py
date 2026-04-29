@@ -179,6 +179,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL)),
             on_warning=ONWARNING_CHOICES(getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ON_WARNING)),
+            strict_operators=getattr(opts, "ppp_gen_strict_operators", PromptPostProcessor.DEFAULT_STRICT_OPERATORS),
             process_wildcards=getattr(opts, "ppp_wil_processwildcards", PromptPostProcessor.DEFAULT_PROCESS_WILDCARDS),
             if_wildcards=IFWILDCARDS_CHOICES(
                 getattr(opts, "ppp_wil_ifwildcards", PromptPostProcessor.DEFAULT_IF_WILDCARDS)
@@ -300,17 +301,18 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
-        hash_options = ppp.options_hash()
-        hash_envinfo = ppp.envinfo_hash()
-        prompts_list = []
+        hash_fullenv = hash(
+            (ppp.envinfo_hash(), ppp.options_hash(), self.wildcards_obj, self.extranetwork_mappings_obj)
+        )
 
         if input_force_equal_seeds:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Forcing equal seeds")
-            seeds = getattr(p, "all_seeds", [])
-            subseeds = getattr(p, "all_subseeds", [])
+            seeds: list[int] = getattr(p, "all_seeds", [])
+            subseeds: list[int] = getattr(p, "all_subseeds", [])
             p.all_seeds = [seeds[0] for _ in seeds]
             p.all_subseeds = [subseeds[0] for _ in subseeds]
 
+        calculated_seeds: list[int] = []
         if input_unlink_seed:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Using unlinked seed")
             num_seeds = len(getattr(p, "all_seeds", []))
@@ -322,9 +324,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
             else:
                 calculated_seeds = [input_seed for _ in range(num_seeds)]
         else:
-            seeds = getattr(p, "all_seeds", [])
-            subseeds = getattr(p, "all_subseeds", [])
-            subseed_strength = getattr(p, "subseed_strength", 0.0)
+            seeds: list[int] = getattr(p, "all_seeds", [])
+            subseeds: list[int] = getattr(p, "all_subseeds", [])
+            subseed_strength: float = getattr(p, "subseed_strength", 0.0)
             if subseed_strength > 0:
                 calculated_seeds = [
                     int(subseed * subseed_strength + seed * (1 - subseed_strength))
@@ -336,93 +338,80 @@ class PromptPostProcessorA1111Script(scripts.Script):
             else:
                 calculated_seeds = seeds
 
-        # initialize extra generation parameters
-        extra_params = {}
+        # (prompt type, typeindex) -> (new positive prompt, new negative prompt)
+        prompts_list: dict[tuple[str, int], tuple[str, str]] = {}
 
-        # adds regular prompts
+        # adds prompts
+        regular_type = "regular"
         rpr: list[str] = getattr(p, "all_prompts", None)
         rnr: list[str] = getattr(p, "all_negative_prompts", None)
-        if rpr is not None and rnr is not None:
-            prompts_list += [
-                ("regular", seed, prompt, negative_prompt)
-                for seed, prompt, negative_prompt in zip(calculated_seeds, rpr, rnr)
-                if (seed, prompt, negative_prompt) not in prompts_list
-            ]
-        # make it compatible with A1111 hires fix
+        regular_exists = rpr is not None and rnr is not None
+        hiresfix_type = "hiresfix"
         rph: list[str] = getattr(p, "all_hr_prompts", None)
         rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
-        if rph is not None and rnh is not None and (rph != rpr or rnh != rnr):
-            prompts_list += [
-                ("hiresfix", seed, prompt, negative_prompt)
-                for seed, prompt, negative_prompt in zip(calculated_seeds, rph, rnh)
-                if (seed, prompt, negative_prompt) not in prompts_list
-            ]
+        hiresfix_exists = rph is not None and rnh is not None
+        for i in range(len(calculated_seeds)):
+            if regular_exists:
+                prompts_list[(regular_type, i)] = None
+            if hiresfix_exists:
+                prompts_list[(hiresfix_type, i)] = None
 
         # processes prompts
-        for i, (prompttype, seed, prompt, negative_prompt) in enumerate(prompts_list):
-            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts[{i+1}] ({prompttype})")
-            if (
-                self.lru_cache.get(
-                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
-                )
-                is None
-            ):
+        for prompttype, typeindex in prompts_list.keys():
+            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts ({prompttype}[{typeindex+1}])")
+            key = (
+                (hash_fullenv, calculated_seeds[typeindex], rpr[typeindex], rnr[typeindex])
+                if prompttype == regular_type
+                else (hash_fullenv, calculated_seeds[typeindex], rph[typeindex], rnh[typeindex])
+            )
+            cached = self.lru_cache.get(key)
+            if cached is None:
+                (hsh, seed, prompt, negative_prompt) = key
                 posp, negp, _ = ppp.process_prompt(prompt, negative_prompt, seed)
-                self.lru_cache.put(
-                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt), (posp, negp)
-                )
+                cached = (posp, negp)
+                self.lru_cache.put(key, cached)
                 # adds also the result so i2i doesn't process it unnecessarily
-                self.lru_cache.put(
-                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), posp, negp), (posp, negp)
-                )
+                self.lru_cache.put((hsh, seed, posp, negp), cached)
             else:
                 log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
+            prompts_list[(prompttype, typeindex)] = cached
+
+        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "last_prompts.txt"), "w", encoding="utf-8") as f:
+        #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():
+        #         f.write(f"Key: {prompttype} {typeindex}\n")
+        #         f.write(f"Seed: {calculated_seeds[typeindex]}\n")
+        #         f.write(f"Old Positive: {rpr[typeindex] if prompttype == regular_type else rph[typeindex]}\n")
+        #         f.write(f"Old Negative: {rnr[typeindex] if prompttype == regular_type else rnh[typeindex]}\n")
+        #         f.write(f"New Positive: {posp}\n")
+        #         f.write(f"New Negative: {negp}\n")
+        #         f.write("\n")
 
         # updates the prompts
-        rpr_copy = None
-        rnr_copy = None
-        if rpr is not None and rnr is not None:
-            rpr_changes = False
-            rnr_changes = False
-            rpr_copy = rpr.copy()
-            rnr_copy = rnr.copy()
-            for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rpr, rnr)):
-                found = self.lru_cache.get(
-                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
-                )
-                if found is not None:
-                    if rpr[i].strip() != found[0].strip():
-                        rpr_changes = True
-                    if rnr[i].strip() != found[1].strip():
-                        rnr_changes = True
-                    rpr[i] = found[0]
-                    rnr[i] = found[1]
-            if add_prompts:
-                if rpr_changes:
-                    extra_params["PPP original prompts"] = rpr_copy
-                if rnr_changes:
-                    extra_params["PPP original negative prompts"] = rnr_copy
-        if rph is not None and rnh is not None:
-            rph_changes = False
-            rnh_changes = False
-            rph_copy = rph.copy()
-            rnh_copy = rnh.copy()
-            for i, (seed, prompt, negative_prompt) in enumerate(zip(calculated_seeds, rph, rnh)):
-                found = self.lru_cache.get(
-                    (hash_envinfo, hash_options, seed, hash(self.wildcards_obj), prompt, negative_prompt)
-                )
-                if found is not None:
-                    if rph[i].strip() != found[0].strip() and (not rpr_copy or rph[i].strip() != rpr_copy[i].strip()):
-                        rph_changes = True
-                    if rnh[i].strip() != found[1].strip() and (not rnr_copy or rnh[i].strip() != rnr_copy[i].strip()):
-                        rnh_changes = True
-                    rph[i] = found[0]
-                    rnh[i] = found[1]
-            if add_prompts:
-                if rph_changes:
-                    extra_params["PPP original HR prompts"] = rph_copy
-                if rnh_changes:
-                    extra_params["PPP original HR negative prompts"] = rnh_copy
+        regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
+        hiresfix_copy = (rph.copy() if rph else None, rnh.copy() if rnh else None)
+        regular_changes = False
+        hiresfix_changes = False
+        for (prompttype, typeindex), (posp, negp) in prompts_list.items():
+            if prompttype == regular_type:
+                if rpr[typeindex].strip() != posp.strip() or rnr[typeindex].strip() != negp.strip():
+                    regular_changes = True
+                rpr[typeindex] = posp
+                rnr[typeindex] = negp
+            elif prompttype == hiresfix_type:
+                if rph[typeindex].strip() != posp.strip() or rnh[typeindex].strip() != negp.strip():
+                    hiresfix_changes = True
+                rph[typeindex] = posp
+                rnh[typeindex] = negp
+
+        # initialize extra generation parameters
+        extra_params = {}
+        if add_prompts:
+            if regular_changes:
+                extra_params["PPP original prompts"] = regular_copy[0]
+                extra_params["PPP original negative prompts"] = regular_copy[1]
+            if hiresfix_changes:
+                extra_params["PPP original HR prompts"] = hiresfix_copy[0]
+                extra_params["PPP original HR negative prompts"] = hiresfix_copy[1]
 
         # fill extra generation parameters only if not already present
         for k, v in extra_params.items():
@@ -508,7 +497,7 @@ def on_ui_settings():
         key="ppp_gen_onwarning",
         info=shared.OptionInfo(
             default=ONWARNING_CHOICES.warn.value,
-            label="What to do on invalid content warnings?",
+            label="What to do on invalid content warnings",
             component=gr.Radio,
             component_args={
                 "choices": (
@@ -516,6 +505,14 @@ def on_ui_settings():
                     ("Stop the generation", ONWARNING_CHOICES.stop.value),
                 )
             },
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_gen_strict_operators",
+        info=shared.OptionInfo(
+            default=PromptPostProcessor.DEFAULT_STRICT_OPERATORS,
+            label="Use strict operators",
             section=section,
         ),
     )

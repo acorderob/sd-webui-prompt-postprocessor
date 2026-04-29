@@ -199,6 +199,7 @@ class PPPStateOptions:
     cup_extranetwork_tags: bool = False
     cup_merge_attention: bool = True
     cup_remove_extranetwork_tags: bool = False
+    strict_operators: bool = True
 
 
 @dataclass(frozen=True)

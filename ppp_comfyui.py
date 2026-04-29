@@ -144,6 +144,15 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "How to handle invalid content warnings",
                     },
                 ),
+                "strict_operators": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_STRICT_OPERATORS,
+                        "tooltip": "Use strict operators",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "process_wildcards": (
                     "BOOLEAN",
                     {
@@ -250,6 +259,7 @@ class PromptPostProcessorComfyUINode:
         stn_options=None,
         cup_options=None,
         en_options=None,
+        strict_operators=None,
     ):
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
@@ -282,6 +292,7 @@ class PromptPostProcessorComfyUINode:
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(debug_level),
             on_warning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ON_WARNING,
+            strict_operators=strict_operators if strict_operators is not None else PromptPostProcessor.DEFAULT_STRICT_OPERATORS,
             process_wildcards=process_wildcards,
             if_wildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
             choice_separator=(

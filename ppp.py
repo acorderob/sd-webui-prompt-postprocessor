@@ -81,6 +81,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_CUP_EXTRANETWORK_TAGS = defopt["cup_extranetwork_tags"]
     DEFAULT_CUP_MERGE_ATTENTION = defopt["cup_merge_attention"]
     DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS = defopt["cup_remove_extranetwork_tags"]
+    DEFAULT_STRICT_OPERATORS = defopt["strict_operators"]
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "

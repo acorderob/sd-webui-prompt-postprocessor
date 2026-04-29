@@ -236,27 +236,38 @@ An echoed variable that uses the default because it doesn't have a value will be
 
 ## Array variables
 
-There is support for array variables. They use brackets `[]` to differenciate from regular variables. Empty brackets mean the whole array (used when initializing or when echoing the whole array) and a number means an indexed value. These variables can only be set with the *Dynamic Prompts* format.
+There is support for array variables. They use brackets `[]` to differenciate from regular variables.
 
-Some examples of how to use them:
+They can be initialized in several ways:
 
 | Construct                  | Meaning                                                          |
 | ---------                  | -------                                                          |
 | `${var[]=value}`           | initialize and set the first value                               |
-| `${var[]+=}`               | add an empty element to the array                                |
-| `${var[]+=value}`          | add a value to the array                                         |
 | `${var[]=*()}`             | initialize an empty array                                        |
 | `${var[]=*var2[]}`         | initialize an array from another array                           |
 | `${var[]=*__wildcard__}`   | initialize an array from a wildcard                              |
 | `${var[]=*('value',var2)}` | initialize an array from a list of values (strings or variables) |
+| `${var[]+=}`               | add an empty element to the array                                |
+| `${var[]+=value}`          | add a value to the array                                         |
 | `${var[]+=*var2[]}`        | add elements from another array                                  |
 | `${var[]+=*__wildcard__}`  | add elements from a wildcard                                     |
+
+The star operator `*` is always with inmediate evaluation, and can only be used with the *Dynamic Prompts* format.
+
+And can be accesed/echoed with:
+
+* Empty brackets mean the whole array (used when initializing or when echoing the whole array)
+* An integer inside the brackets means an indexed value
+* A hash inside the brackets is used to get the length of the array
+* A string inside the brackets (with quotes) is used to get the full array joined with a separator.
+
+| Construct                  | Meaning                                                          |
+| ---------                  | -------                                                          |
 | `${var[]}`                 | echo all elements with a default separator                       |
 | `${var[' / ']}`            | echo all elements with a specific separator                      |
 | `${var[n]}`                | echo an element from the array                                   |
 | `${var[n]:default}`        | echo an element with a default                                   |
-
-Initialization with the star operator `*` is always with inmediate evaluation.
+| `${var[#]}`                | echo the length of the array                                     |
 
 ## If command
 
@@ -283,20 +294,24 @@ Variable values `true` and `false` are considered a boolean, and an all digits v
 
 The operation can be preceded by `not` for readability, instead of using it in the front.
 
-The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in` and `contains`. This list shows what they do depending on the kind of operand (R = regular variable, A = array variable).
+The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in`, `any_in`, `contains` and `contains_any`. The `any_in` and `contains_any` variants exist because `any` and `contains` consider all elements.
 
-| Operation  | R1 op R2                 | A1 op A2          | A1 op R2                       | R1 op A2                     |
-| ---------  | --------                 | --------          | --------                       | --------                     |
-| `eq`       | OK                       | OK (pairwise)     | Always False                   | Always False                 |
-| `ne`       | OK                       | OK (pairwise)     | Always True                    | Always True                  |
-| `gt`       | OK                       | OK (pairwise)     | Error                          | Error                        |
-| `lt`       | OK                       | OK (pairwise)     | Error                          | Error                        |
-| `ge`       | OK                       | OK (pairwise)     | Error                          | Error                        |
-| `le`       | OK                       | OK (pairwise)     | Error                          | Error                        |
-| `in`       | OK (substring, R1 in R2) | OK (all A1 in A2) | OK (any substring in A1 in R2) | OK (R1 in A2)                |
-| `contains` | OK (substring, R2 in R1) | OK (all A2 in A1) | OK (R2 in A1)                  | OK (all substrings A2 in R1) |
+This list shows what they do depending on the kind of operand (R = regular variable, A = array variable).
 
-When a comparison tries to compare undefined variables or the values have different types (f.e. an integer and a string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised.
+| Operation      | R1 op R2                 | A1 op A2          | A1 op R2                                       | R1 op A2                                       |
+| ---------      | --------                 | --------          | --------                                       | --------                                       |
+| `eq`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `ne`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `gt`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `lt`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `ge`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `le`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
+| `in`           | OK (substring, R1 in R2) | OK (all A1 in A2) | OK (all substring in A1 in R2)                 | OK (R1 in A2)                                  |
+| `any_in`       | Error                    | OK (any A1 in A2) | OK (any substring in A1 in R2)                 | Error                                          |
+| `contains`     | OK (substring, R2 in R1) | OK (all A2 in A1) | OK (R2 in A1)                                  | OK (all substrings A2 in R1)                   |
+| `contains_any` | Error                    | OK (any A2 in A1) | Error                                          | OK (any substrings A2 in R1)                   |
+
+When a comparison tries to compare undefined variables or the values have different types (f.e. an integer and a string), the behavior depends on the `on_warning` setting: in `warn` mode the comparison evaluates to false, and in `stop` mode an error is raised. In non strict mode a numeric string literal (with no leading zeros) will be considered an integer.
 
 The variable can be one set with the `set` command (user variables) or you can use system variables like these (names starting with an underscore are reserved for system variables):
 

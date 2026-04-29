@@ -94,7 +94,7 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
 ?encontent.3: content_en
 
 //#if ALLOW_COMMVARS or ALLOW_CHOICES or ALLOW_WILDCARDS
-    vardescriptor_get.8: VARNAME [ /\[/ [ SIGNED_NUMBER | STRING | IDENTIFIER ] /\]/ ]
+    vardescriptor_get.8: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER | STRING | /#/ ] /\]/ ]
     vardescriptor_set.9: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER ] /\]/ ]
 
     // conditions
@@ -108,7 +108,7 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
     ?complexvalue: vardescriptor_get | SIMPLEVALUE
     truthy_operand: vardescriptor_get
-    comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|lt|gt|le|ge|contains|in/ _WHITESPACE ( complexvalue | listvalue )
+    comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|lt|gt|le|ge|contains|in|any_in|contains_any/ _WHITESPACE ( complexvalue | listvalue )
     listvalue.9: "(" ( _WHITESPACE? complexvalue ( _WHITESPACE? "," _WHITESPACE? complexvalue )* )? _WHITESPACE? ")"
 //#endif
 
@@ -125,7 +125,7 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     ifvalue.3: content
 
     // command: set
-    commandset: "<ppp:set" _WHITESPACE vardescriptor_set [ commandsetmodifiers ] _WHITESPACE? ">" commandsetcontent "<ppp:/set>"
+    commandset: "<ppp:set" _WHITESPACE vardescriptor_set [ commandsetmodifiers ] _WHITESPACE? ">" ( starredvalue | commandsetcontent ) "<ppp:/set>"
     commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
     ?commandsetcontent.3: content
 
