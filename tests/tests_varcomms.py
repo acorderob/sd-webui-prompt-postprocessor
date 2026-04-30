@@ -195,6 +195,15 @@ class TestVarCommands(TestPromptPostProcessorBase):
             variables={"v1[]": "val1, val2, val3", "v1[#]": "3"},
         )
 
+    def test_array_variable_10(self):  # array variable set with expanded values from wildcards in command format
+        self.process(
+            PromptPair(
+                "<ppp:set v1[]>*__yaml/wildcard1__<ppp:/set><ppp:set v1[] add>*__yaml/wildcard2__<ppp:/set>${v1[2]:defval}",
+                "",
+            ),
+            PromptPair("choice3", ""),
+            variables={"v1[]": "choice2, choice1, choice3, choice1"},
+        )
 
     # Operator tests
 
@@ -631,6 +640,18 @@ class TestVarCommands(TestPromptPostProcessorBase):
             ),
             PromptPair("OK", ""),
         )
+
+    # Float values
+
+    def test_float_value(self):
+        self.process(
+            PromptPair(
+                "${a=1.5}<ppp:if a gt 1>OK<ppp:else>not OK<ppp:/if>",
+                "",
+            ),
+            PromptPair("OK", ""),
+        )
+
 
     # NaN/undefined variable integer comparison tests
 

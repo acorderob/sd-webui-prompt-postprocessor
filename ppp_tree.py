@@ -338,12 +338,20 @@ class TreeProcessor(lark.visitors.Interpreter):
         if operand1 is None or operand2 is None:
             self.warn_or_stop(f"Undefined value used in comparison: '{escape_single_quotes(desc)}'")
             return False
-        if (
-            isinstance(operand1, (str, int, float, bool))
-            and isinstance(operand2, (str, int, float, bool))
-            and operand1.__class__ != operand2.__class__
-        ):
-            self.warn_or_stop(f"Mixed type values used in comparison: '{escape_single_quotes(desc)}'")
+        compatible_types = [
+            (str, str),
+            (int, int),
+            (float, float),
+            (bool, bool),
+            (int, float),
+            (float, int),
+            (str, list),
+            (int, list),
+            (float, list),
+            (bool, list),
+        ]
+        if not any(isinstance(operand1, t1) and isinstance(operand2, t2) for t1, t2 in compatible_types):
+            self.warn_or_stop(f"Mixed type values ({type(operand1).__name__}, {type(operand2).__name__}) used in comparison: '{escape_single_quotes(desc)}'")
             return False
         return operation(operand1, operand2)
 
