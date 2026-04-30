@@ -12,7 +12,7 @@ SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
 VARNAME:             /(?!__)[a-zA-Z_][a-zA-Z0-9_]*/
 
 // plain text and weights
-?plain:                  /((?!__|\bAND\b|\${)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
+?plain:                  /((?!__|\bAND\b|\${|\x1d)[^\\()\[\]:<>${]|\\.)+/s // exclude only the starting ones
 ?plain_choice:           /((?!__|\bAND\b|\${|\$\$)[^\\()\[\]:<>${|}~@]|\\.)+/s // add the specific internal choice ones
 ?plain_alternate:        /((?!__|\bAND\b|\${)[^\\()\[\]:<>${|]|\\.)+/s // add the specific internal alternate ones
 ?plain_var:              /((?!__|\bAND\b|\${)[^\\()\[\]:<>${}]|\\.)+/s  // add the specific internal var ones
@@ -23,7 +23,9 @@ VARNAME:             /(?!__)[a-zA-Z_][a-zA-Z0-9_]*/
 ?specialchars_var:       /[_{()\[\]:<>}]|\$(?![{$])/ // add the internal var ones
 ?numpar: _WHITESPACE? SIGNED_NUMBER _WHITESPACE?
 
-start: promptcomp | content
+start: prompt negative_sep prompt
+?prompt: promptcomp | content
+negative_sep: /\x1d/
 
 // prompt composition with AND
 promptcomp.4: promptcomppart ( [ ":" numpar ] ( /\bAND\b/ promptcomppart [ ":" numpar ] )+ )+

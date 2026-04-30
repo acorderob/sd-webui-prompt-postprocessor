@@ -594,89 +594,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         for wc in self.state.wildcards_obj.wildcards.values():
             _tree.get_wildcard_options(wc)
 
-    def __add_to_insertion_points(
-        self, negative_prompt: str, add_at_insertion_point: list[str], insertion_at: list[tuple[int, int]]
-    ) -> str:
-        """
-        Adds the negative prompt to the insertion points.
-
-        Args:
-            negative_prompt (str): The negative prompt to be added.
-            add_at_insertion_point (list): A list of insertion points.
-            insertion_at (list): A list of insertion blocks.
-
-        Returns:
-            str: The modified negative prompt.
-        """
-        ordered_range = sorted(
-            range(10), key=lambda x: insertion_at[x][0] if insertion_at[x] is not None else float("-inf"), reverse=True
-        )
-        for n in ordered_range:
-            if insertion_at[n] is not None:
-                ipp = insertion_at[n][0]
-                ipl = insertion_at[n][1] - insertion_at[n][0]
-                if (
-                    negative_prompt[ipp - len(self.state.options.stn_separator) : ipp]
-                    == self.state.options.stn_separator
-                ):
-                    ipp -= len(self.state.options.stn_separator)  # adjust for existing start separator
-                    ipl += len(self.state.options.stn_separator)
-                add_at_insertion_point[n].insert(0, negative_prompt[:ipp])
-                if (
-                    negative_prompt[ipp + ipl : ipp + ipl + len(self.state.options.stn_separator)]
-                    == self.state.options.stn_separator
-                ):
-                    ipl += len(self.state.options.stn_separator)  # adjust for existing end separator
-                endPart = negative_prompt[ipp + ipl :]
-                if len(endPart) > 0:
-                    add_at_insertion_point[n].append(endPart)
-                negative_prompt = self.state.options.stn_separator.join(add_at_insertion_point[n])
-            else:
-                ipp = 0
-                if negative_prompt.startswith(self.state.options.stn_separator):
-                    ipp = len(self.state.options.stn_separator)
-                add_at_insertion_point[n].append(negative_prompt[ipp:])
-                negative_prompt = self.state.options.stn_separator.join(add_at_insertion_point[n])
-        return negative_prompt
-
-    def __add_to_start(self, negative_prompt: str, add_at_start: list[str]) -> str:
-        """
-        Adds the elements in `add_at_start` list to the start of the `negative_prompt` string.
-
-        Args:
-            negative_prompt (str): The original negative prompt string.
-            add_at_start (list): The list of elements to be added at the start of the negative prompt.
-
-        Returns:
-            str: The updated negative prompt string with the elements added at the start.
-        """
-        if len(negative_prompt) > 0:
-            ipp = 0
-            if negative_prompt.startswith(self.state.options.stn_separator):
-                ipp = len(self.state.options.stn_separator)  # adjust for existing end separator
-            add_at_start.append(negative_prompt[ipp:])
-        negative_prompt = self.state.options.stn_separator.join(add_at_start)
-        return negative_prompt
-
-    def __add_to_end(self, negative_prompt: str, add_at_end: list[str]) -> str:
-        """
-        Adds the elements in `add_at_end` list to the end of `negative_prompt` string.
-
-        Args:
-            negative_prompt (str): The original negative prompt string.
-            add_at_end (list): The list of elements to be added at the end of `negative_prompt`.
-
-        Returns:
-            str: The updated negative prompt string with elements added at the end.
-        """
-        if len(negative_prompt) > 0:
-            ipl = len(negative_prompt)
-            if negative_prompt.endswith(self.state.options.stn_separator):
-                ipl -= len(self.state.options.stn_separator)  # adjust for existing start separator
-            add_at_end.insert(0, negative_prompt[:ipl])
-        negative_prompt = self.state.options.stn_separator.join(add_at_end)
-        return negative_prompt
-
     def __cleanup(self, text: str, where: int = 0) -> str:
         """
         Trims the given text based on the specified cleanup options.
@@ -871,53 +788,37 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.variables.clear_echoed()
         all_variables = self.state.variables.get_all_system()
 
-        # Process prompt
-        p_processor = TreeProcessor(self.state, rng)
-        (prompt_parser, parser_description) = self.__get_best_parser(prompt)
+        # Parse both prompts
+        processor = TreeProcessor(self.state, rng)
+        unified_prompt = prompt + "\x1D" + negative_prompt
+        (prompt_parser, parser_description) = self.__get_best_parser(unified_prompt)
         self.log(logging.DEBUG, f"Using {parser_description} for prompt")
-        p_parsed = parse_prompt(
+        parsed = parse_prompt(
             self.state,
             "prompt",
-            prompt,
+            unified_prompt,
             prompt_parser,
         )
-        prompt = p_processor.start_visit("prompt", p_parsed, False)
 
-        # Process negative prompt
-        n_processor = TreeProcessor(self.state, rng)
-        (n_prompt_parser, n_parser_description) = self.__get_best_parser(negative_prompt)
-        self.log(logging.DEBUG, f"Using {n_parser_description} for negative prompt")
-        n_parsed = parse_prompt(
-            self.state,
-            "negative prompt",
-            negative_prompt,
-            n_prompt_parser,
-        )
-        negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
+        # Process the unified prompt
+        unified_prompt, rem_wildcards = processor.start_visit(parsed)
 
         # Complete variables
-        var_keys = self.state.variables.all_user_or_echoed_keys()
+        var_keys = sorted(self.state.variables.all_user_or_echoed_keys())
         for k in var_keys:
             ev = self.state.variables.get_echoed_value(k)
             if ev is None:
                 ev = self.state.variables.get_user(k)
             if ev is None or not isinstance(ev, str):
                 self.log(logging.DEBUG, f"Completing variable: {k}")
-                ev = p_processor.get_final_variable(k)
+                ev = processor.get_final_variable(k)
             all_variables[k] = self.__cleanup(ev, 0) if self.state.options.cup_cleanup_variables else ev
-        all_variables = {k: all_variables[k] for k in sorted(all_variables.keys())}
         self.log(logging.DEBUG, f"All variables: {all_variables}")
 
-        # Insertions in the negative prompt
-        self.log(logging.DEBUG, f"New negative additions: {p_processor.add_at}")
-        self.log(logging.DEBUG, f"New negative indexes: {n_processor.insertion_at}")
-        negative_prompt = self.__add_to_insertion_points(
-            negative_prompt, p_processor.add_at["insertion_point"], n_processor.insertion_at
-        )
-        if p_processor.add_at["start"]:
-            negative_prompt = self.__add_to_start(negative_prompt, p_processor.add_at["start"])
-        if p_processor.add_at["end"]:
-            negative_prompt = self.__add_to_end(negative_prompt, p_processor.add_at["end"])
+        # Split the unified prompt back into prompt and negative prompt
+        split_parts = unified_prompt.split("\x1D", 1)
+        prompt = split_parts[0]
+        negative_prompt = split_parts[1] if len(split_parts) > 1 else ""
 
         # Clean up
         prompt = self.__cleanup(prompt, 1)
@@ -961,27 +862,38 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             )
 
         # Check for wildcards not processed
-        foundP = bool(p_processor.detectedWildcards)
-        foundNP = bool(n_processor.detectedWildcards)
-        if foundP or foundNP:
+        if rem_wildcards:
+            w_found_p = [wc for wc, n in rem_wildcards if not n]
+            w_found_n = [wc for wc, n in rem_wildcards if n]
             if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
                 self.log(logging.ERROR, "Found unprocessed wildcards!")
             else:
                 self.log(logging.INFO, "Found unprocessed wildcards.")
-            ppwl = ", ".join(p_processor.detectedWildcards)
-            npwl = ", ".join(n_processor.detectedWildcards)
-            if foundP:
-                self.log(logging.ERROR, f"In the positive prompt: {ppwl}")
-            if foundNP:
+            ppwl = ", ".join(w_found_p)
+            npwl = ", ".join(w_found_n)
+            if ppwl:
+                self.log(logging.ERROR, f"In the prompt: {ppwl}")
+            if npwl:
                 self.log(logging.ERROR, f"In the negative prompt: {npwl}")
             if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.warn:
                 prompt = self.WILDCARD_WARNING + prompt
             elif self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
                 raise PPPInterrupt(
                     "Found unprocessed wildcards!",
-                    self.WILDCARD_STOP.format(ppwl) if foundP else "",
-                    self.WILDCARD_STOP.format(npwl) if foundNP else "",
+                    self.WILDCARD_STOP.format(ppwl) if ppwl else "",
+                    self.WILDCARD_STOP.format(npwl) if npwl else "",
                 )
+            
+        # Check for constructs not processed due to parsing problems
+        ppp_in_prompt = prompt.find("<ppp:") >= 0
+        ppp_in_negative_prompt = negative_prompt.find("<ppp:") >= 0
+        if ppp_in_prompt or ppp_in_negative_prompt:
+            raise PPPInterrupt(
+                "Found unprocessed constructs!",
+                self.UNPROCESSED_STOP if ppp_in_prompt else "",
+                self.UNPROCESSED_STOP if ppp_in_negative_prompt else "",
+            )
+
         return prompt, negative_prompt, all_variables
 
     def process_prompt(
@@ -1019,16 +931,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.INFO, f"Result prompt: {prompt}")
             self.log(logging.INFO, f"Result negative_prompt: {negative_prompt}")
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
-
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")
-            # Check for constructs not processed due to parsing problems
-            fullcontent: str = prompt + negative_prompt
-            if fullcontent.find("<ppp:") >= 0:
-                raise PPPInterrupt(
-                    "Found unprocessed constructs!",
-                    self.UNPROCESSED_STOP if prompt.find("<ppp:") >= 0 else "",
-                    self.UNPROCESSED_STOP if negative_prompt.find("<ppp:") >= 0 else "",
-                )
             return prompt, negative_prompt, all_variables
         except PPPInterrupt as e:
             self.log(logging.ERROR, e.message)

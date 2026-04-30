@@ -48,7 +48,7 @@ class VariableRepository:
 
     def get_all_system(self) -> dict[str, Any]:
         """Return a shallow copy of all system variables."""
-        return {x: self._system[x] for x in sorted(self._system.keys())}
+        return self._system.copy()
 
     # ---- User variables ----
 
