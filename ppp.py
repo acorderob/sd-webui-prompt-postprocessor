@@ -22,6 +22,7 @@ from ppp_classes import (
     PPPState,
     PPPStateOptions,
 )  # pylint: disable=import-error
+from ppp_variables import VariableRepository
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes
@@ -228,9 +229,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             logger=self.logger,
             host_config=host_config,
             options=options,
-            system_variables={},
-            user_variables={},
-            echoed_variables={},
+            variables=VariableRepository(),
             wildcards_obj=wildcards_obj,
             extranetwork_mappings_obj=extranetwork_mappings_obj,
             parsers={
@@ -547,18 +546,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         Initializes the system variables.
         """
-        sv = self.state.system_variables
-        sv.clear()
+        vs = self.state.variables
+        vs.clear_system()
         sdchecks = {x: self.env_info.get("is_" + x, False) for x in self.known_models}
         sdchecks.update({"": True})
-        sv["_model"] = next((k for k, v in sdchecks.items() if v), "")
-        sv["_sd"] = sv["_model"]  # deprecated
+        model_name_val = next((k for k, v in sdchecks.items() if v), "")
+        vs.set_system("_model", model_name_val)
+        vs.set_system("_sd", model_name_val)  # deprecated
         model_filename = self.env_info.get("model_filename", "")
-        sv["_sdfullname"] = model_filename  # deprecated
-        sv["_modelfullname"] = model_filename
-        sv["_sdname"] = os.path.basename(model_filename)  # deprecated
-        sv["_modelname"] = os.path.basename(model_filename)
-        sv["_modelclass"] = self.env_info.get("model_class", "")
+        vs.set_system("_sdfullname", model_filename)  # deprecated
+        vs.set_system("_modelfullname", model_filename)
+        vs.set_system("_sdname", os.path.basename(model_filename))  # deprecated
+        vs.set_system("_modelname", os.path.basename(model_filename))
+        vs.set_system("_modelclass", self.env_info.get("model_class", ""))
         is_models = {}
         for model_name, model_type_and_substrings in self.variants_definitions.items():
             if not (model_type_and_substrings[0] == "" or sdchecks.get(model_type_and_substrings[0], False)):
@@ -574,19 +574,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 logging.WARNING,
                 f"Multiple model variants detected at the same time in the filename!: {', '.join(is_models_true)}",
             )
-        sv.update({"_is_" + x: y for x, y in is_models.items()})
+        vs.update_system({"_is_" + x: y for x, y in is_models.items()})
         for x in sdchecks.keys():
             if x != "":
-                sv["_is_" + x] = sdchecks[x]
-                sv["_is_pure_" + x] = sdchecks[x] and not any(is_models.values())
-                sv["_is_variant_" + x] = sdchecks[x] and any(is_models.values())
+                vs.set_system("_is_" + x, sdchecks[x])
+                vs.set_system("_is_pure_" + x, sdchecks[x] and not any(is_models.values()))
+                vs.set_system("_is_variant_" + x, sdchecks[x] and any(is_models.values()))
         # special cases
-        sv["_is_sd"] = sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"]
+        vs.set_system("_is_sd", sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"])
         is_ssd = self.env_info.get("is_ssd", False)
-        sv["_is_ssd"] = is_ssd
-        sv["_is_sdxl_no_ssd"] = sdchecks["sdxl"] and not is_ssd
+        vs.set_system("_is_ssd", is_ssd)
+        vs.set_system("_is_sdxl_no_ssd", sdchecks["sdxl"] and not is_ssd)
         # backcompatibility (but the modern one to use would be _is_pure_sdxl)
-        sv["_is_sdxl_no_pony"] = sdchecks["sdxl"] and not sv.get("_is_pony", False)
+        vs.set_system("_is_sdxl_no_pony", sdchecks["sdxl"] and not vs.get_system("_is_pony", False))
 
     def init_wildcards_options(self):
         """Initializes the wildcard options."""
@@ -867,9 +867,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             tuple: A tuple containing the processed prompt and negative prompt.
         """
-        self.state.user_variables.clear()
-        self.state.echoed_variables.clear()
-        all_variables = {**self.state.system_variables}
+        self.state.variables.clear_user()
+        self.state.variables.clear_echoed()
+        all_variables = self.state.variables.get_all_system()
 
         # Process prompt
         p_processor = TreeProcessor(self.state, rng)
@@ -896,15 +896,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt = n_processor.start_visit("negative prompt", n_parsed, True)
 
         # Complete variables
-        var_keys = set(self.state.user_variables.keys()).union(set(self.state.echoed_variables.keys()))
+        var_keys = self.state.variables.all_user_or_echoed_keys()
         for k in var_keys:
-            ev = self.state.echoed_variables.get(k)
+            ev = self.state.variables.get_echoed_value(k)
             if ev is None:
-                ev = self.state.user_variables.get(k)
+                ev = self.state.variables.get_user(k)
             if ev is None or not isinstance(ev, str):
                 self.log(logging.DEBUG, f"Completing variable: {k}")
-                ev = p_processor.get_final_user_variable(k)
+                ev = p_processor.get_final_variable(k)
             all_variables[k] = self.__cleanup(ev, 0) if self.state.options.cup_cleanup_variables else ev
+        all_variables = {k: all_variables[k] for k in sorted(all_variables.keys())}
         self.log(logging.DEBUG, f"All variables: {all_variables}")
 
         # Insertions in the negative prompt
@@ -1006,7 +1007,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 seed = np.random.randint(0, 2**32, dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
-            self.log(logging.INFO, f"System variables: {self.state.system_variables}")
+            self.log(logging.INFO, f"System variables: {self.state.variables.get_all_system()}")
             self.log(logging.INFO, f"Input seed: {seed}")
             self.log(logging.INFO, f"Input prompt: {prompt}")
             self.log(logging.INFO, f"Input negative_prompt: {negative_prompt}")

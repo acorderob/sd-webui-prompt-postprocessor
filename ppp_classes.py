@@ -4,13 +4,14 @@ from dataclasses import dataclass, field
 from logging import Logger
 import re
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 from lark import Lark
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ppp_logging import DEBUG_LEVEL
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
+from ppp_variables import VariableRepository
 
 
 class SUPPORTED_APPS(Enum):
@@ -209,9 +210,7 @@ class PPPState:
     logger: Logger
     host_config: HostConfig = field(default_factory=HostConfig)
     options: PPPStateOptions = field(default_factory=PPPStateOptions)
-    system_variables: dict[str, Any] = field(default_factory=dict)
-    user_variables: dict[str, Any] = field(default_factory=dict)
-    echoed_variables: dict[str, Any] = field(default_factory=dict)
+    variables: VariableRepository = field(default_factory=VariableRepository)
     wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
     extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)
     parsers: dict[str, Lark] = field(default_factory=dict)

@@ -257,7 +257,7 @@ The star operator `*` is always with inmediate evaluation.
 And can be accesed/echoed with:
 
 * Empty brackets mean the whole array (used when initializing or when echoing the whole array)
-* An integer inside the brackets means an indexed value
+* An integer inside the brackets means an indexed value. A variable identifier (not an indexed array) can be used to get the integer.
 * A hash inside the brackets is used to get the length of the array
 * An ampersand followed by a string inside the brackets (with quotes) is used to get the full array joined with a separator.
 

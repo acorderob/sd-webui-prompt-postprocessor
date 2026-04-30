@@ -102,8 +102,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             backup_add_at = self.add_at.copy()
             backup_insertion_at = self.insertion_at.copy()
             backup_detectedwildcards = self.detectedWildcards.copy()
-            backup_user_variables = self.state.user_variables.copy()
-            backup_echoed_variables = self.state.echoed_variables.copy()
+            backup_vars = self.state.variables.backup_user_and_echoed()
         if node is not None:
             if isinstance(node, list):
                 for child in node:
@@ -127,10 +126,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.add_at = backup_add_at
             self.insertion_at = backup_insertion_at
             self.detectedWildcards = backup_detectedwildcards
-            self.state.user_variables.clear()
-            self.state.user_variables.update(backup_user_variables)
-            self.state.echoed_variables.clear()
-            self.state.echoed_variables.update(backup_echoed_variables)
+            self.state.variables.restore_user_and_echoed(backup_vars)
         return added_result
 
     def __get_original_node_content(self, node: lark.Tree | lark.Token, default=None) -> str:
@@ -164,26 +160,26 @@ class TreeProcessor(lark.visitors.Interpreter):
             return None, specifier[2:-1], False
         if not specifier.isdecimal():
             # bare identifier: resolve as variable
-            specifier = self.get_final_user_variable(specifier)
+            specifier = self.get_final_variable(specifier)
         if specifier.isdecimal():
             return int(specifier), None, False
         # invalid specifier
         return None, None, False
 
-    def __get_user_variable_value(
+    def __get_variable_value(
         self, name: str, specifier: str | None = None, evaluate=True, visit=False
     ) -> str | list[str] | None:
         """
-        Get the value of a user variable.
+        Get the value of a variable.
 
         Args:
-            name (str): The name of the user variable.
+            name (str): The name of the variable.
             specifier (str|None): The specifier for an array variable.
             evaluate (bool): Whether to evaluate the variable.
             visit (bool): Whether to also visit the variable (add to result).
 
         Returns:
-            str|list[str]|None: The value of the user variable.
+            str|list[str]|None: The value of the variable.
         """
 
         def visit_value(v):
@@ -200,7 +196,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.result += v
             return v
 
-        v = self.state.user_variables.get(name, None)
+        v = self.state.variables.get(name)
         if v is None:
             return None
         is_array = name[-2:] == "[]"
@@ -250,44 +246,24 @@ class TreeProcessor(lark.visitors.Interpreter):
             specifier = None
         return name, specifier
 
-    def get_final_user_variable(self, name_specifier: str) -> str:
+    def get_final_variable(self, name_specifier: str) -> str:
         """
-        Get the final value of a user variable, resolving any references if needed.
+        Get the final value of a variable, resolving any references if needed.
 
         Args:
             name_specifier (str): The variable reference string.
 
         Returns:
-            str: The final value of the user variable.
+            str: The final value of the variable.
         """
         name, specifier = self.__separate_arrayref(name_specifier)
-        v = self.__get_user_variable_value(name, specifier, True, False)
+        v = self.__get_variable_value(name, specifier, True, False)
         if isinstance(v, list):
             _, sep, _ = self.__parse_array_specifier(specifier)
             if sep is None:
                 sep = self.state.options.choice_separator
             v = sep.join(str(item) for item in v)
         return str(v)
-
-    def __set_user_variable_value(self, name: str, value: str | lark.Tree | list):
-        """
-        Set the value of a user variable.
-
-        Args:
-            name (str): The name of the user variable.
-            value (str|lark.Tree|list): The value to be set.
-        """
-        self.state.user_variables[name] = value
-
-    def __remove_user_variable(self, name: str):
-        """
-        Remove a user variable.
-
-        Args:
-            name (str): The name of the user variable.
-        """
-        if name in self.state.user_variables:
-            del self.state.user_variables[name]
 
     def __debug_end(self, construct: str, start_result: str, duration: int, info=None):
         """
@@ -378,15 +354,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         if c.lower() == "true":
             return True
         # Bare identifier - resolve as variable reference
-        if c.startswith("_"):
-            vartype = "system"
-            val = self.state.system_variables.get(c, None)
-        else:
-            vartype = "user"
-            varname, varspecifier = self.__separate_arrayref(c)
-            val = self.__get_user_variable_value(varname, varspecifier)
+        varname, varspecifier = self.__separate_arrayref(c)
+        val = self.__get_variable_value(varname, varspecifier)
         if val is None:
             val = ""
+            vartype = "system" if self.state.variables.name_is_system(c) else "user"
             self.warn_or_stop(f"Unknown {vartype} variable '{escape_single_quotes(c)}'")
         if isinstance(val, str):
             try:
@@ -992,7 +964,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.result
-        if variable_name.startswith("_"):
+        if self.state.variables.name_is_system(variable_name):
             self.warn_or_stop(
                 f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
             )
@@ -1008,7 +980,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             info = f"{variable_name[0:-2]}[{variable_specifier}]"
         value_description = self.__get_original_node_content(content, None)
         value = content
-        raw_oldvalue = self.state.user_variables.get(variable_name, None)
+        raw_oldvalue = self.state.variables.get_user(variable_name)
         newvalue = None
         some_error = False
         if variable_specifier is not None:
@@ -1083,7 +1055,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         if vardescriptor_specifier is not None:
                             newvalue = None
                         else:
-                            newvalue = self.__get_user_variable_value(vardescriptor_name, None)
+                            newvalue = self.__get_variable_value(vardescriptor_name, None)
                     elif newvalue.children[0].data == "listvalue":
                         newvalue = list(
                             self.__resolve_operand(c) for c in self.__get_cond_operand(newvalue.children[0])
@@ -1119,8 +1091,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                             newvalue = [newvalue]
                         else:
                             newvalue = raw_oldvalue + [newvalue]
-            self.__set_user_variable_value(variable_name, newvalue)
-            currentvalue = self.__get_user_variable_value(variable_name, variable_specifier, False)
+            self.state.variables.set_user(variable_name, newvalue)
+            currentvalue = self.__get_variable_value(variable_name, variable_specifier, False)
             if currentvalue is None:
                 info += "error"
             elif isinstance(currentvalue, list):
@@ -1166,14 +1138,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         #     default_value = self.__visit(default, True)  # for log
         is_array = variable_name[-2:] == "[]"
         vname = f"{variable_name[0:-2]}[{variable_specifier}]" if variable_specifier is not None else variable_name
-        if variable_name.startswith("_"):
-            is_systemvar = True
-            value = self.state.system_variables.get(variable_name, None)
-            if value is not None:
-                self.result += value
-        else:
-            is_systemvar = False
-            value = self.__get_user_variable_value(variable_name, variable_specifier, True, True)
+        value = self.__get_variable_value(variable_name, variable_specifier, True, True)
         if value is None:
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
@@ -1184,8 +1149,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
                 default_value = ""
                 value = ""
-        if not is_systemvar:
-            self.state.echoed_variables[vname] = value
+        if not self.state.variables.name_is_system(variable_name):
+            self.state.variables.echo(vname, value)
         t2 = time.monotonic_ns()
         info = variable_name
         if is_array and variable_specifier is not None:
@@ -1901,9 +1866,9 @@ class TreeProcessor(lark.visitors.Interpreter):
                 vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(var_object.children[0])
                 variablename = vardescriptor_name
                 # variablevalue = self.__visit(var_object.children[1], False, True)
-                variablebackup = self.state.user_variables.get(variablename, None)
-                # self.__remove_user_variable(variablename)
-                # self.__set_user_variable_value(variablename, variablevalue)
+                variablebackup = self.state.variables.get_user(variablename)
+                # self.state.variables.delete_user(variablename)
+                # self.state.variables.set_user(variablename, variablevalue)
                 self.__varset("wildcard", variablename, vardescriptor_specifier, None, var_object.children[1])
             choice_values_all = []
             for wildcard in selected_wildcards:
@@ -1937,9 +1902,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             if wildcard_key in self.__wildcard_filters:
                 del self.__wildcard_filters[wildcard_key]
             if variablename is not None:
-                self.__remove_user_variable(variablename)
+                self.state.variables.delete_user(variablename)
                 if variablebackup is not None:
-                    self.state.user_variables[variablename] = variablebackup
+                    self.state.variables.set_user(variablename, variablebackup)
         elif self.state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
             self.detectedWildcards.append(wc)
             self.result += wc
