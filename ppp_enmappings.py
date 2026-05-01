@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Optional
 import logging
 import yaml
@@ -102,7 +103,7 @@ class PPPExtraNetworkMappings:
             if fullpath != self.LOCALINPUT_FILENAME:
                 path = os.path.dirname(fullpath)
                 if not os.path.exists(fullpath) or not any(
-                    os.path.commonpath([path, folder]) == folder for folder in self.__enmappings_folders
+                    Path(path).is_relative_to(folder) for folder in self.__enmappings_folders
                 ):
                     self.__remove_extranetwork_mappings_from_path(fullpath)
             elif enmappings_input is None:

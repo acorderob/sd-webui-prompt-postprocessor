@@ -12,5 +12,12 @@
     "python.analysis.typeCheckingMode": "off",
     "black-formatter.args": [
         "--line-length=120"
+    ],
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
     ]
 }

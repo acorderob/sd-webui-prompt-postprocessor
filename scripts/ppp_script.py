@@ -10,11 +10,11 @@ import numpy as np
 
 sys.path.append(str(Path(__file__).parent))  # base path for the extension
 
-from modules import scripts, shared, script_callbacks  # pylint: disable=import-error
-from modules.processing import StableDiffusionProcessing  # pylint: disable=import-error
-from modules.shared import opts  # pylint: disable=import-error
-from modules.paths import models_path  # pylint: disable=import-error
-import gradio as gr  # pylint: disable=import-error
+from modules import scripts, shared, script_callbacks  # type: ignore
+from modules.processing import StableDiffusionProcessing  # type: ignore
+from modules.shared import opts  # type: ignore
+from modules.paths import models_path  # type: ignore
+import gradio as gr  # type: ignore
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, SUPPORTED_APPS_NAMES, PPPStateOptions
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
@@ -140,7 +140,22 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     # show_label=True,
                     elem_id="ppp_incremental_seed",
                 )
-        return [force_equal_seeds, unlink_seed, seed, incremental_seed]
+            gr.HTML("<br>")
+            with gr.Row(equal_height=True):
+                combinatorial = gr.Checkbox(
+                    label="Combinatorial mode",
+                    info="Generate all prompt combinations and cycle through them to fill the batch.",
+                    value=PromptPostProcessor.DEFAULT_DO_COMBINATORIAL,
+                    elem_id="ppp_combinatorial",
+                )
+                combinatorial_limit = gr.Number(
+                    label="Combinations limit (0 = no limit)",
+                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_LIMIT,
+                    precision=0,
+                    min_width=120,
+                    elem_id="ppp_combinatorial_limit",
+                )
+        return [force_equal_seeds, unlink_seed, seed, incremental_seed, combinatorial, combinatorial_limit]
 
     def process(
         self,
@@ -149,6 +164,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
         input_unlink_seed,
         input_seed,
         input_incremental_seed,
+        input_combinatorial,
+        input_combinatorial_limit,
     ):  # pylint: disable=arguments-differ
         """
         Processes the prompts and applies post-processing operations.
@@ -159,6 +176,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
             input_unlink_seed (bool): Flag indicating whether to unlink the seed.
             input_seed (int): The seed value.
             input_incremental_seed (bool): Flag indicating whether to use incremental seed.
+            input_combinatorial (bool): Flag indicating whether to use combinatorial mode.
+            input_combinatorial_limit (int): Maximum number of combinations (0 = no limit).
 
         Returns:
             None
@@ -176,6 +195,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 )
             )
         )
+        num_seeds = len(getattr(p, "all_seeds", []))
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL)),
             on_warning=ONWARNING_CHOICES(getattr(opts, "ppp_gen_onwarning", PromptPostProcessor.DEFAULT_ON_WARNING)),
@@ -220,6 +240,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
             cup_remove_extranetwork_tags=getattr(
                 opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
+            do_combinatorial=input_combinatorial,
+            combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
         )
         if self.ppp_logger is None:
             lf = PromptPostProcessorLogFactory()
@@ -251,6 +273,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 "PPP unlink seed": input_unlink_seed,
                 "PPP prompt seed": input_seed,
                 "PPP incremental seed": input_incremental_seed,
+                "PPP combinatorial": input_combinatorial,
             }
         )
 
@@ -315,7 +338,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
         calculated_seeds: list[int] = []
         if input_unlink_seed:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Using unlinked seed")
-            num_seeds = len(getattr(p, "all_seeds", []))
             if input_incremental_seed:
                 first_seed = np.random.randint(0, 2**32, dtype=np.int64) if input_seed == -1 else input_seed
                 calculated_seeds = [first_seed + i for i in range(num_seeds)]
@@ -340,6 +362,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         # (prompt type, typeindex) -> (new positive prompt, new negative prompt)
         prompts_list: dict[tuple[str, int], tuple[str, str]] = {}
+        extra_params = {}
 
         # adds prompts
         regular_type = "regular"
@@ -356,25 +379,49 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if hiresfix_exists:
                 prompts_list[(hiresfix_type, i)] = None
 
-        # processes prompts
-        for prompttype, typeindex in prompts_list.keys():
-            log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts ({prompttype}[{typeindex+1}])")
-            key = (
-                (hash_fullenv, calculated_seeds[typeindex], rpr[typeindex], rnr[typeindex])
-                if prompttype == regular_type
-                else (hash_fullenv, calculated_seeds[typeindex], rph[typeindex], rnh[typeindex])
-            )
-            cached = self.lru_cache.get(key)
-            if cached is None:
-                (hsh, seed, prompt, negative_prompt) = key
-                posp, negp, _ = ppp.process_prompt(prompt, negative_prompt, seed)
-                cached = (posp, negp)
-                self.lru_cache.put(key, cached)
-                # adds also the result so i2i doesn't process it unnecessarily
-                self.lru_cache.put((hsh, seed, posp, negp), cached)
-            else:
-                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
-            prompts_list[(prompttype, typeindex)] = cached
+        if input_combinatorial:
+            seed_for_comb = calculated_seeds[0] if calculated_seeds else 0
+            regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
+            hiresfix_copy = (rph.copy() if rph else None, rnh.copy() if rnh else None)
+            regular_changes = False
+            hiresfix_changes = False
+            if regular_exists:
+                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "processing prompts combinatorially (regular)")
+                comb_results = ppp.process_prompt(rpr[0], rnr[0], seed_for_comb)
+                num_comb = len(comb_results)
+                for i in range(len(rpr)):  # pylint: disable=consider-using-enumerate
+                    posp, negp, _ = comb_results[i % num_comb]
+                    prompts_list[(regular_type, i)] = (posp, negp)
+                extra_params["PPP combination"] = [1+(i % num_comb) for i in range(len(rpr))]
+            if hiresfix_exists:
+                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "processing prompts combinatorially (hiresfix)")
+                comb_results_hr = ppp.process_prompt(rph[0], rnh[0], seed_for_comb)
+                num_comb_hr = len(comb_results_hr)
+                for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
+                    posp, negp, _ = comb_results_hr[i % num_comb_hr]
+                    prompts_list[(hiresfix_type, i)] = (posp, negp)
+                extra_params["PPP HR combination"] = [1+(i % num_comb_hr) for i in range(len(rph))]
+        else:
+            # processes prompts
+            for prompttype, typeindex in prompts_list.keys():
+                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts ({prompttype}[{typeindex+1}])")
+                key = (
+                    (hash_fullenv, calculated_seeds[typeindex], rpr[typeindex], rnr[typeindex])
+                    if prompttype == regular_type
+                    else (hash_fullenv, calculated_seeds[typeindex], rph[typeindex], rnh[typeindex])
+                )
+                cached = self.lru_cache.get(key)
+                if cached is None:
+                    (hsh, seed, prompt, negative_prompt) = key
+                    results = ppp.process_prompt(prompt, negative_prompt, seed)
+                    posp, negp, _ = results[0]
+                    cached = (posp, negp)
+                    self.lru_cache.put(key, cached)
+                    # adds also the result so i2i doesn't process it unnecessarily
+                    self.lru_cache.put((hsh, seed, posp, negp), cached)
+                else:
+                    log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
+                prompts_list[(prompttype, typeindex)] = cached
 
         # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "last_prompts.txt"), "w", encoding="utf-8") as f:
         #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():
@@ -404,7 +451,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 rnh[typeindex] = negp
 
         # initialize extra generation parameters
-        extra_params = {}
         if add_prompts:
             if regular_changes:
                 extra_params["PPP original prompts"] = regular_copy[0]

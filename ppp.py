@@ -8,7 +8,7 @@ import lark
 import numpy as np
 import yaml
 
-from pydantic import ValidationError  # pylint: disable=import-error
+from pydantic import ValidationError
 from ppp_classes import (
     FindInFilenamePattern,
     HostConfig,
@@ -21,7 +21,7 @@ from ppp_classes import (
     PPPInterrupt,
     PPPState,
     PPPStateOptions,
-)  # pylint: disable=import-error
+)
 from ppp_variables import VariableRepository
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
@@ -83,6 +83,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_CUP_MERGE_ATTENTION = defopt["cup_merge_attention"]
     DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS = defopt["cup_remove_extranetwork_tags"]
     DEFAULT_STRICT_OPERATORS = defopt["strict_operators"]
+    DEFAULT_DO_COMBINATORIAL = defopt["do_combinatorial"]
+    DEFAULT_COMBINATORIAL_LIMIT = defopt["combinatorial_limit"]
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
@@ -138,7 +140,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if user_config_file == "":
                 if self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
                     try:
-                        import folder_paths  # pylint: disable=import-error # type: ignore
+                        import folder_paths  # type: ignore
 
                         user_dir = folder_paths.get_user_directory()
                         if user_dir and os.path.isdir(user_dir):
@@ -772,7 +774,115 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             "simple parser without new constructs",
         )
 
-    def __processprompts(self, rng, prompt, negative_prompt):
+    def __postprocess_result(
+        self,
+        result: tuple[str, list[tuple[str, bool]], tuple[dict[str, str | None], dict[str, str | None]]],
+    ) -> tuple[str, str, dict[str, str | None]]:
+        variables = {}
+        unified_prompt, rem_wildcards, (_, echoed_variables_snapshot) = result
+
+        # Split the unified prompt back into prompt and negative prompt
+        split_parts = unified_prompt.split("\x1d", 1)
+        prompt = split_parts[0]
+        negative_prompt = split_parts[1] if len(split_parts) > 1 else ""
+
+        # Clean up
+        prompt = self.__cleanup(prompt, 1)
+        negative_prompt = self.__cleanup(negative_prompt, -1)
+
+        self.log(logging.INFO, f"Result prompt: {prompt}")
+        self.log(logging.INFO, f"Result negative_prompt: {negative_prompt}")
+        try:
+            # Get and clean variables
+            var_keys = sorted(echoed_variables_snapshot.keys())
+            for k in var_keys:
+                ev = echoed_variables_snapshot.get(k)
+                variables[k] = self.__cleanup(ev, 0) if self.state.options.cup_cleanup_variables else ev
+
+            self.log(logging.DEBUG, f"Result variables: {variables}")
+
+            # Result checks
+            warnings = []
+
+            # Check for special character sequences that should not be in the result
+            compound_prompt = prompt + "\n" + negative_prompt
+            found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
+            if found_sequences:
+                s = ", ".join(map(lambda x: '"' + x + '"', set(found_sequences)))
+                warnings.append(f"Probably invalid character sequences: {s}.")
+            # Check for correctly nested parentheses and brackets
+            stack = []
+            prev_char = ""
+            for char in compound_prompt:
+                if prev_char != "\\":
+                    if char in "([":  # opening characters
+                        stack.append(char)
+                    elif char in ")]":  # closing characters
+                        if not stack:
+                            warnings.append(f"Unmatched '{char}' character.")
+                            break
+                        last_open = stack.pop()
+                        if (last_open == "(" and char != ")") or (last_open == "[" and char != "]"):
+                            warnings.append(f"Mismatched '{last_open}' and '{char}' characters.")
+                            break
+                    prev_char = char
+                else:
+                    prev_char = ""  # reset prev_char to avoid treating escaped characters as escapes
+            if stack:
+                warnings.append(f"Unmatched '{''.join(stack)}' characters.")
+            if warnings:
+                self.log(
+                    logging.WARNING,
+                    "Found some weird things in the result. Something might be wrong!\n"
+                    + "\n".join(f"  - {w}" for w in warnings),
+                )
+
+            # Check for wildcards not processed
+            if rem_wildcards:
+                w_found_p = [wc for wc, n in rem_wildcards if not n]
+                w_found_n = [wc for wc, n in rem_wildcards if n]
+                if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
+                    self.log(logging.ERROR, "Found unprocessed wildcards!")
+                else:
+                    self.log(logging.INFO, "Found unprocessed wildcards.")
+                ppwl = ", ".join(w_found_p)
+                npwl = ", ".join(w_found_n)
+                if ppwl:
+                    self.log(logging.ERROR, f"In the prompt: {ppwl}")
+                if npwl:
+                    self.log(logging.ERROR, f"In the negative prompt: {npwl}")
+                if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.warn:
+                    prompt = self.WILDCARD_WARNING + prompt
+                elif self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
+                    raise PPPInterrupt(
+                        "Found unprocessed wildcards!",
+                        self.WILDCARD_STOP.format(ppwl) if ppwl else "",
+                        self.WILDCARD_STOP.format(npwl) if npwl else "",
+                    )
+
+            # Check for constructs not processed due to parsing problems
+            ppp_in_prompt = prompt.find("<ppp:") >= 0
+            ppp_in_negative_prompt = negative_prompt.find("<ppp:") >= 0
+            if ppp_in_prompt or ppp_in_negative_prompt:
+                raise PPPInterrupt(
+                    "Found unprocessed constructs!",
+                    self.UNPROCESSED_STOP if ppp_in_prompt else "",
+                    self.UNPROCESSED_STOP if ppp_in_negative_prompt else "",
+                )
+        except PPPInterrupt as e:
+            self.log(logging.ERROR, e.message)
+            if e.pos_prefix:
+                prompt = e.pos_prefix + prompt
+            if e.neg_prefix:
+                negative_prompt = e.neg_prefix + negative_prompt
+            self.log(logging.ERROR, "Interrupting!")
+            self.interrupt()
+
+        v = self.state.variables.get_all_system()
+        v.update(variables)
+        return prompt, negative_prompt, v
+
+    def __processprompts(self, rng, prompt, negative_prompt) -> list[tuple[str, str, dict[str, str | None]]]:
         """
         Process the prompt and negative prompt.
 
@@ -782,16 +892,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             negative_prompt (str): The negative prompt.
 
         Returns:
-            tuple: A tuple containing the processed prompt and negative prompt.
+            list: A list of tuples, each containing the processed prompt, negative prompt, and all variables.
         """
         self.state.variables.clear_user()
         self.state.variables.clear_echoed()
-        all_variables = self.state.variables.get_all_system()
 
         # Parse both prompts
         processor = TreeProcessor(self.state, rng)
-        unified_prompt = prompt + "\x1D" + negative_prompt
-        (prompt_parser, parser_description) = self.__get_best_parser(unified_prompt)
+        unified_prompt = prompt + "\x1d" + negative_prompt
+        prompt_parser, parser_description = self.__get_best_parser(unified_prompt)
         self.log(logging.DEBUG, f"Using {parser_description} for prompt")
         parsed = parse_prompt(
             self.state,
@@ -801,100 +910,28 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
 
         # Process the unified prompt
-        unified_prompt, rem_wildcards = processor.start_visit(parsed)
+        t1 = time.monotonic_ns()
+        try:
+            results = processor.start_visit(parsed)
+        except PPPInterrupt as e:
+            self.log(logging.ERROR, e.message)
+            if e.pos_prefix:
+                prompt = e.pos_prefix + prompt
+            if e.neg_prefix:
+                negative_prompt = e.neg_prefix + negative_prompt
+            self.log(logging.ERROR, "Interrupting!")
+            self.interrupt()
+        t2 = time.monotonic_ns()
+        self.log(logging.INFO, f"Visit time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
-        # Complete variables
-        var_keys = sorted(self.state.variables.all_user_or_echoed_keys())
-        for k in var_keys:
-            ev = self.state.variables.get_echoed_value(k)
-            if ev is None:
-                ev = self.state.variables.get_user(k)
-            if ev is None or not isinstance(ev, str):
-                self.log(logging.DEBUG, f"Completing variable: {k}")
-                ev = processor.get_final_variable(k)
-            all_variables[k] = self.__cleanup(ev, 0) if self.state.options.cup_cleanup_variables else ev
-        self.log(logging.DEBUG, f"All variables: {all_variables}")
-
-        # Split the unified prompt back into prompt and negative prompt
-        split_parts = unified_prompt.split("\x1D", 1)
-        prompt = split_parts[0]
-        negative_prompt = split_parts[1] if len(split_parts) > 1 else ""
-
-        # Clean up
-        prompt = self.__cleanup(prompt, 1)
-        negative_prompt = self.__cleanup(negative_prompt, -1)
-
-        # Result checks
-        warnings = []
-
-        # Check for special character sequences that should not be in the result
-        compound_prompt = prompt + "\n" + negative_prompt
-        found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
-        if found_sequences:
-            warnings.append(
-                f"Probably invalid character sequences: {', '.join(map(lambda x: '"' + x + '"', set(found_sequences)))}."
-            )
-        # Check for correctly nested parentheses and brackets
-        stack = []
-        prev_char = ""
-        for char in compound_prompt:
-            if prev_char != "\\":
-                if char in "([":  # opening characters
-                    stack.append(char)
-                elif char in ")]":  # closing characters
-                    if not stack:
-                        warnings.append(f"Unmatched '{char}' character.")
-                        break
-                    last_open = stack.pop()
-                    if (last_open == "(" and char != ")") or (last_open == "[" and char != "]"):
-                        warnings.append(f"Mismatched '{last_open}' and '{char}' characters.")
-                        break
-                prev_char = char
-            else:
-                prev_char = ""  # reset prev_char to avoid treating escaped characters as escapes
-        if stack:
-            warnings.append(f"Unmatched '{''.join(stack)}' characters.")
-        if warnings:
-            self.log(
-                logging.WARNING,
-                "Found some weird things in the result. Something might be wrong!\n"
-                + "\n".join(f"  - {w}" for w in warnings),
-            )
-
-        # Check for wildcards not processed
-        if rem_wildcards:
-            w_found_p = [wc for wc, n in rem_wildcards if not n]
-            w_found_n = [wc for wc, n in rem_wildcards if n]
-            if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
-                self.log(logging.ERROR, "Found unprocessed wildcards!")
-            else:
-                self.log(logging.INFO, "Found unprocessed wildcards.")
-            ppwl = ", ".join(w_found_p)
-            npwl = ", ".join(w_found_n)
-            if ppwl:
-                self.log(logging.ERROR, f"In the prompt: {ppwl}")
-            if npwl:
-                self.log(logging.ERROR, f"In the negative prompt: {npwl}")
-            if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.warn:
-                prompt = self.WILDCARD_WARNING + prompt
-            elif self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
-                raise PPPInterrupt(
-                    "Found unprocessed wildcards!",
-                    self.WILDCARD_STOP.format(ppwl) if ppwl else "",
-                    self.WILDCARD_STOP.format(npwl) if npwl else "",
-                )
-            
-        # Check for constructs not processed due to parsing problems
-        ppp_in_prompt = prompt.find("<ppp:") >= 0
-        ppp_in_negative_prompt = negative_prompt.find("<ppp:") >= 0
-        if ppp_in_prompt or ppp_in_negative_prompt:
-            raise PPPInterrupt(
-                "Found unprocessed constructs!",
-                self.UNPROCESSED_STOP if ppp_in_prompt else "",
-                self.UNPROCESSED_STOP if ppp_in_negative_prompt else "",
-            )
-
-        return prompt, negative_prompt, all_variables
+        final_results = []
+        for i, r in enumerate(results):
+            if self.state.options.do_combinatorial:
+                self.log(logging.INFO, f"Combination {i + 1}:")
+            final_results.append(self.__postprocess_result(r))
+        if self.state.options.do_combinatorial:
+            self.log(logging.INFO, f"Total combinations: {len(final_results)}")
+        return final_results
 
     def process_prompt(
         self,
@@ -913,7 +950,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Returns:
             tuple: A tuple containing the processed prompt, negative prompt and all the prompt variables.
         """
-        all_variables = {}
         try:
             if seed == -1:
                 seed = np.random.randint(0, 2**32, dtype=np.int64)
@@ -923,16 +959,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.INFO, f"Input seed: {seed}")
             self.log(logging.INFO, f"Input prompt: {prompt}")
             self.log(logging.INFO, f"Input negative_prompt: {negative_prompt}")
+            self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
             t1 = time.monotonic_ns()
-            prompt, negative_prompt, all_variables = self.__processprompts(
-                np.random.default_rng(seed & 0xFFFFFFFF), prompt, negative_prompt
-            )
+            results = self.__processprompts(np.random.default_rng(seed & 0xFFFFFFFF), prompt, negative_prompt)
             t2 = time.monotonic_ns()
-            self.log(logging.INFO, f"Result prompt: {prompt}")
-            self.log(logging.INFO, f"Result negative_prompt: {negative_prompt}")
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")
-            return prompt, negative_prompt, all_variables
+            return results
         except PPPInterrupt as e:
             self.log(logging.ERROR, e.message)
             if e.pos_prefix:
@@ -941,7 +974,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 negative_prompt = e.neg_prefix + negative_prompt
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
-            return prompt, negative_prompt, all_variables
+            return [prompt, negative_prompt, {}]
         except Exception:  # pylint: disable=broad-exception-caught
             self.log(logging.ERROR, "Unexpected error", exc_info=True)
-            return original_prompt, original_negative_prompt, all_variables
+            return [original_prompt, original_negative_prompt, {}]

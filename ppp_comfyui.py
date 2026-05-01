@@ -1,8 +1,8 @@
 import logging
 import os
 
-import folder_paths  # pylint: disable=import-error # type: ignore
-import nodes  # pylint: disable=import-error # type: ignore
+import folder_paths  # type: ignore
+import nodes  # type: ignore
 
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
@@ -180,6 +180,22 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "do_combinatorial": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_DO_COMBINATORIAL,
+                        "tooltip": "Enable combinatorial mode",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
+                "combinatorial_limit": (
+                    "INT",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_LIMIT,
+                        "tooltip": "Limit for combinatorial mode",
+                    },
+                ),
                 "wc_options": (
                     "PPP_OPTIONS_WC",
                     {
@@ -229,6 +245,11 @@ class PromptPostProcessorComfyUINode:
         "STRING",
         "PPP_DICT",
     )
+    OUTPUT_IS_LIST = (
+        True,
+        True,
+        True,
+    )
     RETURN_NAMES = (
         "pos_prompt",
         "neg_prompt",
@@ -255,6 +276,8 @@ class PromptPostProcessorComfyUINode:
         process_wildcards,
         do_cleanup,
         cleanup_variables,
+        do_combinatorial,
+        combinatorial_limit,
         wc_options=None,
         stn_options=None,
         cup_options=None,
@@ -292,7 +315,9 @@ class PromptPostProcessorComfyUINode:
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(debug_level),
             on_warning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ON_WARNING,
-            strict_operators=strict_operators if strict_operators is not None else PromptPostProcessor.DEFAULT_STRICT_OPERATORS,
+            strict_operators=(
+                strict_operators if strict_operators is not None else PromptPostProcessor.DEFAULT_STRICT_OPERATORS
+            ),
             process_wildcards=process_wildcards,
             if_wildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
             choice_separator=(
@@ -345,6 +370,8 @@ class PromptPostProcessorComfyUINode:
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
+            do_combinatorial=do_combinatorial,
+            combinatorial_limit=combinatorial_limit,
         )
         self.wildcards_obj.refresh_wildcards(
             options.debug_level,
@@ -365,12 +392,14 @@ class PromptPostProcessorComfyUINode:
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
-        pos_prompt, neg_prompt, variables = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
-        return (
-            pos_prompt,
-            neg_prompt,
-            variables,
-        )
+        results = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
+        # pos_prompt, neg_prompt, variables = results[0]
+        # return (
+        #     pos_prompt,
+        #     neg_prompt,
+        #     variables,
+        # )
+        return tuple(zip(*results))  # unzip the list of tuples into tuple of lists
 
     def interrupt(self):
         nodes.interrupt_processing(True)
@@ -917,8 +946,8 @@ class PromptPostProcessorWildcardConcatComfyUINode:
 
 
 try:
-    from server import PromptServer  # type: ignore # pylint: disable=import-error
-    from aiohttp import web as _aiohttp_web  # type: ignore # pylint: disable=import-error
+    from server import PromptServer  # type: ignore
+    from aiohttp import web as _aiohttp_web  # type: ignore
 
     @PromptServer.instance.routes.get("/acb_ppp/wildcards")
     async def _acb_ppp_get_wildcards(request):

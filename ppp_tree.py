@@ -1,10 +1,11 @@
 from collections import namedtuple
+from itertools import combinations, combinations_with_replacement, permutations, product
 import logging
 import math
 import re
 import textwrap
 import time
-from typing import Optional
+from typing import Any, Optional
 import lark
 import numpy as np
 
@@ -31,7 +32,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         result (str): The final processed prompt.
     """
 
-    NEGATIVE_SEP = "\x1D"
+    NEGATIVE_SEP = "\x1d"
     AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
     NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
 
@@ -46,10 +47,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__is_negative = False
         self.__wildcard_filters = {}
         self.__seen_wildcards: list[str] = []
-        self.add_at: dict[str, list] = {"start": [], "insertion_point": [[] for _ in range(10)], "end": []}
-        self.insertion_at: list[tuple[int, int]] = [None for _ in range(10)]
-        self.detectedWildcards: list[tuple[str,bool]] = []
-        self.result = ""
+        self.__add_at: dict[str, list] = {"start": [], "insertion_point": [[] for _ in range(10)], "end": []}
+        self.__insertion_at: list[tuple[int, int]] = [None for _ in range(10)]
+        self.__detectedWildcards: list[tuple[str, bool]] = []
+        self.__result = ""
+        self.__comb_forced_path: list[int] = []
+        self.__comb_trace: list[int] = []
 
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None):
         log(self.state.logger, self.state.options.debug_level, kind, message, min_level)
@@ -57,10 +60,25 @@ class TreeProcessor(lark.visitors.Interpreter):
     def warn_or_stop(self, message: str, e: Exception = None):
         warn_or_stop(self.state, self.__is_negative, message, e)
 
+    def __reset_run_state(self):
+        """Reset all per-run mutable state for a fresh combinatorial pass."""
+        self.__shell = []
+        self.__negtags = []
+        self.__already_processed = []
+        self.__is_negative = False
+        self.__wildcard_filters = {}
+        self.__seen_wildcards = []
+        self.__add_at = {"start": [], "insertion_point": [[] for _ in range(10)], "end": []}
+        self.__insertion_at = [None for _ in range(10)]
+        self.__detectedWildcards = []
+        self.__result = ""
+        if self.state.extranetwork_mappings_obj is not None:
+            self.state.extranetwork_mappings_obj.cached_mappings.clear()
+
     def start_visit(
         self,
         parsed: lark.Tree,
-    ) -> tuple[str, list[tuple[str,bool]]]:
+    ) -> list[tuple[str, list[tuple[str, bool]], tuple[dict[str, Any], dict[str, str]]]]:
         """
         Process the positive and negative prompts in a unified way using the same processor.
         STN insertions are applied to the negative result directly inside this processor.
@@ -69,17 +87,78 @@ class TreeProcessor(lark.visitors.Interpreter):
             parsed (Tree): The parsed unified prompt.
 
         Returns:
-            tuple[str, list[tuple[str,bool]]]: The processed prompt and its detected wildcards.
+            list[tuple[str, list[tuple[str,bool]], tuple[dict[str, Any], dict[str, str]]]]: A list of
+                (processed prompt, detected wildcards, variables snapshot) triples — one entry per
+                combination in combinatorial mode, or a single entry otherwise. The variables snapshot
+                is the return value of ``state.variables.backup_user_and_echoed()`` captured after processing.
         """
-        t1 = time.monotonic_ns()
-        self.log(logging.INFO, f"Processing prompt...")
-        self.detectedWildcards = []
+        self.log(logging.INFO, "Processing prompt...")
+
+        self.__detectedWildcards = []
         self.__is_negative = False
-        self.result = ""
-        self.visit(parsed)
-        t2 = time.monotonic_ns()
-        self.log(logging.INFO, f"Process prompt time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
-        return self.result, self.detectedWildcards
+        self.__result = ""
+
+        if not self.state.options.do_combinatorial:
+            self.visit(parsed)
+            self.__finalize_echoed_variables()
+            return [(self.__result, self.__detectedWildcards, self.state.variables.backup_user_and_echoed())]
+
+        # Combinatorial mode: explore every possible path through choices and wildcards via DFS.
+        # __comb_forced_path drives which option is selected at each decision point;
+        # __comb_trace records how many options were available at each point so the DFS can
+        # correctly enumerate unexplored branches after each run.
+        initial_vars = self.state.variables.backup_user_and_echoed()
+        results: list[tuple[str, list[tuple[str, bool]], tuple]] = []
+        limit = self.state.options.combinatorial_limit
+
+        def _run(forced_path: tuple[int, ...]) -> tuple[int, ...]:
+            self.log(logging.DEBUG, f"Running combinatorial path: {forced_path}")
+            self.__comb_forced_path = list(forced_path)
+            self.__comb_trace = []
+            self.__reset_run_state()
+            self.state.variables.restore_user_and_echoed(initial_vars)
+            self.visit(parsed)
+            self.__finalize_echoed_variables()
+            results.append(
+                (self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user_and_echoed())
+            )
+            return tuple(self.__comb_trace)
+
+        def _dfs(forced_path: tuple[int, ...]):
+            if 0 < limit <= len(results):
+                return
+            trace = _run(forced_path)
+            # For each decision that was reached but not forced, spawn branches for all
+            # options beyond the default (index 0).
+            # Iterate in reverse so later decisions vary fastest, producing lexicographic order.
+            for i in range(len(trace) - 1, len(forced_path) - 1, -1):
+                if 0 < limit <= len(results):
+                    return
+                num_options = trace[i]
+                for opt in range(1, num_options):
+                    if 0 < limit <= len(results):
+                        return
+                    # Pad with zeros for intermediate decisions so they keep the default.
+                    new_path = forced_path + (0,) * (i - len(forced_path)) + (opt,)
+                    _dfs(new_path)
+
+        _dfs(())
+        if 0 < limit <= len(results):
+            self.log(
+                logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations may have been skipped."
+            )
+        return results
+
+    def __finalize_echoed_variables(self):
+        var_keys = self.state.variables.all_user_or_echoed_keys()
+        for k in var_keys:
+            ev = self.state.variables.get_echoed_value(k)
+            if ev is None:
+                ev = self.state.variables.get_user(k)
+            if ev is None or ev.__class__ != str: # strict check to avoid problems with Tokens
+                self.log(logging.DEBUG, f"Completing variable: {k}")
+                ev = self.get_final_variable(k)
+                self.state.variables.echo(k, ev)  # ensure all variables are echoed so they are included in the snapshot
 
     def __visit(
         self,
@@ -98,16 +177,16 @@ class TreeProcessor(lark.visitors.Interpreter):
         Returns:
             str: The result of the visit.
         """
-        backup_result = self.result
+        backup_result = self.__result
         # self.log(logging.DEBUG, f"Visiting node {node}.")
         if restore_state:
             # self.log(logging.DEBUG, "Backing up state before visiting.")
             backup_shell = self.__shell.copy()
             backup_negtags = self.__negtags.copy()
             backup_already_processed = self.__already_processed.copy()
-            backup_add_at = self.add_at.copy()
-            backup_insertion_at = self.insertion_at.copy()
-            backup_detectedwildcards = self.detectedWildcards.copy()
+            backup_add_at = self.__add_at.copy()
+            backup_insertion_at = self.__insertion_at.copy()
+            backup_detectedwildcards = self.__detectedWildcards.copy()
             backup_vars = self.state.variables.backup_user_and_echoed()
         if node is not None:
             if isinstance(node, list):
@@ -116,22 +195,22 @@ class TreeProcessor(lark.visitors.Interpreter):
             elif isinstance(node, lark.Tree):
                 self.visit(node)
             elif isinstance(node, lark.Token):
-                self.result += node
+                self.__result += node
         len_backup = len(backup_result)
         # if self.result[:len_backup] == backup_result:  # this is only necessary if we call parse_prompt with a parser from "start", because it resets the result
-        added_result = self.result[len_backup:]
+        added_result = self.__result[len_backup:]
         # else:
         #     added_result = self.result
         if discard_content or restore_state:
-            self.result = backup_result
+            self.__result = backup_result
         if restore_state:
             # self.log(logging.DEBUG, "Restoring state after visiting.")
             self.__shell = backup_shell
             self.__negtags = backup_negtags
             self.__already_processed = backup_already_processed
-            self.add_at = backup_add_at
-            self.insertion_at = backup_insertion_at
-            self.detectedWildcards = backup_detectedwildcards
+            self.__add_at = backup_add_at
+            self.__insertion_at = backup_insertion_at
+            self.__detectedWildcards = backup_detectedwildcards
             self.state.variables.restore_user_and_echoed(backup_vars)
         return added_result
 
@@ -162,7 +241,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             return None, None, None
         if specifier == "#":  # special value to indicate length of the array variable
             return None, None, True
-        if specifier.startswith("&"): # special value to indicate a separator
+        if specifier.startswith("&"):  # special value to indicate a separator
             return None, specifier[2:-1], False
         if not specifier.isdecimal():
             # bare identifier: resolve as variable
@@ -199,7 +278,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             elif isinstance(v, lark.Token):
                 v = str(v)
             if visit and not visited:
-                self.result += v
+                self.__result += v
             return v
 
         v = self.state.variables.get(name)
@@ -212,7 +291,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if cnt:
                     v = len(v)
                     if visit:
-                        self.result += str(v)
+                        self.__result += str(v)
                 elif idx is not None:
                     if 0 <= idx < len(v):
                         v = visit_value(v[idx])
@@ -225,7 +304,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     for i, item in enumerate(v):
                         v2.append(visit_value(item))
                         if visit and i < len(v) - 1:
-                            self.result += sep
+                            self.__result += sep
                     v = v2
             else:
                 v = None  # error
@@ -283,7 +362,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         if self.__debug_level == DEBUG_LEVEL.full:
             info = f"({info}) " if info is not None and info != "" else ""
-            output = self.result[len(start_result) :]
+            output = self.__result[len(start_result) :]
             if output != "":
                 output = f" >> '{escape_single_quotes(output)}'"
             self.log(logging.DEBUG, f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
@@ -333,7 +412,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             (bool, list),
         ]
         if not any(isinstance(operand1, t1) and isinstance(operand2, t2) for t1, t2 in compatible_types):
-            self.warn_or_stop(f"Mixed type values ({type(operand1).__name__}, {type(operand2).__name__}) used in comparison: '{escape_single_quotes(desc)}'")
+            self.warn_or_stop(
+                f"Mixed type values ({type(operand1).__name__}, {type(operand2).__name__}) used in comparison: '{escape_single_quotes(desc)}'"
+            )
             return False
         return operation(operand1, operand2)
 
@@ -696,10 +777,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a negative prompt separator in the tree.
         """
-        start_result = self.result
+        start_result = self.__result
         t1 = time.monotonic_ns()
         x = tree.children[0]
-        self.result += x.value
+        self.__result += x.value
         self.__is_negative = True
         t2 = time.monotonic_ns()
         self.__debug_end("negative_sep", start_result, t2 - t1)
@@ -708,7 +789,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a prompt composition construct in the tree.
         """
-        start_result = self.result
+        start_result = self.__result
         t1 = time.monotonic_ns()
         self.__visit(tree.children[0])
         and_processing = self.state.host_config.and_
@@ -719,11 +800,11 @@ class TreeProcessor(lark.visitors.Interpreter):
                 "remove": ("removed", " "),
             }
             if tree.children[1] is not None:
-                self.result += f":{tree.children[1]}"
+                self.__result += f":{tree.children[1]}"
             for i in range(2, len(tree.children), 3):
                 if and_processing in and_replacements.keys():
-                    self.result = (
-                        self.result.rstrip()
+                    self.__result = (
+                        self.__result.rstrip()
                         + and_replacements[and_processing][1]
                         + self.__visit(tree.children[i + 1], False, True).lstrip()
                     )
@@ -732,18 +813,20 @@ class TreeProcessor(lark.visitors.Interpreter):
                     self.warn_or_stop("AND constructs are not allowed!")
                 else:  # and_processing == "ok":
                     if self.state.options.cup_ands:
-                        self.result = re.sub(r"[, ]+$", "\n" if self.state.options.cup_ands_eol else " ", self.result)
-                    if self.result[-1:].isalnum():  # add space if needed
-                        self.result += " "
-                    self.result += "AND"
+                        self.__result = re.sub(
+                            r"[, ]+$", "\n" if self.state.options.cup_ands_eol else " ", self.__result
+                        )
+                    if self.__result[-1:].isalnum():  # add space if needed
+                        self.__result += " "
+                    self.__result += "AND"
                     added_result = self.__visit(tree.children[i + 1], False, True)
                     if self.state.options.cup_ands:
                         added_result = re.sub(r"^[, ]+", " ", added_result)
                     if added_result[0:1].isalnum():  # add space if needed
                         added_result = " " + added_result
-                    self.result += added_result
+                    self.__result += added_result
                     if tree.children[i + 2] is not None:
-                        self.result += f":{tree.children[i+2]}"
+                        self.__result += f":{tree.children[i+2]}"
         t2 = time.monotonic_ns()
         self.__debug_end("promptcomp", start_result, t2 - t1)
 
@@ -751,7 +834,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a scheduling construct in the tree and add it to the accumulated shell.
         """
-        start_result = self.result
+        start_result = self.__result
         t1 = time.monotonic_ns()
         before = tree.children[0]
         after = tree.children[-2]
@@ -780,7 +863,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.warn_or_stop("Scheduling constructs are not allowed!")
         else:  # scheduling_processing == "ok"
             # self.__shell.append(TreeProcessor.AccumulatedShell("sc", pos))
-            self.result += "["
+            self.__result += "["
             if before is not None:
                 self.log(logging.DEBUG, f"Shell scheduled before with position {pos}")
                 self.__shell.append(TreeProcessor.AccumulatedShell("scb", pos))
@@ -788,15 +871,15 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.__shell.pop()
             self.log(logging.DEBUG, f"Shell scheduled after with position {pos}")
             self.__shell.append(TreeProcessor.AccumulatedShell("sca", pos))
-            self.result += ":"
+            self.__result += ":"
             self.__visit(after)
             self.__shell.pop()
             if self.state.options.cup_empty_constructs and re.fullmatch(
-                re.escape(start_result) + r"\[:\s*", self.result
+                re.escape(start_result) + r"\[:\s*", self.__result
             ):
-                self.result = start_result
+                self.__result = start_result
             else:
-                self.result += f":{pos_str}]"
+                self.__result += f":{pos_str}]"
             # self.__shell.pop()
         t2 = time.monotonic_ns()
         self.__debug_end("scheduled", start_result, t2 - t1, pos_str)
@@ -805,7 +888,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process an alternation construct in the tree and add it to the accumulated shell.
         """
-        start_result = self.result
+        start_result = self.__result
         t1 = time.monotonic_ns()
         alternation_processing = self.state.host_config.alternation
         if alternation_processing == "first":
@@ -817,19 +900,19 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.warn_or_stop("Alternation constructs are not allowed!")
         else:  # alternation_processing == "ok"
             # self.__shell.append(TreeProcessor.AccumulatedShell("al", len(tree.children)))
-            self.result += "["
+            self.__result += "["
             for i, opt in enumerate(tree.children):
                 self.log(logging.DEBUG, f"Shell alternate option {i+1}")
                 self.__shell.append(TreeProcessor.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}))
                 if i > 0:
-                    self.result += "|"
+                    self.__result += "|"
                 self.__visit(opt)
                 self.__shell.pop()
-            self.result += "]"
+            self.__result += "]"
             if self.state.options.cup_empty_constructs and re.fullmatch(
-                re.escape(start_result) + r"\[\s*\]", self.result
+                re.escape(start_result) + r"\[\s*\]", self.__result
             ):
-                self.result = start_result
+                self.__result = start_result
             # self.__shell.pop()
         t2 = time.monotonic_ns()
         self.__debug_end("alternate", start_result, t2 - t1)
@@ -838,7 +921,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a attention change construct in the tree and add it to the accumulated shell.
         """
-        start_result = self.result
+        start_result = self.__result
         t1 = time.monotonic_ns()
         # weight_kind: -1: remove, 0=none, 1=decrease, 2=increase, 3=specific
         if len(tree.children) == 2:
@@ -902,25 +985,25 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.__shell.append(TreeProcessor.AccumulatedShell("at", (weight_kind, weight_str)))
             if weight_kind == 1:
                 starttag = "["
-                self.result += starttag
+                self.__result += starttag
                 self.__visit(current_tree)
                 endtag = "]"
             elif weight_kind == 2:
                 starttag = "("
-                self.result += starttag
+                self.__result += starttag
                 self.__visit(current_tree)
                 endtag = ")"
             else:  # weight_kind == 3
                 starttag = "("
-                self.result += starttag
+                self.__result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
             if self.state.options.cup_empty_constructs and re.fullmatch(
-                re.escape(start_result + starttag) + r"\s*", self.result
+                re.escape(start_result + starttag) + r"\s*", self.__result
             ):
-                self.result = start_result
+                self.__result = start_result
             else:
-                self.result += endtag
+                self.__result += endtag
             self.__shell.pop()
         t2 = time.monotonic_ns()
         self.__debug_end("attention", start_result, t2 - t1, weight_str)
@@ -929,7 +1012,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a send to negative command in the tree and add it to the list of negative tags.
         """
-        start_result = self.result
+        start_result = self.__result
         info = None
         t1 = time.monotonic_ns()
         if not self.__is_negative:
@@ -940,7 +1023,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 parameters = ""
             content = self.__visit(tree.children[1::], False, True)
             self.__negtags.append(
-                TreeProcessor.NegTag(len(self.result), len(self.result), content, parameters, self.__shell.copy())
+                TreeProcessor.NegTag(len(self.__result), len(self.__result), content, parameters, self.__shell.copy())
             )
             info = f"with {escape_single_quotes(parameters) or 'no parameters'} : {escape_single_quotes(content)}"
         else:
@@ -953,7 +1036,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         Process a send to negative insertion point command in the tree and add it to the list of negative tags.
         """
-        start_result = self.result
+        start_result = self.__result
         info = None
         t1 = time.monotonic_ns()
         if self.__is_negative:
@@ -962,7 +1045,9 @@ class TreeProcessor(lark.visitors.Interpreter):
                 parameters = str(negtagparameters)
             else:
                 parameters = ""
-            self.__negtags.append(TreeProcessor.NegTag(len(self.result), len(self.result), "", parameters, self.__shell.copy()))
+            self.__negtags.append(
+                TreeProcessor.NegTag(len(self.__result), len(self.__result), "", parameters, self.__shell.copy())
+            )
             info = f"with {parameters or 'no parameters'}"
         else:
             self.warn_or_stop("Ignored negative insertion point command in positive prompt")
@@ -981,7 +1066,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process a generic set command in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         if self.state.variables.name_is_system(variable_name):
             self.warn_or_stop(
                 f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
@@ -1069,7 +1154,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             if is_starred:
                 if access_full_array and isinstance(newvalue.children[0], lark.Tree):
                     if newvalue.children[0].data == "vardescriptor_get":
-                        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(newvalue.children[0])
+                        vardescriptor_name, vardescriptor_specifier = self.__separate_vardescriptor(
+                            newvalue.children[0]
+                        )
                         if vardescriptor_specifier is not None:
                             newvalue = None
                         else:
@@ -1079,9 +1166,9 @@ class TreeProcessor(lark.visitors.Interpreter):
                             self.__resolve_operand(c) for c in self.__get_cond_operand(newvalue.children[0])
                         )
                     elif newvalue.children[0].data == "wildcard":
-                        backup_result = self.result
+                        backup_result = self.__result
                         newvalue = self.__process_wildcard(newvalue.children[0])
-                        self.result = backup_result
+                        self.__result = backup_result
                     else:
                         newvalue = None
                 else:
@@ -1150,7 +1237,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process a generic echo command in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         default_value = None
         # if default is not None:
         #     default_value = self.__visit(default, True)  # for log
@@ -1161,7 +1248,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
                 value = self.__visit(default, False, True)
-                self.result += value
+                self.__result += value
                 default_value = value
             else:
                 self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
@@ -1206,7 +1293,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process an if command in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         for i, n in enumerate(tree.children):
             content = n.children[-1]
             if len(n.children) == 2:  # its not an else
@@ -1229,7 +1316,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process an extranetwork command in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         extnet = "(ignored)"
         if not self.state.options.cup_remove_extranetwork_tags:
             extnet_type: str = (tree.children[0].children[0] or "") + str(tree.children[0].children[1])
@@ -1290,12 +1377,23 @@ class TreeProcessor(lark.visitors.Interpreter):
                                         else:
                                             else_mapping = v
                         if found_mappings:
-                            found = found_mappings[
-                                self.__rng.choice(
-                                    len(found_mappings),
-                                    p=[v.weight or 1 for v in found_mappings],
+                            if self.state.options.do_combinatorial:
+                                N = len(found_mappings)
+                                decision_idx = len(self.__comb_trace)
+                                self.__comb_trace.append(N)
+                                chosen_idx = (
+                                    min(self.__comb_forced_path[decision_idx], N - 1)
+                                    if decision_idx < len(self.__comb_forced_path)
+                                    else 0
                                 )
-                            ]
+                                found = found_mappings[chosen_idx]
+                            else:
+                                found = found_mappings[
+                                    self.__rng.choice(
+                                        len(found_mappings),
+                                        p=[v.weight or 1 for v in found_mappings],
+                                    )
+                                ]
                         else:
                             found = else_mapping
                         self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
@@ -1348,23 +1446,23 @@ class TreeProcessor(lark.visitors.Interpreter):
                         self.warn_or_stop(f"Extranetwork mapping '{escape_single_quotes(extnet_id)}' not found!")
                 if extnet_id:
                     extnet = f"<{extnet_id}:{parameters}>"
-                    self.result += extnet
+                    self.__result += extnet
                 elif triggers or compiled_extra_triggers:
                     extnet = "(only triggers)"
                 if triggers or compiled_extra_triggers:
                     if extnet_id:
                         if not self.state.options.cup_extranetwork_tags:
-                            self.result += " "
+                            self.__result += " "
                     else:
-                        self.result += ", "
+                        self.__result += ", "
                 if triggers:
-                    self.result += self.__visit(triggers, True, True)
+                    self.__result += self.__visit(triggers, True, True)
                 if compiled_extra_triggers:
                     if triggers:
-                        self.result += ", "
-                    self.result += self.__visit(compiled_extra_triggers, True, True)
+                        self.__result += ", "
+                    self.__result += self.__visit(compiled_extra_triggers, True, True)
                 if triggers or compiled_extra_triggers:
-                    self.result += ", "
+                    self.__result += ", "
         t2 = time.monotonic_ns()
         self.__debug_end("commandext", start_result, t2 - t1, extnet)
 
@@ -1373,7 +1471,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process a setwcdeffilter (Set Wildcard Default Filter) command in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         wildcard_key: str = self.__visit(tree.children[0].children[1], False, True)
         selected_wildcards = [x.key for x in self.state.wildcards_obj.get_wildcards(wildcard_key)]
         if not selected_wildcards:
@@ -1397,11 +1495,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process an extra network construct in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         if not self.state.options.cup_remove_extranetwork_tags:
-            self.result += f"<{tree.children[0]}"
+            self.__result += f"<{tree.children[0]}"
             self.__visit(tree.children[1])
-            self.result += ">"
+            self.__result += ">"
         t2 = time.monotonic_ns()
         self.__debug_end("extranetworktag", start_result, t2 - t1)
 
@@ -1450,7 +1548,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         for i, c in enumerate(filtered_choice_values):
             if c.get("command", False):
                 content_text = self.__visit(c.get("content", ""), False, True).strip()
-                (cmd, cmd_args) = content_text.split()
+                cmd, cmd_args = content_text.split()
                 if cmd == "include":
                     wcs = self.state.wildcards_obj.get_wildcards(cmd_args)
                     if not wcs:
@@ -1467,7 +1565,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         self.__seen_wildcards.append(wc.key)
                         self.log(logging.DEBUG, f"Seen wildcard '{escape_single_quotes(wc.key)}'")
                         self.log(logging.DEBUG, f"Including choices from wildcard '{escape_single_quotes(wc.key)}'")
-                        (_, choice_values) = self.__check_wildcard_initialization(wc)
+                        _, choice_values = self.__check_wildcard_initialization(wc)
                         if choice_values is not None:
                             ch_values = self.__get_choices_internal_get(choice_values, None, wc.key)
                             for cv in ch_values:
@@ -1550,9 +1648,40 @@ class TreeProcessor(lark.visitors.Interpreter):
                 to_value = 1
             elif (to_value > len(available_choices) and not repeating) or from_value > to_value:
                 to_value = len(available_choices)
-            num_choices = (
-                self.__rng.integers(from_value, to_value, endpoint=True) if from_value < to_value else from_value
-            )
+            comb_chosen_selection: Optional[list[dict]] = None
+            if self.state.options.do_combinatorial:
+                # Enumerate every distinct selection of choices, accounting for count range and repetition.
+                all_selections: list[tuple] = []
+                # When keep_choices_order is False the output depends on the selection order,
+                # so we must enumerate ordered sequences (permutations / product).
+                # When keep_choices_order is True selections are sorted afterward, so all
+                # orderings of the same items produce identical output and we only need
+                # unordered iterators (combinations / combinations_with_replacement).
+                for k in range(from_value, to_value + 1):
+                    if repeating:
+                        if self.state.options.keep_choices_order:
+                            all_selections.extend(combinations_with_replacement(available_choices, k))
+                        else:
+                            all_selections.extend(product(available_choices, repeat=k))
+                    else:
+                        if self.state.options.keep_choices_order:
+                            all_selections.extend(combinations(available_choices, k))
+                        else:
+                            all_selections.extend(permutations(available_choices, k))
+                num_selections = len(all_selections)
+                decision_idx = len(self.__comb_trace)
+                self.__comb_trace.append(num_selections)
+                chosen_idx = (
+                    min(self.__comb_forced_path[decision_idx], num_selections - 1)
+                    if decision_idx < len(self.__comb_forced_path)
+                    else 0
+                )
+                comb_chosen_selection = list(all_selections[chosen_idx])
+                num_choices = len(comb_chosen_selection)
+            else:
+                num_choices = (
+                    self.__rng.integers(from_value, to_value, endpoint=True) if from_value < to_value else from_value
+                )
         else:
             num_choices = 0
             if not optional and from_value > 0:
@@ -1566,11 +1695,14 @@ class TreeProcessor(lark.visitors.Interpreter):
             + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else ""),
         )
         if num_choices > 0:
-            selected_choices: list[dict] = (
-                list(self.__rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
-                if available_choices
-                else []
-            )
+            if self.state.options.do_combinatorial and comb_chosen_selection is not None:
+                selected_choices: list[dict] = comb_chosen_selection
+            else:
+                selected_choices: list[dict] = (
+                    list(self.__rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
+                    if available_choices
+                    else []
+                )
             if self.state.options.keep_choices_order:
                 selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
             selected_choices_text = []
@@ -1829,7 +1961,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         chosen_choices = []
-        start_result = self.result
+        start_result = self.__result
         seen_wildcards_len = len(self.__seen_wildcards)
         applied_options = self.__clean_wildcard_options(self.__convert_choices_options(tree.children[0], False))
         wildcard_key: str = self.__visit(tree.children[1], False, True)
@@ -1838,8 +1970,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.log(logging.DEBUG, f"Processing wildcard: {wildcard_key}")
             selected_wildcards = self.state.wildcards_obj.get_wildcards(wildcard_key)
             if not selected_wildcards:
-                self.detectedWildcards.append((wc, self.__is_negative))
-                self.result += wc
+                self.__detectedWildcards.append((wc, self.__is_negative))
+                self.__result += wc
                 t2 = time.monotonic_ns()
                 self.__debug_end("wildcard", start_result, t2 - t1, wc)
                 return []
@@ -1891,8 +2023,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             choice_values_all = []
             for wildcard in selected_wildcards:
                 if wildcard is None:
-                    self.detectedWildcards.append((wc, self.__is_negative))
-                    self.result += wc
+                    self.__detectedWildcards.append((wc, self.__is_negative))
+                    self.__result += wc
                     t2 = time.monotonic_ns()
                     self.__debug_end("wildcard", start_result, t2 - t1, wc)
                     return []
@@ -1903,7 +2035,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     continue
                 self.__seen_wildcards.append(wildcard.key)
                 self.log(logging.DEBUG, f"Seen wildcard '{escape_single_quotes(wildcard.key)}'")
-                (options, choice_values) = self.__check_wildcard_initialization(wildcard)
+                options, choice_values = self.__check_wildcard_initialization(wildcard)
                 if options is not None:
                     if applied_options is None:
                         applied_options = options
@@ -1916,7 +2048,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 applied_options, choice_values_all, filter_specifier, wildcard_key
             )
             if chosen_choices:
-                self.result += prefix + separator.join(chosen_choices) + suffix
+                self.__result += prefix + separator.join(chosen_choices) + suffix
             if wildcard_key in self.__wildcard_filters:
                 del self.__wildcard_filters[wildcard_key]
             if variablename is not None:
@@ -1924,8 +2056,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if variablebackup is not None:
                     self.state.variables.set_user(variablename, variablebackup)
         elif self.state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
-            self.detectedWildcards.append((wc, self.__is_negative))
-            self.result += wc
+            self.__detectedWildcards.append((wc, self.__is_negative))
+            self.__result += wc
         if self.__debug_level == DEBUG_LEVEL.full:
             list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
             self.log(logging.DEBUG, f"Unseen wildcards: {', '.join(list_unseen)}")
@@ -1959,7 +2091,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         Process a choices construct in the tree.
         """
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         options = self.__convert_choices_options(tree.children[0], False)
         choice_values = [self.__convert_choice(c) for c in tree.children[1::]]
         ch = self.__get_original_node_content(tree, "?{...}")
@@ -1967,22 +2099,22 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.log(logging.DEBUG, "Processing choices:")
             prefix, chosen_choices, separator, suffix = self.__get_choices_select(options, choice_values)
             if chosen_choices:
-                self.result += prefix + separator.join(chosen_choices) + suffix
+                self.__result += prefix + separator.join(chosen_choices) + suffix
         elif self.state.options.if_wildcards != IFWILDCARDS_CHOICES.remove:
-            self.detectedWildcards.append((ch, self.__is_negative))
-            self.result += ch
+            self.__detectedWildcards.append((ch, self.__is_negative))
+            self.__result += ch
         t2 = time.monotonic_ns()
         self.__debug_end("choices", start_result, t2 - t1, f"'{escape_single_quotes(ch)}'")
 
     def __default__(self, tree):
         t1 = time.monotonic_ns()
-        start_result = self.result
+        start_result = self.__result
         self.__visit(tree.children)
         t2 = time.monotonic_ns()
         self.__debug_end(tree.data.value, start_result, t2 - t1)
 
     def __process_negtags(self):
-        # process the found negative tags        
+        # process the found negative tags
         for negtag in self.__negtags:
             if self.state.options.cup_merge_attention:
                 # join consecutive attention elements
@@ -2032,49 +2164,49 @@ class TreeProcessor(lark.visitors.Interpreter):
             position = negtag.parameters or "s"
             if position.startswith("i"):
                 n = int(position[1])
-                self.insertion_at[n] = [negtag.start, negtag.end]
+                self.__insertion_at[n] = [negtag.start, negtag.end]
             elif len(content) > 0:
                 if content not in self.__already_processed:
                     if self.state.options.stn_ignore_repeats:
                         self.__already_processed.append(content)
                     self.log(logging.DEBUG, f"Adding content at position {position}: {content}")
                     if position == "e":
-                        self.add_at["end"].append(content)
+                        self.__add_at["end"].append(content)
                     elif position.startswith("p"):
                         n = int(position[1])
-                        self.add_at["insertion_point"][n].append(content)
+                        self.__add_at["insertion_point"][n].append(content)
                     else:  # position == "s" or invalid
-                        self.add_at["start"].append(content)
+                        self.__add_at["start"].append(content)
                 else:
                     self.log(logging.WARNING, f"Ignoring repeated content: {content}")
-        self.__negtags = []        
+        self.__negtags = []
 
     def __apply_stn_insertions(self):
         """
         Apply all accumulated STN content from add_at to self.result using the recorded
         insertion_at positions, then reset both so ppp.py does not re-apply them.
         """
-        pos, neg = self.result.split(self.NEGATIVE_SEP, 1)
+        pos, neg = self.__result.split(self.NEGATIVE_SEP, 1)
         neg_start = len(pos) + len(self.NEGATIVE_SEP)
         stn_sep = self.state.options.stn_separator
-        self.log(logging.DEBUG, f"Applying STN additions to negative: {self.add_at}")
-        self.log(logging.DEBUG, f"Applying STN indexes: {self.insertion_at}")
+        self.log(logging.DEBUG, f"Applying STN additions to negative: {self.__add_at}")
+        self.log(logging.DEBUG, f"Applying STN indexes: {self.__insertion_at}")
         ordered_range = sorted(
             range(10),
-            key=lambda x: self.insertion_at[x][0] if self.insertion_at[x] is not None else float("-inf"),
+            key=lambda x: self.__insertion_at[x][0] if self.__insertion_at[x] is not None else float("-inf"),
             reverse=True,
         )
         for n in ordered_range:
-            if self.insertion_at[n] is not None:
-                insertion_point_n: list[str] = self.add_at["insertion_point"][n]
-                ipp = self.insertion_at[n][0] - neg_start
-                ipl = self.insertion_at[n][1] - self.insertion_at[n][0]
+            if self.__insertion_at[n] is not None:
+                insertion_point_n: list[str] = self.__add_at["insertion_point"][n]
+                ipp = self.__insertion_at[n][0] - neg_start
+                ipl = self.__insertion_at[n][1] - self.__insertion_at[n][0]
                 if neg[ipp - len(stn_sep) : ipp] == stn_sep:
-                    ipp -= len(stn_sep) # adjust for existing start separator
+                    ipp -= len(stn_sep)  # adjust for existing start separator
                     ipl += len(stn_sep)
                 insertion_point_n.insert(0, neg[:ipp])
                 if neg[ipp + ipl : ipp + ipl + len(stn_sep)] == stn_sep:
-                    ipl += len(stn_sep) # adjust for existing end separator
+                    ipl += len(stn_sep)  # adjust for existing end separator
                 end_part = neg[ipp + ipl :]
                 if len(end_part) > 0:
                     insertion_point_n.append(end_part)
@@ -2083,30 +2215,30 @@ class TreeProcessor(lark.visitors.Interpreter):
                 ipp = 0
                 if neg.startswith(stn_sep):
                     ipp = len(stn_sep)
-                self.add_at["insertion_point"][n].append(neg[ipp:])
-                neg = stn_sep.join(self.add_at["insertion_point"][n])
-        if self.add_at["start"]:
-            add_at_start = self.add_at["start"]
+                self.__add_at["insertion_point"][n].append(neg[ipp:])
+                neg = stn_sep.join(self.__add_at["insertion_point"][n])
+        if self.__add_at["start"]:
+            add_at_start = self.__add_at["start"]
             if len(neg) > 0:
                 ipp = 0
                 if neg.startswith(stn_sep):
                     ipp = len(stn_sep)  # adjust for existing end separator
                 add_at_start.append(neg[ipp:])
             neg = stn_sep.join(add_at_start)
-        if self.add_at["end"]:
-            add_at_end = self.add_at["end"]
+        if self.__add_at["end"]:
+            add_at_end = self.__add_at["end"]
             if len(neg) > 0:
                 ipl = len(neg)
                 if neg.endswith(stn_sep):
-                    ipl -= len(stn_sep) # adjust for existing start separator
+                    ipl -= len(stn_sep)  # adjust for existing start separator
                 add_at_end.insert(0, neg[:ipl])
             neg = stn_sep.join(add_at_end)
         # self.add_at = {"start": [], "insertion_point": [[] for _ in range(10)], "end": []}
         # self.insertion_at = [None for _ in range(10)]
-        self.result = pos + self.NEGATIVE_SEP + neg
+        self.__result = pos + self.NEGATIVE_SEP + neg
 
     def start(self, tree):
-        self.result = ""
+        self.__result = ""
         t1 = time.monotonic_ns()
         self.__visit(tree.children)
         self.__process_negtags()

@@ -1,8 +1,8 @@
 import logging
 from dataclasses import replace
 
-from ppp import PromptPostProcessor  # pylint: disable=import-error
-from .base_tests import PromptPair, TestPromptPostProcessorBase
+from ppp import PromptPostProcessor  # type: ignore
+from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
 
 
 if __name__ == "__main__":
@@ -19,7 +19,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_simple(self):  # simple cleanup
         self.process(
             PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5), (red:1.5)  ", "  normal quality  "),
-            PromptPair("this is a ((test), (test,:2):1.5), (red:1.5)", "normal quality"),
+            OutputTuple("this is a ((test), (test,:2):1.5), (red:1.5)", "normal quality"),
         )
 
     def test_cl_complex(self):  # complex cleanup
@@ -28,7 +28,7 @@ class TestCleanup(TestPromptPostProcessorBase):
                 "  this is BREAKABLE a ((test)), ,AND AND(() [] <lora:test> ANDERSON (test:2.0):1.5) :o BREAK \n BREAK (red:1.5)  ",
                 "  [:hands, feet, :0.15]normal quality  ",
             ),
-            PromptPair(
+            OutputTuple(
                 "this is BREAKABLE a (test:1.21) AND(<lora:test> ANDERSON (test:2):1.5) :o BREAK (red:1.5)",
                 "[:hands, feet, :0.15]normal quality",
             ),
@@ -37,7 +37,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_removenetworktags(self):  # remove network tags
         self.process(
             PromptPair("this is a <lora:test:1> test__yaml/wildcard7__", ""),
-            PromptPair("this is a test", ""),
+            OutputTuple("this is a test", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 self.def_env_info,
@@ -55,7 +55,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_dontremoveseparatorsoneol(self):  # don't remove separators on eol
         self.process(
             PromptPair("this is a test,\nsecond line", ""),
-            PromptPair("this is a test,\nsecond line", ""),
+            OutputTuple("this is a test,\nsecond line", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 self.def_env_info,
@@ -79,7 +79,7 @@ class TestCleanup(TestPromptPostProcessorBase):
                         (d:0.9)""",
                 "",
             ),
-            PromptPair(
+            OutputTuple(
                 """ (l:1.1)         (d:0.9), 
                         (l:1.1)  
                         (d:0.9)""",
@@ -115,7 +115,7 @@ class TestCleanup(TestPromptPostProcessorBase):
                 "this is (a test:0.9) of (attention (merging:1.2)) where ((this)) ((is joined:1.2)) and ([this too]:1.3)",
                 "",
             ),
-            PromptPair(
+            OutputTuple(
                 "this is [a test] of (attention (merging:1.2)) where (this:1.21) (is joined:1.32) and (this too:1.17)",
                 "",
             ),
@@ -127,7 +127,7 @@ class TestCleanup(TestPromptPostProcessorBase):
                 "this is (a test:0.9) of not (attention (merging:1.2)) where ((this)) ((is not joined:1.2)) and neither is ([this]:1.3)",
                 "",
             ),
-            PromptPair(
+            OutputTuple(
                 "this is (a test:0.9) of not (attention (merging:1.2)) where ((this)) ((is not joined:1.2)) and neither is ([this]:1.3)",
                 "",
             ),
@@ -140,7 +140,7 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
                 PromptPair("(unclosed paren", ""),
-                PromptPair("(unclosed paren", ""),
+                OutputTuple("(unclosed paren", ""),
             )
         self.assertTrue(
             any("Unmatched" in msg for msg in cm.output),
@@ -151,7 +151,7 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
                 PromptPair("extra close paren)", ""),
-                PromptPair("extra close paren)", ""),
+                OutputTuple("extra close paren)", ""),
             )
         self.assertTrue(
             any("Unmatched" in msg for msg in cm.output),
@@ -162,7 +162,7 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
                 PromptPair("(mismatched]", ""),
-                PromptPair("(mismatched]", ""),
+                OutputTuple("(mismatched]", ""),
             )
         self.assertTrue(
             any("Mismatched" in msg or "Unmatched" in msg for msg in cm.output),
@@ -173,7 +173,7 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
                 PromptPair("unclosed [bracket", ""),
-                PromptPair("unclosed [bracket", ""),
+                OutputTuple("unclosed [bracket", ""),
             )
         self.assertTrue(
             any("Unmatched" in msg for msg in cm.output),
@@ -184,7 +184,7 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
                 PromptPair("[(unmatched [bracket))", ""),
-                PromptPair("[(unmatched [bracket))", ""),
+                OutputTuple("[(unmatched [bracket))", ""),
             )
         self.assertTrue(
             any("Unmatched" in msg for msg in cm.output),
@@ -195,5 +195,5 @@ class TestCleanup(TestPromptPostProcessorBase):
         with self.assertNoLogs("PromptPostProcessor", level=logging.WARNING):
             self.process(
                 PromptPair(r"text with \(escaped unmatched\]", ""),
-                PromptPair(r"text with \(escaped unmatched\]", ""),
+                OutputTuple(r"text with \(escaped unmatched\]", ""),
             )

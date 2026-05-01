@@ -29,6 +29,8 @@ Inputs:
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
+* **do_combinatorial**: Activates combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
+* **combinatorial_limit**: Limit for the number of generated combinations.
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.
@@ -41,6 +43,8 @@ Outputs:
 * **pos_prompt**: the resulting positive prompt
 * **neg_prompt**: the resulting negative prompt
 * **variables**: the dictionary of variables set or echoed.
+
+The outputs are lists, and in combinatorial mode there will be multiple elements that ComfyUI will process sequentially.
 
 ### ACB PPP Select Variable node
 
@@ -127,6 +131,8 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Unlink seed**: Uses the specified seed for the prompt generation instead of the one from the image. This seed is only used for wildcards and choices.
 * **Prompt seed**: The seed to use for the prompt generation. If -1 a random one will be used.
 * **Incremental seed**: When using a batch you can use this to set the rest of the prompt seeds with consecutive values.
+* **Combinatorial mode**: Generate all possible prompt combinations (from choices and wildcards) and cycle through them to fill the batch.
+* **Combinations limit**: Maximum number of combinations to generate (0 = no limit). When generating a batch the limit is automatically raised to at least the batch size.
 
 ### General settings
 

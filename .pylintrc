@@ -59,16 +59,6 @@ single-line-class-stmt=no
 single-line-if-stmt=no
 
 [IMPORTS]
-allow-any-import-level=
-allow-reexport-from-package=no
-allow-wildcard-with-all=no
-deprecated-modules=
-ext-import-graph=
-import-graph=
-int-import-graph=
-known-standard-library=
-known-third-party=enchant
-preferred-modules=
 
 [LOGGING]
 logging-format-style=new
@@ -94,9 +84,7 @@ disable=raw-checker-failed,
         missing-module-docstring,
         missing-class-docstring,
         logging-fstring-interpolation,
-        import-outside-toplevel,
         consider-iterating-dictionary,
-        wrong-import-position,
         unnecessary-lambda,
         consider-using-dict-items,
         dangerous-default-value,

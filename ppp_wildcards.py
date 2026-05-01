@@ -1,5 +1,6 @@
 import fnmatch
 import os
+from pathlib import Path
 from typing import Optional
 import logging
 import yaml
@@ -82,19 +83,10 @@ class PPPWildcards:
         for fullpath in list(self.__wildcard_files.keys()):
             if fullpath != self.LOCALINPUT_FILENAME:
                 path = os.path.dirname(fullpath)
-                if not os.path.exists(fullpath):
+                if not os.path.exists(fullpath) or not any(
+                    Path(path).is_relative_to(folder) for folder in self.__wildcards_folders
+                ):
                     self.__remove_wildcards_from_path(fullpath)
-                else:
-                    a = False
-                    for folder in self.__wildcards_folders:
-                        try:
-                            if os.path.commonpath([folder, path]) == folder:
-                                a = True
-                                break
-                        except ValueError:
-                            pass
-                    if not a:
-                        self.__remove_wildcards_from_path(fullpath)
             elif wildcards_input is None:
                 self.__remove_wildcards_from_path(fullpath)
         if wildcards_folders is not None or wildcards_input is not None:

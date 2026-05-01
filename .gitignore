@@ -1,4 +1,5 @@
 **/__pycache__
+.venv
 
 .vscode/**/*
 !.vscode/settings.json
@@ -7,3 +8,5 @@
 tests/tests_local.py
 tests/local_wildcards
 tests/logs
+
+scripts/last_prompts.txt

@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"name": "sd-webui-prompt-postprocessor",
+			"path": "."
+		}
+	],
+	"settings": {
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter"
+		},
+		"yaml.schemaStore.enable": false,
+		"cSpell.enabledFiletypes": [
+			"lark"
+		],
+		"powershell.cwd": "sd-webui-prompt-postprocessor"
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": []
+	}
+}

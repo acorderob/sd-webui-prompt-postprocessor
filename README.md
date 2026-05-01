@@ -17,6 +17,7 @@ These are some features:
 * Filter content based on the loaded SD model/variant or a variable.
 * Map extranetworks (LoRAs) depending on conditions (like the loaded model variant). This allows you to add "virtual" loras to the prompt that will be translated to the correct one.
 * Clean up the prompt of unnecessary separators or spaces.
+* Combinatorial mode.
 
 Note: when used in an *A1111* compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension). Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out. When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
@@ -75,10 +76,14 @@ See the [syntax documentation](docs/SYNTAX.md).
 
 See the [cookbook](docs/COOKBOOK.md) for interesting usages.
 
+## Contributing
+
+To develop, I suggest creating a virtual environment just for the extension, so the tests work and can be debugged properly.
+
 ## License
 
 MIT
 
 ## Contact
 
-If you have any questions or concerns, please start a thread in the discussions.
+If you have any questions or concerns, please start a thread in the discussions. For bug reports and feature requests open an issue.

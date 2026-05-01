@@ -201,7 +201,24 @@ class PPPStateOptions:
     cup_merge_attention: bool = True
     cup_remove_extranetwork_tags: bool = False
     strict_operators: bool = True
+    do_combinatorial: bool = False
+    combinatorial_limit: int = 100  # 0 = no limit
 
+    def __post_init__(self):
+        if not self.cup_do_cleanup:
+            object.__setattr__(self, "cup_cleanup_variables", False)
+            object.__setattr__(self, "cup_extra_spaces", False)
+            object.__setattr__(self, "cup_empty_constructs", False)
+            object.__setattr__(self, "cup_extra_separators", False)
+            object.__setattr__(self, "cup_extra_separators2", False)
+            object.__setattr__(self, "cup_extra_separators_include_eol", False)
+            object.__setattr__(self, "cup_breaks", False)
+            object.__setattr__(self, "cup_breaks_eol", False)
+            object.__setattr__(self, "cup_ands", False)
+            object.__setattr__(self, "cup_ands_eol", False)
+            object.__setattr__(self, "cup_extranetwork_tags", False)
+            object.__setattr__(self, "cup_merge_attention", False)
+            object.__setattr__(self, "cup_remove_extranetwork_tags", False)
 
 @dataclass(frozen=True)
 class PPPState:

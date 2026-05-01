@@ -1,8 +1,8 @@
 from dataclasses import replace
 
 from ppp import PromptPostProcessor
-from ppp_classes import ONWARNING_CHOICES  # pylint: disable=import-error
-from .base_tests import PromptPair, TestPromptPostProcessorBase
+from ppp_classes import ONWARNING_CHOICES  # type: ignore
+from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -21,7 +21,7 @@ class TestModelVariants(TestPromptPostProcessorBase):
                 "<ppp:if _is_test1>test1<ppp:/if><ppp:if _is_test2>test2<ppp:/if><ppp:if _is_test3>test3<ppp:/if><ppp:if _is_test4>test4<ppp:/if>",
                 "",
             ),
-            PromptPair("test1test2", ""),
+            OutputTuple("test1test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {

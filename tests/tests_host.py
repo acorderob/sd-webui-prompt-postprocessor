@@ -1,5 +1,5 @@
-from ppp import PromptPostProcessor  # pylint: disable=import-error
-from .base_tests import PromptPair, TestPromptPostProcessorBase
+from ppp import PromptPostProcessor  # type: ignore
+from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -18,7 +18,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1] (test2) (test3:1.5) [(test4)]",
                 "",
             ),
-            PromptPair("(test1:0.9) (test2) (test3:1.5) (test4:0.99)", ""),
+            OutputTuple("(test1:0.9) (test2) (test3:1.5) (test4:0.99)", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -39,7 +39,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
-            PromptPair("test1 test2 test3", ""),
+            OutputTuple("test1 test2 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -60,7 +60,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -81,7 +81,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -103,7 +103,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1:test2:0.5]",
                 "",
             ),
-            PromptPair("test1", ""),
+            OutputTuple("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -124,7 +124,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1:test2:0.5]",
                 "",
             ),
-            PromptPair("test2", ""),
+            OutputTuple("test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -145,7 +145,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1::0.5] [:test2:0.5] [test3:test4:0.5]",
                 "",
             ),
-            PromptPair("test1 test3", ""),
+            OutputTuple("test1 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -166,7 +166,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1:test2:0.5]",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -187,7 +187,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1:test2:0.5]",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -209,7 +209,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1|test2|test3]",
                 "",
             ),
-            PromptPair("test1", ""),
+            OutputTuple("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -230,7 +230,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1|test2|test3]",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -251,7 +251,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "[test1|test2|test3]",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -273,7 +273,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 AND test2:2",
                 "",
             ),
-            PromptPair("test1\ntest2", ""),
+            OutputTuple("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -294,7 +294,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 AND test2:2",
                 "",
             ),
-            PromptPair("test1, test2", ""),
+            OutputTuple("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -315,7 +315,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 AND test2:2",
                 "",
             ),
-            PromptPair("test1 test2", ""),
+            OutputTuple("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -336,7 +336,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 AND test2:2",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -358,7 +358,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 BREAK test2",
                 "",
             ),
-            PromptPair("test1\ntest2", ""),
+            OutputTuple("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -379,7 +379,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 BREAK test2",
                 "",
             ),
-            PromptPair("test1, test2", ""),
+            OutputTuple("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -400,7 +400,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 BREAK test2",
                 "",
             ),
-            PromptPair("test1 test2", ""),
+            OutputTuple("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
@@ -421,7 +421,7 @@ class TestHosts(TestPromptPostProcessorBase):
                 "test1 BREAK test2",
                 "",
             ),
-            PromptPair("", ""),
+            OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
                 {
