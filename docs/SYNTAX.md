@@ -37,7 +37,7 @@ There is also a format where instead of `parameters$$` you just put the sampler,
 
 The construct parameters can be written with the following options (all are optional):
 
-* "**~**" or "**@**": sampler (for compatibility with *Dynamic Prompts*), but only "**~**" (random) is supported.
+* "**~**" (random) or "**@**" (cyclical): sampler (for compatibility with *Dynamic Prompts*). The cyclical sampler cycles through all combinations in order across consecutive `process_prompt` calls, resuming where the previous call left off (as long as the input prompt and negative prompt do not change).
 * "**r**": means it allows repetition of the choices.
 * "**o**": means it is "optional", and no error will be raised if there are no choices to select from.
 * "**n**" or "**n-m**" or "**n-**" or "**-m**": number or range of choices to select. Allows zero as the start of a range. Default is 1.
@@ -471,7 +471,7 @@ They will be translated to the negative prompt. For example:
 
 * `(red<ppp:stn>square<ppp:/stn>:1.5)` will end up as `(square:1.5)` in the negative prompt
 * `(red[<ppp:stn>square<ppp:/stn>]:1.5)` will end up as `(square:1.35)` in the negative prompt (weight=1.5*0.9) if the merge attention option is enabled or `([square]:1.5)` otherwise.
-* However `(red<ppp:stn>[square]<ppp:/stn>:1.5)` will end up as `([square]:1.5)` in the negative prompt. The content of the negative tag is copied as is, and is not merged with the surrounding modifier because the insertions happen after the attention merging.
+* `(red<ppp:stn>[square]<ppp:/stn>:1.5)` will also end up as `(square:1.35)` in the negative prompt if the merge attention option is enabled, because the content of the negative tag is a single attention construct whose weight is merged with the surrounding modifier.
 
 ### Prompt editing constructs (alternation and scheduling)
 

@@ -266,7 +266,7 @@ You can also specify a weight multiplier directly in the command - if both the c
 
 ## Send-to-negative with attention modifiers
 
-When a send-to-negative command sits inside an attention modifier, the weight is carried over to the negative prompt. There is one important distinction:
+When a send-to-negative command sits inside an attention modifier, the weight is carried over to the negative prompt.
 
 ```text
 (red apple<ppp:stn>round shape<ppp:/stn>:1.4)
@@ -276,17 +276,10 @@ Result in the negative: `(round shape:1.4)` - the surrounding weight is applied.
 
 ```text
 (red apple<ppp:stn>[round shape]<ppp:/stn>:1.4)
-```
-
-Result in the negative: `([round shape]:1.4)` - the weight is **not** merged into the inner brackets, because the content of the negative tag is copied as-is and the merge happens before the tag is processed.
-
-```text
 (red [apple<ppp:stn>round shape<ppp:/stn>]:1.4)
 ```
 
-Result in the negative: `(round shape:1.26)` - if merge attention is enabled, `1.4 × 0.9 = 1.26` is applied.
-
-Keep this in mind when writing choices in wildcards that combine attention brackets with send-to-negative.
+For both cases, the result in the negative is: `(round shape:1.26)` - the weight is merged, if merge attention is enabled.
 
 ## Array variables
 

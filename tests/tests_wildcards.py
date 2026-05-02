@@ -347,14 +347,6 @@ class TestWildcards(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
-    def test_wc_unsupportedsampler(self):  # unsupported sampler
-        self.process(
-            InputTuple("the choices are: __@yaml/wildcard2__", ""),
-            OutputTuple("", ""),
-            ppp="nocup",
-            interrupted=True,
-        )
-
     def test_wc_wildcard_globbing(self):  # wildcard with globbing
         self.process(
             InputTuple("the choices are: __yaml/wildcard[12]__, __yaml/wildcard?__", ""),
@@ -372,7 +364,7 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcardPS_yaml(self):  # yaml wildcard with object formatted choices and options and prefix and suffix
         self.process(
             InputTuple("the choices are: __yaml/wildcardPS__", ""),
-            OutputTuple("the choices are: prefix-choice2/choice3-suffix", ""),
+            OutputTuple("the choices are: prefix1-choice2/choice3-suffix", ""),
             ppp="nocup",
         )
 

@@ -221,6 +221,37 @@ class PPPStateOptions:
             object.__setattr__(self, "cup_merge_attention", False)
             object.__setattr__(self, "cup_remove_extranetwork_tags", False)
 
+class CyclicalSamplerState:
+    """Maintains the cycling position for '@' choice samplers across process_prompt calls."""
+
+    def __init__(self):
+        self.current_path: list[int] = []
+        self.last_trace: list[int] = []
+        self.last_prompt_pair: tuple[str, str] | None = None
+
+    def advance(self):
+        """Advance to the next combination, cycling back to the start when all are exhausted."""
+        if not self.last_trace:
+            self.current_path = []
+            return
+        path = list(self.current_path)
+        while len(path) < len(self.last_trace):
+            path.append(0)
+        # Mixed-radix increment: least significant position is last.
+        for i in range(len(path) - 1, -1, -1):
+            path[i] += 1
+            if path[i] < self.last_trace[i]:
+                break
+            path[i] = 0
+        self.current_path = path
+
+    def reset(self):
+        """Reset the cyclical state to the beginning."""
+        self.current_path = []
+        self.last_trace = []
+        self.last_prompt_pair = None
+
+
 @dataclass(frozen=True)
 class PPPState:
     """State object passed to various PPP components during prompt processing."""
@@ -232,6 +263,7 @@ class PPPState:
     wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
     extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)
     parsers: dict[str, Lark] = field(default_factory=dict)
+    cyclical_state: CyclicalSamplerState = field(default_factory=CyclicalSamplerState)
 
 
 class PPPInterrupt(Exception):

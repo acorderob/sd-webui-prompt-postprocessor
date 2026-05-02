@@ -43,7 +43,7 @@ yaml:
         repeating: false,
         optional: false,
         count: 2,
-        prefix: "prefix-",
+        prefix: "prefix{1|2}-",
         suffix: "-suffix",
         separator: "/",
       }

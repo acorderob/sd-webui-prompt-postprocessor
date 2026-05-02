@@ -52,8 +52,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
                 "normal quality",
             ),
             OutputTuple(
-
-                "this is a ((test) (test:2):1.5) (red:1.5)", "[neg1], ([square]:1.5), normal quality, (neg2:1.65)"
+                "this is a ((test) (test:2):1.5) (red:1.5)", "[neg1], (square:1.35), normal quality, (neg2:1.65)"
             ),
         )
 

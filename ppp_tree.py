@@ -53,6 +53,8 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__result = ""
         self.__comb_forced_path: list[int] = []
         self.__comb_trace: list[int] = []
+        self.__cycl_forced_path: list[int] = []
+        self.__cycl_trace: list[int] = []
 
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None):
         log(self.state.logger, self.state.options.debug_level, kind, message, min_level)
@@ -99,8 +101,13 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__result = ""
 
         if not self.state.options.do_combinatorial:
+            self.__cycl_forced_path = list(self.state.cyclical_state.current_path)
+            self.__cycl_trace = []
             self.visit(parsed)
             self.__finalize_echoed_variables()
+            if self.__cycl_trace:
+                self.state.cyclical_state.last_trace = self.__cycl_trace[:]
+                self.state.cyclical_state.advance()
             return [(self.__result, self.__detectedWildcards, self.state.variables.backup_user_and_echoed())]
 
         # Combinatorial mode: explore every possible path through choices and wildcards via DFS.
@@ -150,9 +157,7 @@ class TreeProcessor(lark.visitors.Interpreter):
 
         _dfs(())
         if limit_reached:
-            self.log(
-                logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations have been skipped."
-            )
+            self.log(logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations have been skipped.")
         return results
 
     def __finalize_echoed_variables(self):
@@ -1027,10 +1032,47 @@ class TreeProcessor(lark.visitors.Interpreter):
                 parameters = str(negtagparameters)
             else:
                 parameters = ""
-            content = self.__visit(tree.children[1::], False, True)
+            content_nodes = tree.children[1::]
+            attention_processing = self.state.host_config.attention
+            peeled = False
+            if (
+                self.state.options.cup_merge_attention
+                and attention_processing in ("ok", "parentheses")
+                and len(content_nodes) == 1
+                and isinstance(content_nodes[0], lark.Tree)
+                and content_nodes[0].data == "attention"
+            ):
+                inner_tree = content_nodes[0]
+                weight = 1.0
+                while isinstance(inner_tree, lark.Tree) and inner_tree.data == "attention":
+                    if len(inner_tree.children) == 2:
+                        w = inner_tree.children[-1]
+                        inner_weight = float(w) if w is not None else 1.1
+                    else:
+                        inner_weight = 0.9
+                    weight *= inner_weight
+                    inner_tree = inner_tree.children[0]
+                weight = math.floor(weight * 100) / 100
+                weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
+                if weight_str == "0.9" and attention_processing != "parentheses":
+                    weight_kind = 1
+                elif weight_str == "1.1":
+                    weight_kind = 2
+                else:
+                    weight_kind = 3
+                if attention_processing == "parentheses" and weight_kind == 1:
+                    weight_kind = 3
+                    weight_str = "0.9"
+                self.__shell.append(TreeProcessor.AccumulatedShell("at", (weight_kind, weight_str)))
+                content = self.__visit(inner_tree, False, True)
+                peeled = True
+            else:
+                content = self.__visit(content_nodes, False, True)
             self.__negtags.append(
                 TreeProcessor.NegTag(len(self.__result), len(self.__result), content, parameters, self.__shell.copy())
             )
+            if peeled:
+                self.__shell.pop()
             info = f"with {escape_single_quotes(parameters) or 'no parameters'} : {escape_single_quotes(content)}"
         else:
             self.warn_or_stop("Ignored negative command in negative prompt")
@@ -1624,7 +1666,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             to_value: int = options.get("to", 1)
         separator: str = options.get("separator", self.state.options.choice_separator)
         msg_where = f"wildcard '{escape_single_quotes(wildcard_key)}'" if wildcard_key else "choices"
-        if sampler != "~":
+        if sampler not in ("~", "@"):
             self.warn_or_stop(f"Unsupported sampler '{escape_single_quotes(sampler)}' at {msg_where} options!")
             sampler = "~"
         expanded_choice_values = self.__get_choices_internal_get(choice_values, filter_specifier, wildcard_key)
@@ -1659,7 +1701,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             elif (to_value > len(available_choices) and not repeating) or from_value > to_value:
                 to_value = len(available_choices)
             comb_chosen_selection: Optional[list[dict]] = None
-            if self.state.options.do_combinatorial:
+            if self.state.options.do_combinatorial or sampler == "@":
                 # Enumerate every distinct selection of choices, accounting for count range and repetition.
                 all_selections: list[tuple] = []
                 # When keep_choices_order is False the output depends on the selection order,
@@ -1679,13 +1721,22 @@ class TreeProcessor(lark.visitors.Interpreter):
                         else:
                             all_selections.extend(permutations(available_choices, k))
                 num_selections = len(all_selections)
-                decision_idx = len(self.__comb_trace)
-                self.__comb_trace.append(num_selections)
-                chosen_idx = (
-                    min(self.__comb_forced_path[decision_idx], num_selections - 1)
-                    if decision_idx < len(self.__comb_forced_path)
-                    else 0
-                )
+                if self.state.options.do_combinatorial:
+                    decision_idx = len(self.__comb_trace)
+                    self.__comb_trace.append(num_selections)
+                    chosen_idx = (
+                        min(self.__comb_forced_path[decision_idx], num_selections - 1)
+                        if decision_idx < len(self.__comb_forced_path)
+                        else 0
+                    )
+                else:  # sampler == "@"
+                    cycl_decision_idx = len(self.__cycl_trace)
+                    self.__cycl_trace.append(num_selections)
+                    chosen_idx = (
+                        self.__cycl_forced_path[cycl_decision_idx] % num_selections
+                        if cycl_decision_idx < len(self.__cycl_forced_path)
+                        else 0
+                    )
                 comb_chosen_selection = list(all_selections[chosen_idx])
                 num_choices = len(comb_chosen_selection)
             else:
@@ -1705,7 +1756,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else ""),
         )
         if num_choices > 0:
-            if self.state.options.do_combinatorial and comb_chosen_selection is not None:
+            if comb_chosen_selection is not None:
                 selected_choices: list[dict] = comb_chosen_selection
             else:
                 selected_choices: list[dict] = (

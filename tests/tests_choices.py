@@ -21,12 +21,62 @@ class TestChoices(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
-    def test_ch_unsupportedsampler(self):  # unsupported sampler
+    def test_ch_cyclical(self):  # cyclical sampler cycles through all choices
+        ppp_instance = self.init_obj("nocup")
         self.process(
             InputTuple("the choices are: {@choice1|choice2|choice3}", ""),
-            OutputTuple("", ""),
-            ppp="nocup",
-            interrupted=True,
+            [
+                OutputTuple("the choices are: choice1", ""),
+                OutputTuple("the choices are: choice2", ""),
+                OutputTuple("the choices are: choice3", ""),
+                OutputTuple("the choices are: choice1", ""),  # cycles back
+            ],
+            ppp=ppp_instance,
+        )
+
+    def test_ch_cyclical_multiple_constructs(self):  # two independent @ constructs cycle together
+        ppp_instance = self.init_obj("nocup")
+        self.process(
+            InputTuple("{@a|b} {@c|d}", ""),
+            [
+                OutputTuple("a c", ""),
+                OutputTuple("a d", ""),
+                OutputTuple("b c", ""),
+                OutputTuple("b d", ""),
+                OutputTuple("a c", ""),  # cycles back
+            ],
+            ppp=ppp_instance,
+        )
+
+    def test_ch_cyclical_resets_on_prompt_change(self):  # state resets when the prompt pair changes
+        ppp_instance = self.init_obj("nocup")
+        # Advance the cycle to position 1 (choice2).
+        self.process(
+            InputTuple("the choices are: {@choice1|choice2|choice3}", ""),
+            [
+                OutputTuple("the choices are: choice1", ""),
+                OutputTuple("the choices are: choice2", ""),
+            ],
+            ppp=ppp_instance,
+        )
+        # A different prompt must restart from position 0 (choice1).
+        self.process(
+            InputTuple("the choices are: {@choice1|choice2|choice3} different", ""),
+            OutputTuple("the choices are: choice1 different", ""),
+            ppp=ppp_instance,
+        )
+
+    def test_ch_cyclical_mixed_samplers(self):  # @ construct cycles while a ~ construct alongside is unaffected
+        ppp_instance = self.init_obj("nocup")
+        self.process(
+            InputTuple("{@a|b|c} {x|y}", ""),
+            [
+                OutputTuple("a y", ""),
+                OutputTuple("b x", ""),
+                OutputTuple("c x", ""),
+                OutputTuple("a y", ""),  # @ cycles back
+            ],
+            ppp=ppp_instance,
         )
 
     def test_ch_choices_withcomments(self):  # choices with comments and multiline

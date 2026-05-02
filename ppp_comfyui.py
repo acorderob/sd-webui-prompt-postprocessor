@@ -70,6 +70,7 @@ class PromptPostProcessorComfyUINode:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
         self.extranetwork_mappings_obj = PPPExtraNetworkMappings(lf.log)
+        self.ppp: PromptPostProcessor | None = None
         log(
             self.logger,
             DEBUG_LEVEL.minimal,
@@ -394,16 +395,24 @@ class PromptPostProcessorComfyUINode:
             enmappings_folders,
             en_options["en_mappings_input"] if en_options else "",
         )
-        ppp = PromptPostProcessor(
-            self.logger,
-            env_info,
-            options,
-            self.grammar_content,
-            self.interrupt,
-            self.wildcards_obj,
-            self.extranetwork_mappings_obj,
-        )
-        results = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
+        if self.ppp is None:
+            self.ppp = PromptPostProcessor(
+                self.logger,
+                env_info,
+                options,
+                self.grammar_content,
+                self.interrupt,
+                self.wildcards_obj,
+                self.extranetwork_mappings_obj,
+            )
+        else:
+            self.ppp.update(
+                env_info,
+                options,
+                self.wildcards_obj,
+                self.extranetwork_mappings_obj,
+            )
+        results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
 
         # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs", "last_prompts_comfyui.txt"), "w", encoding="utf-8") as f:
         #     f.write(f"Seed: {seed if seed is not None else 1}\n")

@@ -115,103 +115,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.logger = logger
         self.debug_level = options.debug_level
         self.interrupt_callback = interrupt
-        self.env_info = env_info
 
-        default_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml.defaults")
-        try:
-            with open(default_config_file, "r", encoding="utf-8") as f:
-                default_raw: dict[str, Any] = yaml.safe_load(f)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            self.config = {}
-            raise PPPInterrupt(
-                f"Failed to load default configuration from '{escape_single_quotes(default_config_file)}'."
-            ) from exc
-        self.config, def_result = self.__parse_configuration(default_raw, "default configuration file")
-        if def_result != 0:
-            errmsg = "Default configuration file has errors. Please restore the default configuration file and, per instructions, use a copy to adapt it."
-            if def_result == 2:
-                raise PPPInterrupt(errmsg)
-            self.log(logging.WARNING, errmsg)
-
-        user_config_file = self.env_info.get("ppp_config", "")
-        if isinstance(user_config_file, dict):
-            user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
-        else:
-            user_raw: dict[str, Any] = {}
-            if user_config_file == "":
-                if self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
-                    try:
-                        import folder_paths  # type: ignore
-
-                        user_dir = folder_paths.get_user_directory()
-                        if user_dir and os.path.isdir(user_dir):
-                            user_config_file = os.path.join(user_dir, "default", "ppp_config.yaml")
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        self.log(logging.WARNING, "Failed to get user directory for PPP config.")
-                if not user_config_file or not os.path.exists(user_config_file):
-                    user_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml")
-            if user_config_file and os.path.exists(user_config_file):
-                with open(user_config_file, "r", encoding="utf-8") as f:
-                    user_raw = yaml.safe_load(f)
-                user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
-            else:
-                user_cfg = None
-        if user_cfg is not None:
-            self.__merge_configuration(user_cfg)
-
-        self.models_config: dict[str, ModelConfig | None] = self.config.models or {}
-        self.known_models: list[str] = list(self.models_config.keys())
-
-        # Patch for tests (copy comfyui)
-        if self.env_info.get("app", "") == "tests":
-            if self.config.hosts is None:
-                self.config.hosts = {}
-            self.config.hosts.setdefault("tests", HostConfig())
-            for m in self.known_models:
-                model = self.models_config.get(m)
-                if model is not None:
-                    if model.detect is None:
-                        model.detect = {}
-                    model.detect.setdefault("tests", model.detect.get("comfyui", None))
-
-        host_config: HostConfig | None = (self.config.hosts or {}).get(self.env_info.get("app", ""))
-        if host_config is None:
-            raise PPPInterrupt(
-                f"No host configuration found for app '{escape_single_quotes(self.env_info.get('app', ''))}'. Please check your configuration."
-            )
-
-        # Update env_info with model detection
-        prop_base = self.env_info.get("property_base", None)
-        model_class = self.env_info.get("model_class", "")
-        app = self.env_info.get("app", "")
-        for m in self.known_models:
-            self.env_info["is_" + m] = False
-            model_obj = self.models_config.get(m)
-            model_detect = (model_obj.detect if model_obj else None) or {}
-            model_detect_for_app: ModelDetectConfig | None = model_detect.get(app)
-            if model_detect_for_app is not None:
-                cls_list = model_detect_for_app.class_ or []
-                if model_class in cls_list:
-                    self.env_info["is_" + m] = True
-                elif model_detect_for_app.property is not None and prop_base is not None:
-                    prop = model_detect_for_app.property
-                    attr = getattr(prop_base, prop, None)
-                    if isinstance(attr, bool) and attr:
-                        self.env_info["is_" + m] = True
-        self.variants_definitions: dict[str, tuple[str, list[FindInFilenamePattern]]] = {}
-        for m in self.known_models:
-            model_obj = self.models_config.get(m)
-            for v, vo in ((model_obj.variants if model_obj else None) or {}).items():
-                if v not in self.known_models:
-                    self.variants_definitions[v] = (m, vo.find_in_filename)
-                else:
-                    self.log(
-                        logging.WARNING,
-                        f"Variant name '{escape_single_quotes(v)}' in model '{escape_single_quotes(m)}' conflicts with a known model name. Discarding variant.",
-                    )
-        self.log(logging.DEBUG, f"Host configuration: {host_config}", min_level=DEBUG_LEVEL.minimal)
-
-        # self.log(logging.INFO, f"Detected environment info: {env_info}", min_level=DEBUG_LEVEL.minimal)
+        host_config = self.__load_config_and_detect(env_info)
 
         if grammar_content is None:
             grammar_content = load_grammar()
@@ -370,6 +275,128 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info: bool = False):
         log(self.logger, self.debug_level, kind, message, min_level, exc_info=exc_info)
+
+    def __load_config_and_detect(self, env_info: dict[str, Any]) -> HostConfig:
+        """Loads config files, performs model detection, and returns the resolved host config."""
+        self.env_info = env_info
+
+        default_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml.defaults")
+        try:
+            with open(default_config_file, "r", encoding="utf-8") as f:
+                default_raw: dict[str, Any] = yaml.safe_load(f)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self.config = {}
+            raise PPPInterrupt(
+                f"Failed to load default configuration from '{escape_single_quotes(default_config_file)}'."
+            ) from exc
+        self.config, def_result = self.__parse_configuration(default_raw, "default configuration file")
+        if def_result != 0:
+            errmsg = "Default configuration file has errors. Please restore the default configuration file and, per instructions, use a copy to adapt it."
+            if def_result == 2:
+                raise PPPInterrupt(errmsg)
+            self.log(logging.WARNING, errmsg)
+
+        user_config_file = self.env_info.get("ppp_config", "")
+        if isinstance(user_config_file, dict):
+            user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
+        else:
+            user_raw: dict[str, Any] = {}
+            if user_config_file == "":
+                if self.env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
+                    try:
+                        import folder_paths  # type: ignore
+
+                        user_dir = folder_paths.get_user_directory()
+                        if user_dir and os.path.isdir(user_dir):
+                            user_config_file = os.path.join(user_dir, "default", "ppp_config.yaml")
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        self.log(logging.WARNING, "Failed to get user directory for PPP config.")
+                if not user_config_file or not os.path.exists(user_config_file):
+                    user_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml")
+            if user_config_file and os.path.exists(user_config_file):
+                with open(user_config_file, "r", encoding="utf-8") as f:
+                    user_raw = yaml.safe_load(f)
+                user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
+            else:
+                user_cfg = None
+        if user_cfg is not None:
+            self.__merge_configuration(user_cfg)
+
+        self.models_config: dict[str, ModelConfig | None] = self.config.models or {}
+        self.known_models: list[str] = list(self.models_config.keys())
+
+        # Patch for tests (copy comfyui)
+        if self.env_info.get("app", "") == "tests":
+            if self.config.hosts is None:
+                self.config.hosts = {}
+            self.config.hosts.setdefault("tests", HostConfig())
+            for m in self.known_models:
+                model = self.models_config.get(m)
+                if model is not None:
+                    if model.detect is None:
+                        model.detect = {}
+                    model.detect.setdefault("tests", model.detect.get("comfyui", None))
+
+        host_config: HostConfig | None = (self.config.hosts or {}).get(self.env_info.get("app", ""))
+        if host_config is None:
+            raise PPPInterrupt(
+                f"No host configuration found for app '{escape_single_quotes(self.env_info.get('app', ''))}'. Please check your configuration."
+            )
+
+        # Update env_info with model detection
+        prop_base = self.env_info.get("property_base", None)
+        model_class = self.env_info.get("model_class", "")
+        app = self.env_info.get("app", "")
+        for m in self.known_models:
+            self.env_info["is_" + m] = False
+            model_obj = self.models_config.get(m)
+            model_detect = (model_obj.detect if model_obj else None) or {}
+            model_detect_for_app: ModelDetectConfig | None = model_detect.get(app)
+            if model_detect_for_app is not None:
+                cls_list = model_detect_for_app.class_ or []
+                if model_class in cls_list:
+                    self.env_info["is_" + m] = True
+                elif model_detect_for_app.property is not None and prop_base is not None:
+                    prop = model_detect_for_app.property
+                    attr = getattr(prop_base, prop, None)
+                    if isinstance(attr, bool) and attr:
+                        self.env_info["is_" + m] = True
+        self.variants_definitions: dict[str, tuple[str, list[FindInFilenamePattern]]] = {}
+        for m in self.known_models:
+            model_obj = self.models_config.get(m)
+            for v, vo in ((model_obj.variants if model_obj else None) or {}).items():
+                if v not in self.known_models:
+                    self.variants_definitions[v] = (m, vo.find_in_filename)
+                else:
+                    self.log(
+                        logging.WARNING,
+                        f"Variant name '{escape_single_quotes(v)}' in model '{escape_single_quotes(m)}' conflicts with a known model name. Discarding variant.",
+                    )
+        self.log(logging.DEBUG, f"Host configuration: {host_config}", min_level=DEBUG_LEVEL.minimal)
+
+        return host_config
+
+    def update(
+        self,
+        env_info: dict[str, Any],
+        options: PPPStateOptions,
+        wildcards_obj: PPPWildcards,
+        extranetwork_mappings_obj: PPPExtraNetworkMappings,
+    ) -> None:
+        """Updates env_info, options, wildcards and enmappings while preserving the cyclical state and compiled parsers."""
+        self.debug_level = options.debug_level
+        host_config = self.__load_config_and_detect(env_info)
+        self.state = PPPState(
+            logger=self.logger,
+            host_config=host_config,
+            options=options,
+            variables=VariableRepository(),
+            wildcards_obj=wildcards_obj,
+            extranetwork_mappings_obj=extranetwork_mappings_obj,
+            parsers=self.state.parsers,
+            cyclical_state=self.state.cyclical_state,
+        )
+        self.__init_sysvars()
 
     def __merge_configuration(self, user_config: PPPConfig):
         """
@@ -968,6 +995,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.INFO, f"Input negative_prompt: {negative_prompt}")
             self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
             t1 = time.monotonic_ns()
+            if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
+                self.state.cyclical_state.reset()
+                self.state.cyclical_state.last_prompt_pair = (original_prompt, original_negative_prompt)
             results = self.__processprompts(np.random.default_rng(seed & 0xFFFFFFFF), prompt, negative_prompt)
             t2 = time.monotonic_ns()
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
