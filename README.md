@@ -78,7 +78,7 @@ See the [cookbook](docs/COOKBOOK.md) for interesting usages.
 
 ## Contributing
 
-To develop, I suggest creating a virtual environment just for the extension, so the tests work and can be debugged properly.
+To develop, I suggest doing so with the extension isolated from the UI (you can use a symlink to test it in the UI), and with its own virtual environment (venv or .venv), so the tests work and can be debugged properly.
 
 ## License
 

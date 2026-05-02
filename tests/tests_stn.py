@@ -1,4 +1,4 @@
-from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
+from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -13,7 +13,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_simple(self):  # negtags with different parameters and separations
         self.process(
-            PromptPair(
+            InputTuple(
                 "flowers<ppp:stn>red<ppp:/stn>, <ppp:stn s>green<ppp:/stn>, <ppp:stn e>blue<ppp:/stn><ppp:stn p0>yellow<ppp:/stn>, <ppp:stn p1>purple<ppp:/stn><ppp:stn p2>black<ppp:/stn>",
                 "<ppp:stn i0/>normal quality<ppp:stn i1>, worse quality<ppp:stn i2/>",
             ),
@@ -22,7 +22,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_complex(self):  # complex negtags
         self.process(
-            PromptPair(
+            InputTuple(
                 "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
                 "normal quality, <ppp:stn i0/>, bad quality<ppp:stn i1/>, worse quality",
             ),
@@ -34,7 +34,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_complex_nocleanup(self):  # complex negtags with no cleanup
         self.process(
-            PromptPair(
+            InputTuple(
                 "<ppp:stn>red<ppp:/stn> ((<ppp:stn s>pink<ppp:/stn>)), flowers <ppp:stn e>purple<ppp:/stn>, <ppp:stn p0>mauve<ppp:/stn><ppp:stn e>blue<ppp:/stn>, <ppp:stn p0>yellow<ppp:/stn> <ppp:stn p1>green<ppp:/stn>",
                 "normal quality, <ppp:stn i0/>, bad quality<ppp:stn i1/>, worse quality",
             ),
@@ -47,7 +47,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_inside_attention(self):  # negtag inside attention
         self.process(
-            PromptPair(
+            InputTuple(
                 "[<ppp:stn>neg1<ppp:/stn>] this is a ((test<ppp:stn e>neg2<ppp:/stn>) (test:2.0): 1.5 ) (red<ppp:stn>[square]<ppp:/stn>:1.5)",
                 "normal quality",
             ),
@@ -59,7 +59,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_inside_alternation(self):  # negtag inside alternation
         self.process(
-            PromptPair(
+            InputTuple(
                 "this is a (([complex<ppp:stn>neg1<ppp:/stn>|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
                 "normal quality",
             ),
@@ -71,7 +71,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_inside_alternation_recursive(self):  # negtag inside alternation (recursive alternation)
         self.process(
-            PromptPair(
+            InputTuple(
                 "this is a (([complex<ppp:stn>neg1<ppp:/stn>[one|two<ppp:stn>neg12<ppp:/stn>||three|four(<ppp:stn>neg14<ppp:/stn>)]|simple<ppp:stn>neg2<ppp:/stn>|regular<ppp:stn>neg3<ppp:/stn>] test)(test:2.0):1.5)",
                 "normal quality",
             ),
@@ -83,13 +83,13 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_inside_scheduling(self):  # negtag inside scheduling
         self.process(
-            PromptPair("this is [abc<ppp:stn>neg1<ppp:/stn>:def<ppp:stn e>neg2<ppp:/stn>: 5 ]", "normal quality"),
+            InputTuple("this is [abc<ppp:stn>neg1<ppp:/stn>:def<ppp:stn e>neg2<ppp:/stn>: 5 ]", "normal quality"),
             OutputTuple("this is [abc:def:5]", "[neg1::5], normal quality, [neg2:5]"),
         )
 
     def test_stn_complex_features(self):  # complex negtags with AND, BREAK and other features
         self.process(
-            PromptPair(
+            InputTuple(
                 "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
                 "normal quality, <ppp:stn i0/>",
             ),
@@ -101,7 +101,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_complex_features_newformat(self):  # complex negtags with AND, BREAK and other features (new format)
         self.process(
-            PromptPair(
+            InputTuple(
                 "[<ppp:stn>neg5<ppp:/stn>] this \\(is\\): a (([complex|simple<ppp:stn>neg6<ppp:/stn>|regular] test<ppp:stn>neg1<ppp:/stn>)(test:2.0):1.5) \nBREAK, BREAK with [abc<ppp:stn>neg4<ppp:/stn>:def<ppp:stn p0>neg2(neg3:1.6)<ppp:/stn>:5]:0.5 AND loratrigger <lora:xxx:1> AND AND hypernettrigger <hypernet:yyy>:0.3",
                 "normal quality, <ppp:stn i0/>",
             ),
@@ -113,7 +113,7 @@ class TestSendToNegative(TestPromptPostProcessorBase):
 
     def test_stn_inside_alternation_recursive_2(self):  # negtag inside alternation (recursive alternation)
         self.process(
-            PromptPair(
+            InputTuple(
                 "[pos1<ppp:stn>neg1<ppp:/stn>[pos11|pos12<ppp:stn>neg12<ppp:/stn>||pos14|pos15<ppp:stn>neg15<ppp:/stn>]|pos2<ppp:stn>neg2<ppp:/stn>|pos3<ppp:stn>neg3<ppp:/stn>]",
                 "",
             ),

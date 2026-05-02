@@ -31,33 +31,59 @@ Examples: `test_cl_simple`, `test_ch_choices`, `test_wc_ignore`
 
 ## Running a Test Case via `self.process()`
 
-Use the `process()` helper from the base class — never instantiate `PromptPostProcessor` directly in test methods.
+Use the `process()` helper from the base class — never instantiate `PromptPostProcessor` directly in test methods unless there is a need to pass specific options not covered by the default setup or the "nocup" or "nostrict" options.
 
 ```python
 def test_cl_simple(self):
     """simple cleanup"""
     self.process(
-        "input prompt",                             # positive prompt
-        "",                                         # negative prompt
-        PromptPair("expected output", ""),          # expected result
+        InputTuple(
+            "input prompt",                         # positive prompt
+            ""),                                    # negative prompt
+        OutputTuple(
+            "expected output",                      # expected positive prompt
+            "",                                     # expected negative prompt
+            {}                                      # expected variables (optional)
+        ),
     )
+
+def test_cl_combinatorial(self):
+    """simple cleanup"""
+    self.process(
+        InputTuple(
+            "input prompt",                         # positive prompt
+            ""),                                    # negative prompt
+        [
+            OutputTuple(
+                "expected output",                  # expected positive prompt
+                "",                                 # expected negative prompt
+                {}                                  # expected variables (optional)
+            ),
+            OutputTuple(
+                "expected output",                  # expected positive prompt
+                "",                                 # expected negative prompt
+                {}                                  # expected variables (optional)
+            ),
+        ],
+        combinatorial=True,
+    )
+
 ```
 
 ### `process()` Signature (key parameters)
 
 | Parameter | Type | Notes |
 |-----------|------|-------|
-| `input_prompt` | `str` | Positive prompt input |
-| `input_negative_prompt` | `str` | Negative prompt input |
-| `expected_output` | `PromptPair \| list[PromptPair]` | Single or multiple valid outputs |
+| `input_prompts` | `InputTuple` | Prompts input |
+| `expected_output` | `OutputTuple \| list[OutputTuple]` | Single or multiple valid outputs |
 | `seed` | `int` | Optional, defaults to fixed seed |
-| `ppp` | `PromptPostProcessor \| str \| None` | Pass `"nocup"` to skip creation |
+| `ppp` | `PromptPostProcessor \| str \| None` | Supported values `"nocup"`, `"nostrict"` or a specific instance |
 | `interrupted` | `bool` | Expected interrupt flag |
-| `output_variables` | `dict[str, str] \| None` | Variables to validate after processing |
+| `combinatorial` | `bool` | Whether to run a combinatorial generation. If a specific ppp instance is used then it is ignored |
 
 ## Assertions
 
-Use `assertEqual` with a descriptive message string:
+Use `assertEqual` or similar methods with a descriptive message string:
 
 ```python
 self.assertEqual(result, expected, "Descriptive failure message")
@@ -73,8 +99,24 @@ Override `self.defopts` or `self.def_env_info` to pass non-default options — d
 ```python
 def test_cl_custom(self):
     """cleanup with custom separator"""
-    opts = {**self.defopts, "ppp_stn_separator": " | "}
-    self.process("a, , b", "", PromptPair("a | b", ""), ppp_opts=opts)
+    self.process(
+        InputTuple("a, , b", ""),
+        OutputTuple("a | b", ""),
+        ppp=PromptPostProcessor(
+            self.ppp_logger,
+            self.def_env_info,
+            replace(
+                self.defopts,
+                keep_choices_order=True,
+                cup_do_cleanup=False,
+                do_combinatorial=True,
+            ),
+            self.grammar_content,
+            self.interrupt,
+            self.wildcards_obj,
+            self.extranetwork_maps_obj,
+        ),
+    )
 ```
 
 ## Entry Point

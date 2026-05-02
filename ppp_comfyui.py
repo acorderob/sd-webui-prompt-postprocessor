@@ -189,6 +189,15 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
+                "combinatorial_shuffle": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_SHUFFLE,
+                        "tooltip": "Shuffle the combinatorial results",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "combinatorial_limit": (
                     "INT",
                     {
@@ -277,6 +286,7 @@ class PromptPostProcessorComfyUINode:
         do_cleanup,
         cleanup_variables,
         do_combinatorial,
+        combinatorial_shuffle,
         combinatorial_limit,
         wc_options=None,
         stn_options=None,
@@ -371,6 +381,7 @@ class PromptPostProcessorComfyUINode:
                 else PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
             do_combinatorial=do_combinatorial,
+            combinatorial_shuffle=combinatorial_shuffle,
             combinatorial_limit=combinatorial_limit,
         )
         self.wildcards_obj.refresh_wildcards(
@@ -393,12 +404,19 @@ class PromptPostProcessorComfyUINode:
             self.extranetwork_mappings_obj,
         )
         results = ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
-        # pos_prompt, neg_prompt, variables = results[0]
-        # return (
-        #     pos_prompt,
-        #     neg_prompt,
-        #     variables,
-        # )
+
+        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs", "last_prompts_comfyui.txt"), "w", encoding="utf-8") as f:
+        #     f.write(f"Seed: {seed if seed is not None else 1}\n")
+        #     f.write(f"In Positive: {pos_prompt}\n")
+        #     f.write(f"In Negative: {neg_prompt}\n")
+        #     f.write("\n")
+        #     for i, (posp, negp, var) in enumerate(results):
+        #         f.write(f"Index: {i}\n")
+        #         f.write(f"Out Positive: {posp}\n")
+        #         f.write(f"Out Negative: {negp}\n")
+        #         f.write(f"Out Variables: {var}\n")
+        #         f.write("\n")
+
         return tuple(zip(*results))  # unzip the list of tuples into tuple of lists
 
     def interrupt(self):

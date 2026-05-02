@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from ppp import PromptPostProcessor
 from ppp_classes import ONWARNING_CHOICES  # type: ignore
-from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
+from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -17,7 +17,7 @@ class TestModelVariants(TestPromptPostProcessorBase):
 
     def test_variants(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "<ppp:if _is_test1>test1<ppp:/if><ppp:if _is_test2>test2<ppp:/if><ppp:if _is_test3>test3<ppp:/if><ppp:if _is_test4>test4<ppp:/if>",
                 "",
             ),

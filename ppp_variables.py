@@ -32,14 +32,14 @@ class VariableRepository:
     def set_system(self, name: str, value: Any) -> None:
         """Set a system variable."""
         if not self.name_is_system(name):
-            raise ValueError(f"invalid system variable name '{name}': must start with an underscore")
+            raise ValueError(f"Invalid system variable name '{name}': must start with an underscore")
         self._system[name] = value
 
     def update_system(self, mapping: dict[str, Any]) -> None:
         """Bulk-update system variables from *mapping*."""
         for name in mapping:
             if not self.name_is_system(name):
-                raise ValueError(f"invalid system variable name '{name}': must start with an underscore")
+                raise ValueError(f"Invalid system variable name '{name}': must start with an underscore")
         self._system.update(mapping)
 
     def clear_system(self) -> None:
@@ -59,7 +59,7 @@ class VariableRepository:
     def set_user(self, name: str, value: Any) -> None:
         """Set a user variable."""
         if self.name_is_system(name):
-            raise ValueError(f"invalid user variable name '{name}': must not start with an underscore")
+            raise ValueError(f"Invalid user variable name '{name}': must not start with an underscore")
         self._user[name] = value
 
     def delete_user(self, name: str) -> None:

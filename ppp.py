@@ -84,6 +84,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS = defopt["cup_remove_extranetwork_tags"]
     DEFAULT_STRICT_OPERATORS = defopt["strict_operators"]
     DEFAULT_DO_COMBINATORIAL = defopt["do_combinatorial"]
+    DEFAULT_COMBINATORIAL_SHUFFLE = defopt["combinatorial_shuffle"]
     DEFAULT_COMBINATORIAL_LIMIT = defopt["combinatorial_limit"]
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
@@ -882,7 +883,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         v.update(variables)
         return prompt, negative_prompt, v
 
-    def __processprompts(self, rng, prompt, negative_prompt) -> list[tuple[str, str, dict[str, str | None]]]:
+    def __processprompts(
+        self, rng: np.random.Generator, prompt: str, negative_prompt: str
+    ) -> list[tuple[str, str, dict[str, str | None]]]:
         """
         Process the prompt and negative prompt.
 
@@ -914,6 +917,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         try:
             results = processor.start_visit(parsed)
         except PPPInterrupt as e:
+            results = []
             self.log(logging.ERROR, e.message)
             if e.pos_prefix:
                 prompt = e.pos_prefix + prompt
@@ -931,6 +935,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             final_results.append(self.__postprocess_result(r))
         if self.state.options.do_combinatorial:
             self.log(logging.INFO, f"Total combinations: {len(final_results)}")
+            if self.state.options.combinatorial_shuffle:
+                rng.shuffle(final_results)
+                self.log(logging.INFO, "Combinations shuffled")
         return final_results
 
     def process_prompt(
@@ -974,7 +981,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 negative_prompt = e.neg_prefix + negative_prompt
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
-            return [prompt, negative_prompt, {}]
+            return [(prompt, negative_prompt, {})]
         except Exception:  # pylint: disable=broad-exception-caught
             self.log(logging.ERROR, "Unexpected error", exc_info=True)
-            return [original_prompt, original_negative_prompt, {}]
+            return [(original_prompt, original_negative_prompt, {})]

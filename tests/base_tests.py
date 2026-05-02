@@ -1,7 +1,7 @@
 from dataclasses import replace
 import os
 import logging
-from typing import NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 import unittest
 import datetime
 
@@ -12,7 +12,7 @@ from ppp import PromptPostProcessor  # type: ignore
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # type: ignore
 
 
-class PromptPair(NamedTuple):
+class InputTuple(NamedTuple):
     prompt: str = ""
     negative_prompt: str = ""
 
@@ -20,7 +20,7 @@ class PromptPair(NamedTuple):
 class OutputTuple(NamedTuple):
     prompt: str = ""
     negative_prompt: str = ""
-    variables: dict[str, str] = None
+    variables: dict[str, Any] = None
 
 
 class TestPromptPostProcessorBase(unittest.TestCase):
@@ -177,7 +177,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
 
     def process(
         self,
-        input_prompts: PromptPair,
+        input_prompts: InputTuple,
         expected_output: Optional[OutputTuple | list[OutputTuple]] = None,
         seed: int = 1,
         ppp: Optional[str | PromptPostProcessor] = None,
@@ -188,7 +188,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         Process the prompt and compare the results with the expected prompts.
 
         Args:
-            input_prompts (PromptPair): The input prompts.
+            input_prompts (InputTuple): The input prompts.
             expected_output (OutputTuple | list[OutputTuple], optional): The expected output. When a list is provided, the test will run once for each expected output, using the same input prompt, but seed will be incremented for each iteration.
             seed (int, optional): The seed value. Defaults to 1.
             ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
@@ -214,7 +214,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             )
             if self.interrupted != interrupted:
                 errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
-            elif expected_output is not None:
+            elif not self.interrupted and expected_output is not None:
                 if len(result) != len(out):
                     errors.append(f"Incorrect number of combinations (expected {len(out)}, got {len(result)})")
                 for out_prompt, out_negative_prompt, out_variables in out:
@@ -253,8 +253,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             )
             if self.interrupted != interrupted:
                 errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
-            elif expected_output is not None:
-                result_prompt, result_negative_prompt, output_variables = result[0]
+            elif not self.interrupted and expected_output is not None:
+                result_prompt, result_negative_prompt, output_variables = (result[0] if result else (None, None, None))
                 if result_prompt != eo.prompt or result_negative_prompt != eo.negative_prompt:
                     errors.append(
                         f"Incorrect result '{eo.prompt}' / '{eo.negative_prompt}', got '{result_prompt}' / '{result_negative_prompt}'"

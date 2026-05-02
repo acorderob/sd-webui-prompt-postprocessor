@@ -79,7 +79,7 @@ class ModelDetectConfig(BaseModel):
     @model_validator(mode="after")
     def check_class_or_property(self) -> "ModelDetectConfig":
         if self.class_ is None and self.property is None:
-            raise ValueError("either 'class' or 'property' must be specified")
+            raise ValueError("Either 'class' or 'property' must be specified")
         return self
 
 
@@ -101,17 +101,17 @@ class FindInFilenamePattern(BaseModel):
             flag_value = 0
             for flag in v:
                 if not isinstance(flag, str) or not hasattr(re, flag):
-                    raise ValueError(f"invalid regex flag '{flag}'")
+                    raise ValueError(f"Invalid regex flag '{flag}'")
                 flag_value |= getattr(re, flag)
             return flag_value
-        raise ValueError(f"expected int or list of flag-name strings, got {type(v).__name__}")
+        raise ValueError(f"Expected int or list of flag-name strings, got {type(v).__name__}")
 
     @model_validator(mode="after")
     def validate_regex(self) -> "FindInFilenamePattern":
         try:
             re.compile(self.regex, self.flags)
         except re.error as exc:
-            raise ValueError(f"invalid regex pattern '{self.regex}': {exc}") from exc
+            raise ValueError(f"Invalid regex pattern '{self.regex}': {exc}") from exc
         return self
 
 
@@ -136,9 +136,9 @@ class VariantConfig(BaseModel):
                 elif isinstance(item, dict):
                     normalized.append(item)
                 else:
-                    raise ValueError(f"expected str or dict in 'find_in_filename' list, got {type(item).__name__}")
+                    raise ValueError(f"Expected str or dict in 'find_in_filename' list, got {type(item).__name__}")
             return normalized
-        raise ValueError(f"expected str, dict, or list for 'find_in_filename', got {type(v).__name__}")
+        raise ValueError(f"Expected str, dict, or list for 'find_in_filename', got {type(v).__name__}")
 
 
 # ------------------- Model configuration -------------------
@@ -153,7 +153,7 @@ class ModelConfig(BaseModel):
     @model_validator(mode="after")
     def check_detect_or_variants(self) -> "ModelConfig":
         if self.detect is None and self.variants is None:
-            raise ValueError("at least one of 'detect' or 'variants' must be specified")
+            raise ValueError("At least one of 'detect' or 'variants' must be specified")
         return self
 
 
@@ -169,7 +169,7 @@ class PPPConfig(BaseModel):
     @model_validator(mode="after")
     def check_hosts_or_models(self) -> "PPPConfig":
         if self.hosts is None and self.models is None:
-            raise ValueError("at least one of 'hosts' or 'models' must be specified")
+            raise ValueError("At least one of 'hosts' or 'models' must be specified")
         return self
 
 # ------------------- State object -------------------
@@ -202,6 +202,7 @@ class PPPStateOptions:
     cup_remove_extranetwork_tags: bool = False
     strict_operators: bool = True
     do_combinatorial: bool = False
+    combinatorial_shuffle: bool = False
     combinatorial_limit: int = 100  # 0 = no limit
 
     def __post_init__(self):

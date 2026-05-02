@@ -124,8 +124,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             )
             return tuple(self.__comb_trace)
 
+        limit_reached = False
+
         def _dfs(forced_path: tuple[int, ...]):
+            nonlocal limit_reached
             if 0 < limit <= len(results):
+                limit_reached = True
                 return
             trace = _run(forced_path)
             # For each decision that was reached but not forced, spawn branches for all
@@ -133,19 +137,21 @@ class TreeProcessor(lark.visitors.Interpreter):
             # Iterate in reverse so later decisions vary fastest, producing lexicographic order.
             for i in range(len(trace) - 1, len(forced_path) - 1, -1):
                 if 0 < limit <= len(results):
+                    limit_reached = True
                     return
                 num_options = trace[i]
                 for opt in range(1, num_options):
                     if 0 < limit <= len(results):
+                        limit_reached = True
                         return
                     # Pad with zeros for intermediate decisions so they keep the default.
                     new_path = forced_path + (0,) * (i - len(forced_path)) + (opt,)
                     _dfs(new_path)
 
         _dfs(())
-        if 0 < limit <= len(results):
+        if limit_reached:
             self.log(
-                logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations may have been skipped."
+                logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations have been skipped."
             )
         return results
 
@@ -1354,25 +1360,26 @@ class TreeProcessor(lark.visitors.Interpreter):
                             enmapping = self.state.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
                             if enmapping:
                                 for v in enmapping.variants:
-                                    if str(v.condition):
+                                    cond = str(v.condition) if v.condition is not None else None
+                                    if cond:
                                         try:
                                             cnd = parse_prompt(
                                                 self.state,
                                                 "condition",
-                                                str(v.condition),
+                                                cond,
                                                 self.state.parsers["condition"],
                                                 True,
                                             )
                                         except lark.exceptions.UnexpectedInput as e:
                                             self.warn_or_stop(
-                                                f"Error parsing condition '{escape_single_quotes(str(v.condition))}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
+                                                f"Error parsing condition '{escape_single_quotes(cond)}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
                                                 e,
                                             )
                                             cnd = None
                                     else:
                                         cnd = "True"
                                     if cnd is not None and (cnd == "True" or self.__eval_condition(cnd)):
-                                        if str(v.condition):
+                                        if cond:
                                             found_mappings.append(v)
                                         else:
                                             else_mapping = v

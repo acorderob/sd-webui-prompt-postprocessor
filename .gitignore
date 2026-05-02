@@ -6,8 +6,7 @@ venv
 !.vscode/settings.json
 !.vscode/launch.json
 
+logs
 tests/tests_local.py
 tests/local_wildcards
 tests/logs
-
-scripts/last_prompts.txt

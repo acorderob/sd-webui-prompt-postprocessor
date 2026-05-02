@@ -7,7 +7,7 @@ from ppp_logging import DEBUG_LEVEL
 
 class PPPLRUCache:
 
-    ProcessInput = Tuple[int, int, str, str]  # (seed, wildcards_hash, positive_prompt, negative_prompt)
+    ProcessInput = Tuple[int, int, str, str]  # (env_hash, seed, positive_prompt, negative_prompt)
     ProcessResult = Tuple[str, str]  # (positive_prompt, negative_prompt)
 
     def __init__(self, capacity: int, logger: Logger = None, debug_level: DEBUG_LEVEL = DEBUG_LEVEL.none):

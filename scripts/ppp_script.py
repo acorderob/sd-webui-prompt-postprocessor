@@ -103,8 +103,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 elem_id="ppp_force_equal_seeds",
             )
             gr.HTML("<br>")
-            gr.Markdown(
-                """
+            gr.Markdown("""
                 Unlink the seed to use the specified one for the prompts instead of the image seed.
 
                 * A seed of -1 and "Incremental seed" checked will use a random seed for the first prompt and consecutive values for the rest. This is the same as when you use -1 for the image seed.
@@ -113,8 +112,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 * Any other seed value and "Incremental seed" unchecked will use the specified seed for all the prompts.
 
                 Seeds are only used for the wildcards and choice constructs.
-            """
-            )
+            """)
             gr.HTML("<br>")
             with gr.Row(equal_height=True):
                 unlink_seed = gr.Checkbox(
@@ -148,6 +146,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     value=PromptPostProcessor.DEFAULT_DO_COMBINATORIAL,
                     elem_id="ppp_combinatorial",
                 )
+                combinatorial_shuffle = gr.Checkbox(
+                    label="Shuffle combinations",
+                    info="Shuffle the combinatorial results.",
+                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_SHUFFLE,
+                    elem_id="ppp_combinatorial_shuffle",
+                )
                 combinatorial_limit = gr.Number(
                     label="Combinations limit (0 = no limit)",
                     value=PromptPostProcessor.DEFAULT_COMBINATORIAL_LIMIT,
@@ -155,7 +159,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     min_width=120,
                     elem_id="ppp_combinatorial_limit",
                 )
-        return [force_equal_seeds, unlink_seed, seed, incremental_seed, combinatorial, combinatorial_limit]
+        return [force_equal_seeds, unlink_seed, seed, incremental_seed, combinatorial, combinatorial_shuffle, combinatorial_limit]
 
     def process(
         self,
@@ -165,6 +169,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         input_seed,
         input_incremental_seed,
         input_combinatorial,
+        input_combinatorial_shuffle,
         input_combinatorial_limit,
     ):  # pylint: disable=arguments-differ
         """
@@ -177,6 +182,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             input_seed (int): The seed value.
             input_incremental_seed (bool): Flag indicating whether to use incremental seed.
             input_combinatorial (bool): Flag indicating whether to use combinatorial mode.
+            input_combinatorial_shuffle (bool): Flag indicating whether to shuffle the combinatorial results.
             input_combinatorial_limit (int): Maximum number of combinations (0 = no limit).
 
         Returns:
@@ -241,6 +247,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
             do_combinatorial=input_combinatorial,
+            combinatorial_shuffle=input_combinatorial_shuffle,
             combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
         )
         if self.ppp_logger is None:
@@ -392,19 +399,40 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 for i in range(len(rpr)):  # pylint: disable=consider-using-enumerate
                     posp, negp, _ = comb_results[i % num_comb]
                     prompts_list[(regular_type, i)] = (posp, negp)
-                extra_params["PPP combination"] = [1+(i % num_comb) for i in range(len(rpr))]
+                extra_params["PPP combination"] = [1 + (i % num_comb) for i in range(len(rpr))]
             if hiresfix_exists:
-                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "processing prompts combinatorially (hiresfix)")
-                comb_results_hr = ppp.process_prompt(rph[0], rnh[0], seed_for_comb)
-                num_comb_hr = len(comb_results_hr)
-                for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
-                    posp, negp, _ = comb_results_hr[i % num_comb_hr]
-                    prompts_list[(hiresfix_type, i)] = (posp, negp)
-                extra_params["PPP HR combination"] = [1+(i % num_comb_hr) for i in range(len(rph))]
+                hiresfix_equal = regular_exists and rph == rpr and rnh == rnr
+                if hiresfix_equal:
+                    log(
+                        self.ppp_logger,
+                        self.ppp_debug_level,
+                        logging.INFO,
+                        "hiresfix prompts are the same as regular prompts, skipping combinatorial processing for hiresfix",
+                    )
+                    for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
+                        prompts_list[(hiresfix_type, i)] = prompts_list.get((regular_type, i))
+                else:
+                    log(
+                        self.ppp_logger,
+                        self.ppp_debug_level,
+                        logging.INFO,
+                        "processing prompts combinatorially (hiresfix)",
+                    )
+                    comb_results_hr = ppp.process_prompt(rph[0], rnh[0], seed_for_comb)
+                    num_comb_hr = len(comb_results_hr)
+                    for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
+                        posp, negp, _ = comb_results_hr[i % num_comb_hr]
+                        prompts_list[(hiresfix_type, i)] = (posp, negp)
+                    extra_params["PPP HR combination"] = [1 + (i % num_comb_hr) for i in range(len(rph))]
         else:
             # processes prompts
             for prompttype, typeindex in prompts_list.keys():
-                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, f"processing prompts ({prompttype}[{typeindex+1}])")
+                log(
+                    self.ppp_logger,
+                    self.ppp_debug_level,
+                    logging.INFO,
+                    f"processing prompts ({prompttype}[{typeindex+1}])",
+                )
                 key = (
                     (hash_fullenv, calculated_seeds[typeindex], rpr[typeindex], rnr[typeindex])
                     if prompttype == regular_type
@@ -412,7 +440,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 )
                 cached = self.lru_cache.get(key)
                 if cached is None:
-                    (hsh, seed, prompt, negative_prompt) = key
+                    hsh, seed, prompt, negative_prompt = key
                     results = ppp.process_prompt(prompt, negative_prompt, seed)
                     posp, negp, _ = results[0]
                     cached = (posp, negp)
@@ -423,14 +451,14 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
                 prompts_list[(prompttype, typeindex)] = cached
 
-        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "last_prompts.txt"), "w", encoding="utf-8") as f:
+        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "logs", f"last_prompts_{app.value}.txt"), "w", encoding="utf-8") as f:
         #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():
-        #         f.write(f"Key: {prompttype} {typeindex}\n")
+        #         f.write(f"Key: {prompttype}[{typeindex}]\n")
         #         f.write(f"Seed: {calculated_seeds[typeindex]}\n")
-        #         f.write(f"Old Positive: {rpr[typeindex] if prompttype == regular_type else rph[typeindex]}\n")
-        #         f.write(f"Old Negative: {rnr[typeindex] if prompttype == regular_type else rnh[typeindex]}\n")
-        #         f.write(f"New Positive: {posp}\n")
-        #         f.write(f"New Negative: {negp}\n")
+        #         f.write(f"In Positive: {rpr[typeindex] if prompttype == regular_type else rph[typeindex]}\n")
+        #         f.write(f"In Negative: {rnr[typeindex] if prompttype == regular_type else rnh[typeindex]}\n")
+        #         f.write(f"Out Positive: {posp}\n")
+        #         f.write(f"Out Negative: {negp}\n")
         #         f.write("\n")
 
         # updates the prompts

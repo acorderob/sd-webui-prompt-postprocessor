@@ -2,7 +2,7 @@ import logging
 from dataclasses import replace
 
 from ppp import PromptPostProcessor  # type: ignore
-from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
+from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 
 if __name__ == "__main__":
@@ -18,13 +18,13 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_simple(self):  # simple cleanup
         self.process(
-            PromptPair("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5), (red:1.5)  ", "  normal quality  "),
+            InputTuple("  this is a ((test ), , ,  (), ,   [] ( , test ,:2.0):1.5), (red:1.5)  ", "  normal quality  "),
             OutputTuple("this is a ((test), (test,:2):1.5), (red:1.5)", "normal quality"),
         )
 
     def test_cl_complex(self):  # complex cleanup
         self.process(
-            PromptPair(
+            InputTuple(
                 "  this is BREAKABLE a ((test)), ,AND AND(() [] <lora:test> ANDERSON (test:2.0):1.5) :o BREAK \n BREAK (red:1.5)  ",
                 "  [:hands, feet, :0.15]normal quality  ",
             ),
@@ -36,7 +36,7 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_removenetworktags(self):  # remove network tags
         self.process(
-            PromptPair("this is a <lora:test:1> test__yaml/wildcard7__", ""),
+            InputTuple("this is a <lora:test:1> test__yaml/wildcard7__", ""),
             OutputTuple("this is a test", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
@@ -54,7 +54,7 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_dontremoveseparatorsoneol(self):  # don't remove separators on eol
         self.process(
-            PromptPair("this is a test,\nsecond line", ""),
+            InputTuple("this is a test,\nsecond line", ""),
             OutputTuple("this is a test,\nsecond line", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
@@ -73,7 +73,7 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_separatorswitheol(self):  # don't remove eols with the separators
         self.process(
-            PromptPair(
+            InputTuple(
                 """{      (d:0.9) ,, (l:1.1)  | (l:1.1)         (d:0.9),,, }
                         (l:1.1)  
                         (d:0.9)""",
@@ -111,7 +111,7 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_mergeattention(self):  # merge attention
         self.process(
-            PromptPair(
+            InputTuple(
                 "this is (a test:0.9) of (attention (merging:1.2)) where ((this)) ((is joined:1.2)) and ([this too]:1.3)",
                 "",
             ),
@@ -123,7 +123,7 @@ class TestCleanup(TestPromptPostProcessorBase):
 
     def test_cl_not_mergeattention(self):  # not merge attention
         self.process(
-            PromptPair(
+            InputTuple(
                 "this is (a test:0.9) of not (attention (merging:1.2)) where ((this)) ((is not joined:1.2)) and neither is ([this]:1.3)",
                 "",
             ),
@@ -139,7 +139,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_unmatched_open_paren(self):  # unmatched open parenthesis triggers warning
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
-                PromptPair("(unclosed paren", ""),
+                InputTuple("(unclosed paren", ""),
                 OutputTuple("(unclosed paren", ""),
             )
         self.assertTrue(
@@ -150,7 +150,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_unmatched_close_paren(self):  # unmatched close parenthesis triggers warning
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
-                PromptPair("extra close paren)", ""),
+                InputTuple("extra close paren)", ""),
                 OutputTuple("extra close paren)", ""),
             )
         self.assertTrue(
@@ -161,7 +161,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_mismatched_brackets(self):  # mismatched bracket types trigger warning
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
-                PromptPair("(mismatched]", ""),
+                InputTuple("(mismatched]", ""),
                 OutputTuple("(mismatched]", ""),
             )
         self.assertTrue(
@@ -172,7 +172,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_unmatched_open_bracket(self):  # unmatched open bracket triggers warning
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
-                PromptPair("unclosed [bracket", ""),
+                InputTuple("unclosed [bracket", ""),
                 OutputTuple("unclosed [bracket", ""),
             )
         self.assertTrue(
@@ -183,7 +183,7 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_unmatched_complex(self):  # unmatched complex case triggers warning
         with self.assertLogs("PromptPostProcessor", level=logging.WARNING) as cm:
             self.process(
-                PromptPair("[(unmatched [bracket))", ""),
+                InputTuple("[(unmatched [bracket))", ""),
                 OutputTuple("[(unmatched [bracket))", ""),
             )
         self.assertTrue(
@@ -194,6 +194,6 @@ class TestCleanup(TestPromptPostProcessorBase):
     def test_cl_warn_escaped_unmatched_no_false_warning(self):  # escaped unmatched paren/bracket does not trigger warning
         with self.assertNoLogs("PromptPostProcessor", level=logging.WARNING):
             self.process(
-                PromptPair(r"text with \(escaped unmatched\]", ""),
+                InputTuple(r"text with \(escaped unmatched\]", ""),
                 OutputTuple(r"text with \(escaped unmatched\]", ""),
             )

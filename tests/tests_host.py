@@ -1,5 +1,5 @@
 from ppp import PromptPostProcessor  # type: ignore
-from .base_tests import OutputTuple, PromptPair, TestPromptPostProcessorBase
+from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -14,7 +14,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_attention_parentheses(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1] (test2) (test3:1.5) [(test4)]",
                 "",
             ),
@@ -35,7 +35,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_attention_disable(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
@@ -56,7 +56,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_attention_remove(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
@@ -77,7 +77,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_attention_error(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1] (test2) (test3:1.5)",
                 "",
             ),
@@ -99,7 +99,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_scheduling_before(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1:test2:0.5]",
                 "",
             ),
@@ -120,7 +120,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_scheduling_after(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1:test2:0.5]",
                 "",
             ),
@@ -141,7 +141,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_scheduling_first(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1::0.5] [:test2:0.5] [test3:test4:0.5]",
                 "",
             ),
@@ -162,7 +162,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_scheduling_remove(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1:test2:0.5]",
                 "",
             ),
@@ -183,7 +183,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_scheduling_error(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1:test2:0.5]",
                 "",
             ),
@@ -205,7 +205,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_alternation_first(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1|test2|test3]",
                 "",
             ),
@@ -226,7 +226,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_alternation_remove(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1|test2|test3]",
                 "",
             ),
@@ -247,7 +247,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_alternation_error(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "[test1|test2|test3]",
                 "",
             ),
@@ -269,7 +269,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_and_eol(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 AND test2:2",
                 "",
             ),
@@ -290,7 +290,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_and_comma(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 AND test2:2",
                 "",
             ),
@@ -311,7 +311,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_and_remove(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 AND test2:2",
                 "",
             ),
@@ -332,7 +332,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_and_error(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 AND test2:2",
                 "",
             ),
@@ -354,7 +354,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_break_eol(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 BREAK test2",
                 "",
             ),
@@ -375,7 +375,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_break_comma(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 BREAK test2",
                 "",
             ),
@@ -396,7 +396,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_break_remove(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 BREAK test2",
                 "",
             ),
@@ -417,7 +417,7 @@ class TestHosts(TestPromptPostProcessorBase):
 
     def test_host_break_error(self):
         self.process(
-            PromptPair(
+            InputTuple(
                 "test1 BREAK test2",
                 "",
             ),
