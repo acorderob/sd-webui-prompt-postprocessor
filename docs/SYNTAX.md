@@ -82,7 +82,7 @@ The generic format is: `__parameters$$wildcard'filter'(var=value)__`
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-Wildcards cannot be used inside an extranetwork tag (because some lora names contain double underscores). If you need to choose from multiple loras put the whole extranetwork tag inside a wildcard, or use choices.
+Wildcards cannot be used inside an extranetwork tag (because some LoRA names contain double underscores). If you need to choose from multiple LoRAs put the whole extranetwork tag inside a wildcard, or use choices.
 
 ### Identifier
 
@@ -362,7 +362,7 @@ The `type` is the kind of extranetwork, like `lora` or `hypernet`.
 
 The `name` is the extranetwork identifier. If it is not a regular identifier (i.e. starts with a number or contains spaces or symbols) it should be inside quotes.
 
-The `parameters` is optional and its format depends on the extranetwork type. With loras or hypernets it is usually a single weight number, so if the type is one of those and there are no parameters it will default to `1`. If it is not a number it should go inside quotes.
+The `parameters` is optional and its format depends on the extranetwork type. With LoRAs or HyperNets it is usually a single weight number, so if the type is one of those and there are no parameters it will default to `1`. If it is not a number it should go inside quotes.
 
 The `condition` uses the same format as in the `if` command, and it is also optional.
 
@@ -394,7 +394,7 @@ The extranetwork command supports specifying mappings of extranetworks (like LoR
 
 If the type of extranetwork is prefixed with a `$` the command will look for a mapping.
 
-If you have loras that do the same but for different models, create a mapping to group them, configuring there the weight and triggers for each one.
+If you have LoRAs that do the same but for different models, create a mapping to group them, configuring there the weight and triggers for each one.
 
 The mappings are configured in yaml files in any of the configured extranetwork mappings folders. The format is like this:
 
@@ -422,7 +422,7 @@ Each mapping can have any number of elements in its list of mappings. There are 
 * `mappingname`: the name you want to give to the mapping, to be referenced in the command.
 * `condition`: the condition to check for this mapping to be used (usually it should be one of the `_is_*` variables). If the conditions of multiple mappings evaluate to True, one will be chosen randomly. If the condition is missing it is considered True, to be used in the last mapping to catch as an "else" condition, and will be used if no other mapping applies.
 * `name`: name of the real extranetwork. If it is missing no extranetwork tag will be added.
-* `parameters`: parameters for the real extranetwork. If it is missing it is assumed "1" for loras and hypernets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
+* `parameters`: parameters for the real extranetwork. If it is missing it is assumed "1" for LoRAs and HyperNets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
 * `triggers`: list of trigger strings. If it is missing, only the inline triggers in the ext command will be added.
 * `weight`: weight for this variant, in case multiple of them apply, to choose one. Default is 1.
 

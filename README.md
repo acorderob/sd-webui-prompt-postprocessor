@@ -15,7 +15,7 @@ These are some features:
 * Set and modify local variables.
 * Define model variants (pony, illustrious, ...).
 * Filter content based on the loaded SD model/variant or a variable.
-* Map extranetworks (LoRAs) depending on conditions (like the loaded model variant). This allows you to add "virtual" loras to the prompt that will be translated to the correct one.
+* Map extranetworks (LoRAs) depending on conditions (like the loaded model variant). This allows you to add "virtual" LoRAs to the prompt that will be translated to the correct one.
 * Clean up the prompt of unnecessary separators or spaces.
 * Combinatorial mode.
 
@@ -37,7 +37,7 @@ Notes:
     *ComfyUI* only supports natively the attention using parentheses, so the ones with the brackets will be converted. The other constructs are not natively supported but some custom nodes implement them. For example:
         [ComfyUI_smZNodes](https://github.com/shiimizu/ComfyUI_smZNodes)
 
-    I also recommend a node to add loras from the prompt, like:
+    I also recommend a node to add LoRAs from the prompt, like:
         [LoRA Tag Loader for ComfyUI](https://github.com/badjeff/comfyui_lora_tag_loader)
 
     In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
