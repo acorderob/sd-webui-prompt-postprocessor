@@ -12,6 +12,9 @@
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
+* **do_combinatorial**: Activates combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
+* **combinatorial_shuffle**: It shuffles the combinatorial results.
+* **combinatorial_limit**: Limit for the number of generated combinations.
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.

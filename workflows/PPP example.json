@@ -1,1 +1,988 @@
-{"id":"0f75c56e-adb4-41f6-b957-81b6772cb8b5","revision":0,"last_node_id":39,"last_link_id":100,"nodes":[{"id":17,"type":"PrimitiveInt","pos":[0,-480],"size":[315,82],"flags":{},"order":0,"mode":0,"inputs":[{"localized_name":"value","name":"value","type":"INT","widget":{"name":"value"},"link":null}],"outputs":[{"localized_name":"INT","name":"INT","type":"INT","links":[24,94]}],"title":"Seed","properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"PrimitiveInt"},"widgets_values":[189718398195680,"randomize"]},{"id":5,"type":"EmptyLatentImage","pos":[0,-840],"size":[315,106],"flags":{},"order":1,"mode":0,"inputs":[{"localized_name":"width","name":"width","type":"INT","widget":{"name":"width"},"link":null},{"localized_name":"height","name":"height","type":"INT","widget":{"name":"height"},"link":null},{"localized_name":"batch_size","name":"batch_size","type":"INT","widget":{"name":"batch_size"},"link":null}],"outputs":[{"localized_name":"LATENT","name":"LATENT","type":"LATENT","slot_index":0,"links":[2]}],"properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"EmptyLatentImage"},"widgets_values":[1024,1024,1]},{"id":27,"type":"PrimitiveStringMultiline","pos":[-100,-20],"size":[400,200],"flags":{},"order":2,"mode":0,"inputs":[{"localized_name":"value","name":"value","type":"STRING","widget":{"name":"value"},"link":null}],"outputs":[{"localized_name":"STRING","name":"STRING","type":"STRING","links":[95]}],"title":"wildcards","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PrimitiveStringMultiline"},"widgets_values":["color:\n - red\n - blonde\n - brunette\naction:\n - running\n - sleeping"]},{"id":9,"type":"SaveImage","pos":[1880,-820],"size":[210,270],"flags":{},"order":15,"mode":0,"inputs":[{"localized_name":"images","name":"images","type":"IMAGE","link":9},{"localized_name":"filename_prefix","name":"filename_prefix","type":"STRING","widget":{"name":"filename_prefix"},"link":null}],"outputs":[],"properties":{"cnr_id":"comfy-core","ver":"0.3.27"},"widgets_values":["ComfyUI"]},{"id":6,"type":"CLIPTextEncode","pos":[940,-520],"size":[240,88],"flags":{"collapsed":true},"order":7,"mode":0,"inputs":[{"localized_name":"clip","name":"clip","type":"CLIP","link":19},{"localized_name":"text","name":"text","type":"STRING","widget":{"name":"text"},"link":96}],"outputs":[{"localized_name":"CONDITIONING","name":"CONDITIONING","type":"CONDITIONING","slot_index":0,"links":[4]}],"properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"CLIPTextEncode"},"widgets_values":[""]},{"id":7,"type":"CLIPTextEncode","pos":[940,-460],"size":[220,88],"flags":{"collapsed":true},"order":9,"mode":0,"inputs":[{"localized_name":"clip","name":"clip","type":"CLIP","link":45},{"localized_name":"text","name":"text","type":"STRING","widget":{"name":"text"},"link":98}],"outputs":[{"localized_name":"CONDITIONING","name":"CONDITIONING","type":"CONDITIONING","slot_index":0,"links":[6]}],"properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"CLIPTextEncode"},"widgets_values":[""]},{"id":8,"type":"VAEDecode","pos":[1700,-800],"size":[210,46],"flags":{"collapsed":true},"order":14,"mode":0,"inputs":[{"localized_name":"samples","name":"samples","type":"LATENT","link":7},{"localized_name":"vae","name":"vae","type":"VAE","link":20}],"outputs":[{"localized_name":"IMAGE","name":"IMAGE","type":"IMAGE","slot_index":0,"links":[9]}],"properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"VAEDecode"},"widgets_values":[]},{"id":3,"type":"KSampler","pos":[1320,-740],"size":[315,571],"flags":{},"order":12,"mode":0,"inputs":[{"localized_name":"model","name":"model","type":"MODEL","link":16},{"localized_name":"positive","name":"positive","type":"CONDITIONING","link":4},{"localized_name":"negative","name":"negative","type":"CONDITIONING","link":6},{"localized_name":"latent_image","name":"latent_image","type":"LATENT","link":2},{"localized_name":"seed","name":"seed","type":"INT","widget":{"name":"seed"},"link":24},{"localized_name":"steps","name":"steps","type":"INT","widget":{"name":"steps"},"link":null},{"localized_name":"cfg","name":"cfg","type":"FLOAT","widget":{"name":"cfg"},"link":null},{"localized_name":"sampler_name","name":"sampler_name","type":"COMBO","widget":{"name":"sampler_name"},"link":null},{"localized_name":"scheduler","name":"scheduler","type":"COMBO","widget":{"name":"scheduler"},"link":null},{"localized_name":"denoise","name":"denoise","type":"FLOAT","widget":{"name":"denoise"},"link":null}],"outputs":[{"localized_name":"LATENT","name":"LATENT","type":"LATENT","slot_index":0,"links":[7]}],"properties":{"cnr_id":"comfy-core","ver":"0.3.27","Node name for S&R":"KSampler"},"widgets_values":[982251382500348,"randomize",20,8,"euler","normal",1]},{"id":25,"type":"PrimitiveStringMultiline","pos":[-100,-320],"size":[400,100],"flags":{},"order":3,"mode":0,"inputs":[{"localized_name":"value","name":"value","type":"STRING","widget":{"name":"value"},"link":null}],"outputs":[{"localized_name":"STRING","name":"STRING","type":"STRING","links":[91]}],"title":"positive input","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PrimitiveStringMultiline"},"widgets_values":["score_9, score_8_up, score_7_up, score_6_up, woman with __color__ hair, __action__"]},{"id":26,"type":"PrimitiveStringMultiline","pos":[-100,-160],"size":[400,88],"flags":{},"order":4,"mode":0,"inputs":[{"localized_name":"value","name":"value","type":"STRING","widget":{"name":"value"},"link":null}],"outputs":[{"localized_name":"STRING","name":"STRING","type":"STRING","links":[92]}],"title":"negative input","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PrimitiveStringMultiline"},"widgets_values":["score_4, score_5"]},{"id":35,"type":"PreviewAny","pos":[940,-400],"size":[320,120],"flags":{},"order":8,"mode":0,"inputs":[{"localized_name":"source","name":"source","type":"*","link":97}],"outputs":[],"title":"positive result","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PreviewAny"},"widgets_values":[]},{"id":36,"type":"PreviewAny","pos":[940,-240],"size":[320,120],"flags":{},"order":10,"mode":0,"inputs":[{"localized_name":"source","name":"source","type":"*","link":99}],"outputs":[],"title":"negative result","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PreviewAny"},"widgets_values":[]},{"id":20,"type":"ACBPPPSelectVariable","pos":[900,-20],"size":[220,60],"flags":{},"order":11,"mode":0,"inputs":[{"localized_name":"variables","name":"variables","type":"PPP_DICT","link":100},{"localized_name":"name","name":"name","shape":7,"type":"STRING","widget":{"name":"name"},"link":null}],"outputs":[{"localized_name":"value","name":"value","type":"STRING","links":[87]}],"properties":{"cnr_id":"sd-webui-prompt-postprocessor","ver":"5e3c8cbc44bacd3b4da2ef33588f152a571775dd","Node name for S&R":"ACBPPPSelectVariable"},"widgets_values":[""]},{"id":37,"type":"PreviewAny","pos":[1180,-60],"size":[440,520],"flags":{},"order":13,"mode":0,"inputs":[{"localized_name":"source","name":"source","type":"*","link":87}],"outputs":[],"title":"variables result","properties":{"cnr_id":"comfy-core","ver":"0.3.34","Node name for S&R":"PreviewAny"},"widgets_values":[]},{"id":16,"type":"Checkpoint Loader with Name (Image Saver)","pos":[-200,-660],"size":[516.5999755859375,118],"flags":{},"order":5,"mode":0,"inputs":[{"localized_name":"ckpt_name","name":"ckpt_name","type":"COMBO","widget":{"name":"ckpt_name"},"link":null}],"outputs":[{"localized_name":"MODEL","name":"MODEL","type":"MODEL","links":[16,90]},{"localized_name":"CLIP","name":"CLIP","type":"CLIP","links":[19,45]},{"localized_name":"VAE","name":"VAE","type":"VAE","links":[20]},{"localized_name":"model_name","name":"model_name","type":"STRING","links":[93]}],"properties":{"cnr_id":"comfyui-image-saver","ver":"f8520bcfe5339ba7b4bb64ba96f6ed03da87fb89","Node name for S&R":"Checkpoint Loader with Name (Image Saver)"},"widgets_values":["PDXL\\ponyDiffusionV6XL_v6StartWithThisOne.safetensors"]},{"id":39,"type":"ACBPromptPostProcessor","pos":[420,-380],"size":[400,866],"flags":{},"order":6,"mode":0,"inputs":[{"localized_name":"model","name":"model","shape":7,"type":"MODEL,STRING","link":90},{"localized_name":"pos_prompt","name":"pos_prompt","type":"STRING","widget":{"name":"pos_prompt"},"link":91},{"localized_name":"neg_prompt","name":"neg_prompt","type":"STRING","widget":{"name":"neg_prompt"},"link":92},{"localized_name":"modelname","name":"modelname","shape":7,"type":"STRING","widget":{"name":"modelname"},"link":93},{"localized_name":"seed","name":"seed","shape":7,"type":"INT","widget":{"name":"seed"},"link":94},{"localized_name":"debug_level","name":"debug_level","shape":7,"type":"COMBO","widget":{"name":"debug_level"},"link":null},{"localized_name":"on_warnings","name":"on_warnings","shape":7,"type":"COMBO","widget":{"name":"on_warnings"},"link":null},{"localized_name":"variants_definitions","name":"variants_definitions","shape":7,"type":"STRING","widget":{"name":"variants_definitions"},"link":null},{"localized_name":"wc_process_wildcards","name":"wc_process_wildcards","shape":7,"type":"BOOLEAN","widget":{"name":"wc_process_wildcards"},"link":null},{"localized_name":"wc_wildcards_folders","name":"wc_wildcards_folders","shape":7,"type":"STRING","widget":{"name":"wc_wildcards_folders"},"link":null},{"localized_name":"wc_wildcards_input","name":"wc_wildcards_input","shape":7,"type":"STRING","widget":{"name":"wc_wildcards_input"},"link":95},{"localized_name":"wc_if_wildcards","name":"wc_if_wildcards","shape":7,"type":"COMBO","widget":{"name":"wc_if_wildcards"},"link":null},{"localized_name":"wc_choice_separator","name":"wc_choice_separator","shape":7,"type":"STRING","widget":{"name":"wc_choice_separator"},"link":null},{"localized_name":"wc_keep_choices_order","name":"wc_keep_choices_order","shape":7,"type":"BOOLEAN","widget":{"name":"wc_keep_choices_order"},"link":null},{"localized_name":"stn_separator","name":"stn_separator","shape":7,"type":"STRING","widget":{"name":"stn_separator"},"link":null},{"localized_name":"stn_ignore_repeats","name":"stn_ignore_repeats","shape":7,"type":"BOOLEAN","widget":{"name":"stn_ignore_repeats"},"link":null},{"localized_name":"cleanup_extra_spaces","name":"cleanup_extra_spaces","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_extra_spaces"},"link":null},{"localized_name":"cleanup_empty_constructs","name":"cleanup_empty_constructs","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_empty_constructs"},"link":null},{"localized_name":"cleanup_extra_separators","name":"cleanup_extra_separators","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_extra_separators"},"link":null},{"localized_name":"cleanup_extra_separators2","name":"cleanup_extra_separators2","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_extra_separators2"},"link":null},{"localized_name":"cleanup_extra_separators_include_eol","name":"cleanup_extra_separators_include_eol","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_extra_separators_include_eol"},"link":null},{"localized_name":"cleanup_breaks","name":"cleanup_breaks","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_breaks"},"link":null},{"localized_name":"cleanup_breaks_eol","name":"cleanup_breaks_eol","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_breaks_eol"},"link":null},{"localized_name":"cleanup_ands","name":"cleanup_ands","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_ands"},"link":null},{"localized_name":"cleanup_ands_eol","name":"cleanup_ands_eol","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_ands_eol"},"link":null},{"localized_name":"cleanup_extranetwork_tags","name":"cleanup_extranetwork_tags","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_extranetwork_tags"},"link":null},{"localized_name":"cleanup_merge_attention","name":"cleanup_merge_attention","shape":7,"type":"BOOLEAN","widget":{"name":"cleanup_merge_attention"},"link":null},{"localized_name":"remove_extranetwork_tags","name":"remove_extranetwork_tags","shape":7,"type":"BOOLEAN","widget":{"name":"remove_extranetwork_tags"},"link":null}],"outputs":[{"localized_name":"pos_prompt","name":"pos_prompt","type":"STRING","links":[96,97]},{"localized_name":"neg_prompt","name":"neg_prompt","type":"STRING","links":[98,99]},{"localized_name":"variables","name":"variables","type":"PPP_DICT","links":[100]}],"properties":{"cnr_id":"sd-webui-prompt-postprocessor","ver":"8f7957c4ae814cfb56515c9fc5adeea3cd75e630","Node name for S&R":"ACBPromptPostProcessor"},"widgets_values":["","","",1019,"randomize","minimal","stop","pony(sdxl)=pony,pny,pdxl\nillustrious(sdxl)=illustrious,illust,ilxl",true,"","true","stop",", ",true,", ",true,true,true,true,true,true,true,true,true,true,true,true,true]}],"links":[[2,5,0,3,3,"LATENT"],[4,6,0,3,1,"CONDITIONING"],[6,7,0,3,2,"CONDITIONING"],[7,3,0,8,0,"LATENT"],[9,8,0,9,0,"IMAGE"],[16,16,0,3,0,"MODEL"],[19,16,1,6,0,"CLIP"],[20,16,2,8,1,"VAE"],[24,17,0,3,4,"INT"],[45,16,1,7,0,"CLIP"],[87,20,0,37,0,"*"],[90,16,0,39,0,"MODEL,STRING"],[91,25,0,39,1,"STRING"],[92,26,0,39,2,"STRING"],[93,16,3,39,3,"STRING"],[94,17,0,39,4,"INT"],[95,27,0,39,10,"STRING"],[96,39,0,6,1,"STRING"],[97,39,0,35,0,"*"],[98,39,1,7,1,"STRING"],[99,39,1,36,0,"*"],[100,39,2,20,0,"PPP_DICT"]],"groups":[],"config":{},"extra":{"ds":{"scale":0.8580000000000002,"offset":[526.5913159217441,989.5715392146044]},"frontendVersion":"1.16.8","reroutes":[{"id":2,"pos":[1280,-820],"linkIds":[20]},{"id":3,"pos":[780,-500],"linkIds":[19,45]},{"id":4,"pos":[580,-720],"linkIds":[16]}],"VHS_latentpreview":true,"VHS_latentpreviewrate":0,"VHS_MetadataImage":true,"VHS_KeepIntermediate":true,"linkExtensions":[{"id":16,"parentId":4},{"id":19,"parentId":3},{"id":20,"parentId":2},{"id":45,"parentId":3}]},"version":0.4}
+{
+  "id": "0f75c56e-adb4-41f6-b957-81b6772cb8b5",
+  "revision": 0,
+  "last_node_id": 44,
+  "last_link_id": 116,
+  "nodes": [
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "pos": [
+        1880,
+        -820
+      ],
+      "size": [
+        210,
+        270
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 9
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27"
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [
+        940,
+        -460
+      ],
+      "size": [
+        220,
+        88
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 45
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 114
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [
+        1700,
+        -800
+      ],
+      "size": [
+        210,
+        46
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 3,
+      "type": "KSampler",
+      "pos": [
+        1320,
+        -740
+      ],
+      "size": [
+        315,
+        571
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 16
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 4
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 6
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 2
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        607033707847523,
+        "randomize",
+        20,
+        8,
+        "euler",
+        "normal",
+        1
+      ]
+    },
+    {
+      "id": 35,
+      "type": "PreviewAny",
+      "pos": [
+        940,
+        -400
+      ],
+      "size": [
+        320,
+        120
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 113
+        }
+      ],
+      "outputs": [],
+      "title": "positive result",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 36,
+      "type": "PreviewAny",
+      "pos": [
+        940,
+        -240
+      ],
+      "size": [
+        320,
+        120
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 115
+        }
+      ],
+      "outputs": [],
+      "title": "negative result",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 37,
+      "type": "PreviewAny",
+      "pos": [
+        1180,
+        -60
+      ],
+      "size": [
+        440,
+        520
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 87
+        }
+      ],
+      "outputs": [],
+      "title": "variables result",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 40,
+      "type": "ACBPPPWildcardOptions",
+      "pos": [
+        0,
+        -380
+      ],
+      "size": [
+        340,
+        240
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "options",
+          "type": "PPP_OPTIONS_WC",
+          "links": [
+            106
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "84d31ef07286983a329de9d31c106efc836205ff",
+        "Node name for S&R": "ACBPPPWildcardOptions"
+      },
+      "widgets_values": [
+        "",
+        "color:\n - red\n - blonde\n - brunette\naction:\n - running\n - sleeping",
+        "stop",
+        ", ",
+        true
+      ]
+    },
+    {
+      "id": 42,
+      "type": "ACBPPPSendToNegativeOptions",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        340,
+        82
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "options",
+          "type": "PPP_OPTIONS_STN",
+          "links": [
+            107
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "84d31ef07286983a329de9d31c106efc836205ff",
+        "Node name for S&R": "ACBPPPSendToNegativeOptions"
+      },
+      "widgets_values": [
+        ", ",
+        true
+      ]
+    },
+    {
+      "id": 41,
+      "type": "ACBPPPCleanupOptions",
+      "pos": [
+        0,
+        -80
+      ],
+      "size": [
+        340,
+        322
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "options",
+          "type": "PPP_OPTIONS_CUP",
+          "links": [
+            108
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "84d31ef07286983a329de9d31c106efc836205ff",
+        "Node name for S&R": "ACBPPPCleanupOptions"
+      },
+      "widgets_values": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ]
+    },
+    {
+      "id": 20,
+      "type": "ACBPPPSelectVariable",
+      "pos": [
+        860,
+        -20
+      ],
+      "size": [
+        220,
+        60
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "variables",
+          "type": "PPP_DICT",
+          "link": 116
+        }
+      ],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "STRING",
+          "links": [
+            87
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "5e3c8cbc44bacd3b4da2ef33588f152a571775dd",
+        "Node name for S&R": "ACBPPPSelectVariable"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [
+        940,
+        -520
+      ],
+      "size": [
+        240,
+        88
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 19
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 112
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 17,
+      "type": "PrimitiveInt",
+      "pos": [
+        20,
+        -560
+      ],
+      "size": [
+        315,
+        82
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            24,
+            111
+          ]
+        }
+      ],
+      "title": "Seed",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "PrimitiveInt"
+      },
+      "widgets_values": [
+        -323628412266755,
+        "randomize"
+      ]
+    },
+    {
+      "id": 43,
+      "type": "ACBPPPENMappingOptions",
+      "pos": [
+        0,
+        440
+      ],
+      "size": [
+        340,
+        112
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "options",
+          "type": "PPP_OPTIONS_EN",
+          "links": [
+            109
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "84d31ef07286983a329de9d31c106efc836205ff",
+        "Node name for S&R": "ACBPPPENMappingOptions"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 5,
+      "type": "EmptyLatentImage",
+      "pos": [
+        20,
+        -900
+      ],
+      "size": [
+        315,
+        106
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.27",
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 16,
+      "type": "Checkpoint Loader with Name (Image Saver)",
+      "pos": [
+        -220,
+        -740
+      ],
+      "size": [
+        560,
+        118
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            16,
+            105
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            19,
+            45
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            20
+          ]
+        },
+        {
+          "name": "model_name",
+          "type": "STRING",
+          "links": [
+            110
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-image-saver",
+        "ver": "f8520bcfe5339ba7b4bb64ba96f6ed03da87fb89",
+        "Node name for S&R": "Checkpoint Loader with Name (Image Saver)"
+      },
+      "widgets_values": [
+        "zz_Archived\\PDXL\\ponyDiffusionV6XL_v6StartWithThisOne.safetensors"
+      ]
+    },
+    {
+      "id": 44,
+      "type": "ACBPromptPostProcessor",
+      "pos": [
+        500,
+        -380
+      ],
+      "size": [
+        400,
+        510
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "shape": 7,
+          "type": "MODEL,STRING",
+          "link": 105
+        },
+        {
+          "name": "wc_options",
+          "shape": 7,
+          "type": "PPP_OPTIONS_WC",
+          "link": 106
+        },
+        {
+          "name": "stn_options",
+          "shape": 7,
+          "type": "PPP_OPTIONS_STN",
+          "link": 107
+        },
+        {
+          "name": "cup_options",
+          "shape": 7,
+          "type": "PPP_OPTIONS_CUP",
+          "link": 108
+        },
+        {
+          "name": "en_options",
+          "shape": 7,
+          "type": "PPP_OPTIONS_EN",
+          "link": 109
+        },
+        {
+          "name": "modelname",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "modelname"
+          },
+          "link": 110
+        },
+        {
+          "name": "seed",
+          "shape": 7,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 111
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pos_prompt",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            112,
+            113
+          ]
+        },
+        {
+          "name": "neg_prompt",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            114,
+            115
+          ]
+        },
+        {
+          "name": "variables",
+          "shape": 6,
+          "type": "PPP_DICT",
+          "links": [
+            116
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "sd-webui-prompt-postprocessor",
+        "ver": "2c34ec9cdf22365f623953bf764bcedaf506a3f9",
+        "Node name for S&R": "ACBPromptPostProcessor"
+      },
+      "widgets_values": [
+        "score_9, score_8_up, score_7_up, score_6_up, woman with __color__ hair, __action__",
+        "score_4, score_5",
+        "",
+        -1,
+        "randomize",
+        "minimal",
+        "stop",
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        100
+      ]
+    }
+  ],
+  "links": [
+    [
+      2,
+      5,
+      0,
+      3,
+      3,
+      "LATENT"
+    ],
+    [
+      4,
+      6,
+      0,
+      3,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      6,
+      7,
+      0,
+      3,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      7,
+      3,
+      0,
+      8,
+      0,
+      "LATENT"
+    ],
+    [
+      9,
+      8,
+      0,
+      9,
+      0,
+      "IMAGE"
+    ],
+    [
+      16,
+      16,
+      0,
+      3,
+      0,
+      "MODEL"
+    ],
+    [
+      19,
+      16,
+      1,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      20,
+      16,
+      2,
+      8,
+      1,
+      "VAE"
+    ],
+    [
+      24,
+      17,
+      0,
+      3,
+      4,
+      "INT"
+    ],
+    [
+      45,
+      16,
+      1,
+      7,
+      0,
+      "CLIP"
+    ],
+    [
+      87,
+      20,
+      0,
+      37,
+      0,
+      "*"
+    ],
+    [
+      105,
+      16,
+      0,
+      44,
+      0,
+      "MODEL"
+    ],
+    [
+      106,
+      40,
+      0,
+      44,
+      1,
+      "PPP_OPTIONS_WC"
+    ],
+    [
+      107,
+      42,
+      0,
+      44,
+      2,
+      "PPP_OPTIONS_STN"
+    ],
+    [
+      108,
+      41,
+      0,
+      44,
+      3,
+      "PPP_OPTIONS_CUP"
+    ],
+    [
+      109,
+      43,
+      0,
+      44,
+      4,
+      "PPP_OPTIONS_EN"
+    ],
+    [
+      110,
+      16,
+      3,
+      44,
+      5,
+      "STRING"
+    ],
+    [
+      111,
+      17,
+      0,
+      44,
+      6,
+      "INT"
+    ],
+    [
+      112,
+      44,
+      0,
+      6,
+      1,
+      "STRING"
+    ],
+    [
+      113,
+      44,
+      0,
+      35,
+      0,
+      "STRING"
+    ],
+    [
+      114,
+      44,
+      1,
+      7,
+      1,
+      "STRING"
+    ],
+    [
+      115,
+      44,
+      1,
+      36,
+      0,
+      "STRING"
+    ],
+    [
+      116,
+      44,
+      2,
+      20,
+      0,
+      "PPP_DICT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8580000000000002,
+      "offset": [
+        503.3154432844885,
+        1065.5795532391492
+      ]
+    },
+    "frontendVersion": "1.39.19",
+    "VHS_latentpreview": true,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true,
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
+}

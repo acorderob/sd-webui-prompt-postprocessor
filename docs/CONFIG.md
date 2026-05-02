@@ -10,6 +10,10 @@ This file contains some options for how the host applications (WebUIs) should ac
 
 The model variants now support regular expressions instead of a list of strings to detect the variant. If you used a non default value in previous versions you should create a configuration file and add them with the new format. As before, the default file defines variants for *Pony* and *Illustrious* models.
 
+## Notes
+
+Beware of the combinatorial mode with no limits. Very few choice/wildcard constructs can cause a combinatorial explosion!
+
 ## ComfyUI
 
 ### ACB Prompt Post Processor node
@@ -30,6 +34,7 @@ Inputs:
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
 * **do_combinatorial**: Activates combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
+* **combinatorial_shuffle**: It shuffles the combinatorial results.
 * **combinatorial_limit**: Limit for the number of generated combinations.
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
@@ -132,7 +137,8 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Prompt seed**: The seed to use for the prompt generation. If -1 a random one will be used.
 * **Incremental seed**: When using a batch you can use this to set the rest of the prompt seeds with consecutive values.
 * **Combinatorial mode**: Generate all possible prompt combinations (from choices and wildcards) and cycle through them to fill the batch.
-* **Combinations limit**: Maximum number of combinations to generate (0 = no limit). When generating a batch the limit is automatically raised to at least the batch size.
+* **Shuffle combinations**: It shuffles the combinatorial results.
+* **Combinations limit**: Maximum number of combinations to generate (0 = no limit). The actual maximum limit is the number of images (batch size * count).
 
 ### General settings
 
