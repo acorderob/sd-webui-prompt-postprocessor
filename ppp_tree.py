@@ -155,7 +155,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             ev = self.state.variables.get_echoed_value(k)
             if ev is None:
                 ev = self.state.variables.get_user(k)
-            if ev is None or ev.__class__ != str: # strict check to avoid problems with Tokens
+            if ev is None or ev.__class__ != str:  # strict check to avoid problems with Tokens
                 self.log(logging.DEBUG, f"Completing variable: {k}")
                 ev = self.get_final_variable(k)
                 self.state.variables.echo(k, ev)  # ensure all variables are echoed so they are included in the snapshot
@@ -1354,25 +1354,25 @@ class TreeProcessor(lark.visitors.Interpreter):
                             enmapping = self.state.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
                             if enmapping:
                                 for v in enmapping.variants:
-                                    if v.condition:
+                                    if str(v.condition):
                                         try:
                                             cnd = parse_prompt(
                                                 self.state,
                                                 "condition",
-                                                v.condition,
+                                                str(v.condition),
                                                 self.state.parsers["condition"],
                                                 True,
                                             )
                                         except lark.exceptions.UnexpectedInput as e:
                                             self.warn_or_stop(
-                                                f"Error parsing condition '{escape_single_quotes(v.condition)}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
+                                                f"Error parsing condition '{escape_single_quotes(str(v.condition))}' in extranetwork mapping '{escape_single_quotes(extnet_id)}'! : {e.__class__.__name__}",
                                                 e,
                                             )
                                             cnd = None
                                     else:
                                         cnd = "True"
                                     if cnd is not None and (cnd == "True" or self.__eval_condition(cnd)):
-                                        if v.condition:
+                                        if str(v.condition):
                                             found_mappings.append(v)
                                         else:
                                             else_mapping = v
@@ -1387,6 +1387,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                                     else 0
                                 )
                                 found = found_mappings[chosen_idx]
+                            elif len(found_mappings) == 1:
+                                found = found_mappings[0]
                             else:
                                 found = found_mappings[
                                     self.__rng.choice(
@@ -1396,7 +1398,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                                 ]
                         else:
                             found = else_mapping
-                        self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
+                        if len(found_mappings) < 2:
+                            self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                     if found:
                         if found.name:
                             if not found_in_cache:

@@ -426,7 +426,7 @@ class TestWildcards(TestPromptPostProcessorBase):
     # Combinatorial
 
     def test_wc_combinatorial_1(self):  # combinatorial wildcard with variable
-        self.process_combinatorial(
+        self.process(
             PromptPair("the choices are: __2$$yaml/wildcard2__, ${v:{option1|option2}}", ""),
             [  # 12 combinations
                 OutputTuple("the choices are: choice1, choice2, option1", "", {"v": "option1"}),
@@ -442,10 +442,11 @@ class TestWildcards(TestPromptPostProcessorBase):
                 OutputTuple("the choices are: choice3, choice2, option1", "", {"v": "option1"}),
                 OutputTuple("the choices are: choice3, choice2, option2", "", {"v": "option2"}),
             ],
+            combinatorial=True,
         )
 
     def test_wc_combinatorial_2(self):  # combinatorial wildcard
-        self.process_combinatorial(
+        self.process(
             PromptPair("__yaml/wildcard2__", ""),
             [  # 36 combinations
                 # groups of 3
@@ -495,10 +496,11 @@ class TestWildcards(TestPromptPostProcessorBase):
                 OutputTuple("choice3-choice1", ""),
             ],
             ppp="nocup",
+            combinatorial=True,
         )
 
     def test_wc_combinatorial_3(self):  # combinatorial wildcard (keep choice order)
-        self.process_combinatorial(
+        self.process(
             PromptPair("__2-3$$-$$yaml/wildcard2__", ""),
             [  # 4 combinations
                 # groups of 3
@@ -519,6 +521,7 @@ class TestWildcards(TestPromptPostProcessorBase):
                     self.defopts,
                     keep_choices_order=True,
                     cup_do_cleanup=False,
+                    do_combinatorial=True,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -528,7 +531,7 @@ class TestWildcards(TestPromptPostProcessorBase):
         )
 
     def test_wc_combinatorial_4(self):  # combinatorial wildcard (don't keep choice order)
-        self.process_combinatorial(
+        self.process(
             PromptPair("__2-3$$-$$yaml/wildcard2__", ""),
             [  # 12 combinations
                 # groups of 3
@@ -551,4 +554,28 @@ class TestWildcards(TestPromptPostProcessorBase):
                 OutputTuple("choice3-choice1", ""),
             ],
             ppp="nocup",
+            combinatorial=True,
+        )
+
+    def test_wc_combinatorial_5(self):  # combinatorial nested wildcards and multiselection enmappings
+        self.process(
+            PromptPair("{__yaml/wildcard1__|__yaml/wildcard3__|<ppp:ext $lora loraany/>}", ""),
+            [  # 11 combinations
+                # first wildcard
+                OutputTuple("choice1", ""),
+                OutputTuple("choice2", ""),
+                OutputTuple("choice3", ""),
+                # second wildcard (nested)
+                OutputTuple("choice1, choice2 ", ""),
+                OutputTuple(" choice2 ,choice1", ""),
+                OutputTuple("choice1,choice3", ""),
+                OutputTuple("choice3,choice1", ""),
+                OutputTuple(" choice2 ,choice3", ""),
+                OutputTuple("choice3, choice2 ", ""),
+                # ppp:ext
+                OutputTuple("<lora:loraany1:0.8> trigger1, trigger2, ", ""),
+                OutputTuple("<lora:loraany2:1> trigger3, trigger4, ", ""),
+            ],
+            ppp="nocup",
+            combinatorial=True,
         )

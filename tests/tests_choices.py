@@ -105,7 +105,7 @@ class TestChoices(TestPromptPostProcessorBase):
     # Combinatorial
 
     def test_ch_combinatorial(self):
-        self.process_combinatorial(
+        self.process(
             PromptPair("{choice1|choice2|choice3}, ${v:{option1|option2}}", ""),
             [
                 OutputTuple("choice1, option1", ""),
@@ -115,4 +115,5 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("choice3, option1", ""),
                 OutputTuple("choice3, option2", "", {"v": "option2"}),
             ],
+            combinatorial=True,
         )

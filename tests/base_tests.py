@@ -73,6 +73,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             cup_extranetwork_tags=True,
             cup_merge_attention=True,
             cup_remove_extranetwork_tags=False,
+            do_combinatorial=False,
+            combinatorial_limit=0,
         )
         self.def_env_info = {
             "app": "tests",
@@ -112,7 +114,9 @@ class TestPromptPostProcessorBase(unittest.TestCase):
     def interrupt(self):
         self.interrupted = True
 
-    def init_obj(self, ppp: Optional[str | PromptPostProcessor] = None) -> PromptPostProcessor:
+    def init_obj(
+        self, ppp: Optional[str | PromptPostProcessor] = None, combinatorial: bool = False
+    ) -> PromptPostProcessor:
         if isinstance(ppp, str):
             if ppp == "nocup":
                 the_obj = PromptPostProcessor(
@@ -133,6 +137,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         cup_ands_eol=False,
                         cup_extranetwork_tags=False,
                         cup_merge_attention=False,
+                        do_combinatorial=combinatorial,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -146,6 +151,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     replace(
                         self.defopts,
                         strict_operators=False,
+                        do_combinatorial=combinatorial,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -158,7 +164,10 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             the_obj = PromptPostProcessor(
                 self.ppp_logger,
                 self.def_env_info,
-                self.defopts,
+                replace(
+                    self.defopts,
+                    do_combinatorial=combinatorial,
+                ),
                 self.grammar_content,
                 self.interrupt,
                 self.wildcards_obj,
@@ -173,6 +182,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         seed: int = 1,
         ppp: Optional[str | PromptPostProcessor] = None,
         interrupted: bool = False,
+        combinatorial: bool = False,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
@@ -183,95 +193,39 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             seed (int, optional): The seed value. Defaults to 1.
             ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
             interrupted (bool, optional): The interrupted flag. Defaults to False.
+            combinatorial (bool, optional): The combinatorial flag. Defaults to False.
 
         Returns:
             None
         """
-        the_obj = self.init_obj(ppp)
+        the_obj: PromptPostProcessor = self.init_obj(ppp, combinatorial)
         out = (
             [OutputTuple("", "", None)]
             if expected_output is None
             else expected_output if isinstance(expected_output, list) else [expected_output]
         )
-        for eo in out:
+        if the_obj.state.options.do_combinatorial:
+            # combinatorial
+            errors = []
             result = the_obj.process_prompt(
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
             )
-            self.assertEqual(self.interrupted, interrupted, "Interrupted flag is incorrect")
-            if not self.interrupted:
-                result_prompt, result_negative_prompt, output_variables = result[0]
-                if expected_output is not None:
-                    self.assertTrue(
-                        result_prompt == eo.prompt and result_negative_prompt == eo.negative_prompt,
-                        f"Incorrect result '{eo.prompt}' / '{eo.negative_prompt}', got '{result_prompt}' / '{result_negative_prompt}'",
-                    )
-                    if eo.variables:
-                        unmatched_vars = {}
-                        expected_values = {}
-                        for var_name, var_value in eo.variables.items():
-                            if var_name not in output_variables or output_variables[var_name] != var_value:
-                                unmatched_vars[var_name] = (
-                                    output_variables[var_name] if var_name in output_variables else None
-                                )
-                                expected_values[var_name] = var_value
-                        self.assertTrue(
-                            not unmatched_vars,
-                            f"Result '{eo.prompt}' / '{eo.negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}",
-                        )
-            seed += 1
-
-    def process_combinatorial(
-        self,
-        input_prompts: PromptPair,
-        expected_output: Optional[OutputTuple | list[OutputTuple]] = None,
-        seed: int = 1,
-        ppp: Optional[str | PromptPostProcessor] = None,
-        interrupted: bool = False,
-    ):
-        """
-        Process the prompt and compare the results with the expected prompts.
-
-        Args:
-            input_prompts (PromptPair): The input prompts.
-            expected_output (OutputTuple | list[OutputTuple], optional): The expected output.
-            seed (int, optional): The seed value. Defaults to 1.
-            ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
-            interrupted (bool, optional): The interrupted flag. Defaults to False.
-
-        Returns:
-            None
-        """
-        the_obj = self.init_obj(ppp)
-        out = (
-            [OutputTuple("", "", None)]
-            if expected_output is None
-            else expected_output if isinstance(expected_output, list) else [expected_output]
-        )
-        result = the_obj.process_prompt(
-            input_prompts.prompt,
-            input_prompts.negative_prompt,
-            seed,
-            combinatorial=True,
-        )
-        self.assertEqual(self.interrupted, interrupted, "Interrupted flag is incorrect")
-        if not self.interrupted:
-            if expected_output is not None:
-                self.assertEqual(
-                    len(result), len(out), f"Incorrect number of combinations (expected {len(out)}, got {len (result)})"
-                )
+            if self.interrupted != interrupted:
+                errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
+            elif expected_output is not None:
+                if len(result) != len(out):
+                    errors.append(f"Incorrect number of combinations (expected {len(out)}, got {len(result)})")
                 for out_prompt, out_negative_prompt, out_variables in out:
                     found = None
                     for r_prompt, r_negative_prompt, r_variables in result:
                         if r_prompt == out_prompt and r_negative_prompt == out_negative_prompt:
                             found = OutputTuple(r_prompt, r_negative_prompt, r_variables)
                             break
-                    self.assertTrue(
-                        bool(found),
-                        f"Combination '{out_prompt}' / '{out_negative_prompt}' not found in output",
-                    )
-                    if found and out_variables:
+                    if not found:
+                        errors.append(f"Combination '{out_prompt}' / '{out_negative_prompt}' not found in output")
+                    elif out_variables:
                         unmatched_vars = {}
                         expected_values = {}
                         for var_name, var_value in out_variables.items():
@@ -280,7 +234,46 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                                     found.variables[var_name] if var_name in found.variables else None
                                 )
                                 expected_values[var_name] = var_value
-                        self.assertTrue(
-                            not unmatched_vars,
-                            f"Combination '{out_prompt}' / '{out_negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}",
+                        if unmatched_vars:
+                            errors.append(
+                                f"Combination '{out_prompt}' / '{out_negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}"
+                            )
+            self.assertFalse(
+                bool(errors),
+                "\n" + "\n".join(errors),
+            )
+            return
+        # non-combinatorial
+        errors = []
+        for eo in out:
+            result = the_obj.process_prompt(
+                input_prompts.prompt,
+                input_prompts.negative_prompt,
+                seed,
+            )
+            if self.interrupted != interrupted:
+                errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
+            elif expected_output is not None:
+                result_prompt, result_negative_prompt, output_variables = result[0]
+                if result_prompt != eo.prompt or result_negative_prompt != eo.negative_prompt:
+                    errors.append(
+                        f"Incorrect result '{eo.prompt}' / '{eo.negative_prompt}', got '{result_prompt}' / '{result_negative_prompt}'"
+                    )
+                if eo.variables:
+                    unmatched_vars = {}
+                    expected_values = {}
+                    for var_name, var_value in eo.variables.items():
+                        if var_name not in output_variables or output_variables[var_name] != var_value:
+                            unmatched_vars[var_name] = (
+                                output_variables[var_name] if var_name in output_variables else None
+                            )
+                            expected_values[var_name] = var_value
+                    if unmatched_vars:
+                        errors.append(
+                            f"Result '{eo.prompt}' / '{eo.negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}"
                         )
+            seed += 1
+        self.assertFalse(
+            bool(errors),
+            "\n" + "\n".join(errors),
+        )

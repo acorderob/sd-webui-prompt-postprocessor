@@ -9,3 +9,12 @@ lora:
       parameters: "0.9:0.8"
       triggers: ["triggerillustrious1", "triggerillustrious2"]
     - triggers: ["triggergeneric1", "triggergeneric2", "{one|two}"]
+  loraany:
+    - condition: true
+      name: loraany1
+      parameters: 0.8
+      triggers: ["trigger1", "trigger2"]
+    - condition: true
+      name: loraany2
+      parameters: 1.0
+      triggers: ["trigger3", "trigger4"]
