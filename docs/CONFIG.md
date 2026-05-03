@@ -10,9 +10,11 @@ This file contains some options for how the host applications (WebUIs) should ac
 
 The model variants now support regular expressions instead of a list of strings to detect the variant. If you used a non default value in previous versions you should create a configuration file and add them with the new format. As before, the default file defines variants for *Pony* and *Illustrious* models.
 
-## Notes
+## Important
 
-Beware of the combinatorial mode with no limits. Very few choice/wildcard constructs can cause a combinatorial explosion!
+**Beware of the combinatorial mode with no limits**. Even very few choice/wildcard constructs can cause a *combinatorial explosion*!
+
+The console log can help you determine the number of combinations that it is trying to generate. There will be an **"Estimated combinations"** message that shows an estimate. You can try first with a limit of 1, then check this message in the log. But note that it is a lower bound estimate, and there could be more combinations.
 
 ## ComfyUI
 

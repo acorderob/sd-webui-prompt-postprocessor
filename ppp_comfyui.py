@@ -412,7 +412,9 @@ class PromptPostProcessorComfyUINode:
                 self.wildcards_obj,
                 self.extranetwork_mappings_obj,
             )
+        self.ppp.process_prompts_group_start()
         results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
+        self.ppp.process_prompts_group_end()
 
         # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs", "last_prompts_comfyui.txt"), "w", encoding="utf-8") as f:
         #     f.write(f"Seed: {seed if seed is not None else 1}\n")

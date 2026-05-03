@@ -1,4 +1,5 @@
 from collections import namedtuple
+from functools import reduce
 from itertools import combinations, combinations_with_replacement, permutations, product
 import logging
 import math
@@ -129,6 +130,10 @@ class TreeProcessor(lark.visitors.Interpreter):
             results.append(
                 (self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user_and_echoed())
             )
+            if len(results) == 1:
+                first_run_estimate = reduce(lambda x, y: x * y, self.__comb_trace, 1)
+                self.log(logging.INFO, f"Estimated combinations (lower bound): {first_run_estimate}")
+            self.log(logging.INFO, f"Added combination {len(results)}")
             return tuple(self.__comb_trace)
 
         limit_reached = False
@@ -1425,29 +1430,29 @@ class TreeProcessor(lark.visitors.Interpreter):
                                             found_mappings.append(v)
                                         else:
                                             else_mapping = v
-                        if found_mappings:
+                        num_mappings = len(found_mappings)
+                        if num_mappings > 0:
                             if self.state.options.do_combinatorial:
-                                N = len(found_mappings)
                                 decision_idx = len(self.__comb_trace)
-                                self.__comb_trace.append(N)
+                                self.__comb_trace.append(num_mappings)
                                 chosen_idx = (
-                                    min(self.__comb_forced_path[decision_idx], N - 1)
+                                    min(self.__comb_forced_path[decision_idx], num_mappings - 1)
                                     if decision_idx < len(self.__comb_forced_path)
                                     else 0
                                 )
                                 found = found_mappings[chosen_idx]
-                            elif len(found_mappings) == 1:
+                            elif num_mappings == 1:
                                 found = found_mappings[0]
                             else:
                                 found = found_mappings[
                                     self.__rng.choice(
-                                        len(found_mappings),
+                                        num_mappings,
                                         p=[v.weight or 1 for v in found_mappings],
                                     )
                                 ]
                         else:
                             found = else_mapping
-                        if len(found_mappings) < 2:
+                        if num_mappings < 2:
                             self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                     if found:
                         if found.name:

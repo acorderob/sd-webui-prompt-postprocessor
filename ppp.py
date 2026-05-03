@@ -869,16 +869,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if rem_wildcards:
                 w_found_p = [wc for wc, n in rem_wildcards if not n]
                 w_found_n = [wc for wc, n in rem_wildcards if n]
-                if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
-                    self.log(logging.ERROR, "Found unprocessed wildcards!")
-                else:
-                    self.log(logging.INFO, "Found unprocessed wildcards.")
                 ppwl = ", ".join(w_found_p)
                 npwl = ", ".join(w_found_n)
                 if ppwl:
-                    self.log(logging.ERROR, f"In the prompt: {ppwl}")
+                    self.log(logging.WARN, f"Unprocessed wildcards in the prompt: {ppwl}")
                 if npwl:
-                    self.log(logging.ERROR, f"In the negative prompt: {npwl}")
+                    self.log(logging.WARN, f"Unprocessed wildcards in the negative prompt: {npwl}")
                 if self.state.options.if_wildcards == IFWILDCARDS_CHOICES.warn:
                     prompt = self.WILDCARD_WARNING + prompt
                 elif self.state.options.if_wildcards == IFWILDCARDS_CHOICES.stop:
@@ -929,6 +925,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         # Parse both prompts
         processor = TreeProcessor(self.state, rng)
+        # We use the ASCII Group Separator character between prompt and negative prompt since it's unlikely to appear in prompts
         unified_prompt = prompt + "\x1d" + negative_prompt
         prompt_parser, parser_description = self.__get_best_parser(unified_prompt)
         self.log(logging.DEBUG, f"Using {parser_description} for prompt")
@@ -967,6 +964,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.log(logging.INFO, "Combinations shuffled")
         return final_results
 
+    def process_prompts_group_start(self):
+        """Start of a prompt processing group."""
+        self.log(logging.INFO, f"System variables: {self.state.variables.get_all_system()}")
+        self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
+
     def process_prompt(
         self,
         original_prompt: str,
@@ -989,11 +991,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 seed = np.random.randint(0, 2**32, dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
-            self.log(logging.INFO, f"System variables: {self.state.variables.get_all_system()}")
             self.log(logging.INFO, f"Input seed: {seed}")
             self.log(logging.INFO, f"Input prompt: {prompt}")
             self.log(logging.INFO, f"Input negative_prompt: {negative_prompt}")
-            self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
             t1 = time.monotonic_ns()
             if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
                 self.state.cyclical_state.reset()
@@ -1015,3 +1015,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         except Exception:  # pylint: disable=broad-exception-caught
             self.log(logging.ERROR, "Unexpected error", exc_info=True)
             return [(original_prompt, original_negative_prompt, {})]
+
+    def process_prompts_group_end(self):
+        """End of a prompt processing group."""

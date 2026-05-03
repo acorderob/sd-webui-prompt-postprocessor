@@ -159,7 +159,15 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     min_width=120,
                     elem_id="ppp_combinatorial_limit",
                 )
-        return [force_equal_seeds, unlink_seed, seed, incremental_seed, combinatorial, combinatorial_shuffle, combinatorial_limit]
+        return [
+            force_equal_seeds,
+            unlink_seed,
+            seed,
+            incremental_seed,
+            combinatorial,
+            combinatorial_shuffle,
+            combinatorial_limit,
+        ]
 
     def process(
         self,
@@ -386,6 +394,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if hiresfix_exists:
                 prompts_list[(hiresfix_type, i)] = None
 
+        ppp.process_prompts_group_start()
         if input_combinatorial:
             seed_for_comb = calculated_seeds[0] if calculated_seeds else 0
             regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
@@ -399,7 +408,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 for i in range(len(rpr)):  # pylint: disable=consider-using-enumerate
                     posp, negp, _ = comb_results[i % num_comb]
                     prompts_list[(regular_type, i)] = (posp, negp)
-                extra_params["PPP combination"] = [1 + (i % num_comb) for i in range(len(rpr))]
+                extra_params["PPP combination"] = [str(1 + (i % num_comb)) for i in range(len(rpr))]
             if hiresfix_exists:
                 hiresfix_equal = regular_exists and rph == rpr and rnh == rnr
                 if hiresfix_equal:
@@ -423,7 +432,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
                         posp, negp, _ = comb_results_hr[i % num_comb_hr]
                         prompts_list[(hiresfix_type, i)] = (posp, negp)
-                    extra_params["PPP HR combination"] = [1 + (i % num_comb_hr) for i in range(len(rph))]
+                    extra_params["PPP HR combination"] = [str(1 + (i % num_comb_hr)) for i in range(len(rph))]
         else:
             # processes prompts
             for prompttype, typeindex in prompts_list.keys():
@@ -450,6 +459,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 else:
                     log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
                 prompts_list[(prompttype, typeindex)] = cached
+        ppp.process_prompts_group_end()
 
         # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "logs", f"last_prompts_{app.value}.txt"), "w", encoding="utf-8") as f:
         #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():

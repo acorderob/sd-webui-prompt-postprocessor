@@ -48,13 +48,12 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.ppp_logger = self.lf.log
         self.ppp_logger.setLevel(logging.DEBUG)
         self.grammar_content = None
-        self.interrupted = False
         self.defopts = PPPStateOptions(
             debug_level=DEBUG_LEVEL.full,
             on_warning=ONWARNING_CHOICES.stop,
             strict_operators=True,
             process_wildcards=True,
-            if_wildcards=IFWILDCARDS_CHOICES.ignore,
+            if_wildcards=IFWILDCARDS_CHOICES.stop,
             choice_separator=", ",
             keep_choices_order=False,
             stn_separator=", ",
@@ -75,6 +74,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             cup_remove_extranetwork_tags=False,
             do_combinatorial=False,
             combinatorial_limit=0,
+            combinatorial_shuffle=False,
         )
         self.def_env_info = {
             "app": "tests",
@@ -115,7 +115,10 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.interrupted = True
 
     def init_obj(
-        self, ppp: Optional[str | PromptPostProcessor] = None, combinatorial: bool = False
+        self,
+        ppp: Optional[str | PromptPostProcessor] = None,
+        combinatorial: bool = False,
+        combinatorial_limit: int = 0,
     ) -> PromptPostProcessor:
         if isinstance(ppp, str):
             if ppp == "nocup":
@@ -138,6 +141,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         cup_extranetwork_tags=False,
                         cup_merge_attention=False,
                         do_combinatorial=combinatorial,
+                        combinatorial_limit=combinatorial_limit,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -152,6 +156,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         self.defopts,
                         strict_operators=False,
                         do_combinatorial=combinatorial,
+                        combinatorial_limit=combinatorial_limit,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -167,6 +172,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 replace(
                     self.defopts,
                     do_combinatorial=combinatorial,
+                    combinatorial_limit=combinatorial_limit,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -183,6 +189,9 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         ppp: Optional[str | PromptPostProcessor] = None,
         interrupted: bool = False,
         combinatorial: bool = False,
+        combinatorial_limit: int = 0,
+        specific_wc_folders: Optional[list[str]] = None,
+        specific_em_folders: Optional[list[str]] = None,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
@@ -194,11 +203,24 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
             interrupted (bool, optional): The interrupted flag. Defaults to False.
             combinatorial (bool, optional): The combinatorial flag. Defaults to False.
+            combinatorial_limit (int, optional): The combinatorial limit. Defaults to 0.
+            specific_wc_folders (Optional[list[str]], optional): A list of specific wildcard folders to refresh. Defaults to None.
+            specific_em_folders (Optional[list[str]], optional): A list of specific extranetwork mapping folders to refresh. Defaults to None.
 
         Returns:
             None
         """
-        the_obj: PromptPostProcessor = self.init_obj(ppp, combinatorial)
+        if specific_wc_folders is not None:
+            self.wildcards_obj.refresh_wildcards(
+                DEBUG_LEVEL.full,
+                specific_wc_folders,
+            )
+        if specific_em_folders is not None:
+            self.extranetwork_maps_obj.refresh_extranetwork_mappings(
+                DEBUG_LEVEL.full,
+                specific_em_folders,
+            )
+        the_obj: PromptPostProcessor = self.init_obj(ppp, combinatorial, combinatorial_limit)
         out = (
             [OutputTuple("", "", None)]
             if expected_output is None
@@ -207,11 +229,13 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         if the_obj.state.options.do_combinatorial:
             # combinatorial
             errors = []
+            the_obj.process_prompts_group_start()
             result = the_obj.process_prompt(
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
             )
+            the_obj.process_prompts_group_end()
             if self.interrupted != interrupted:
                 errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
             elif not self.interrupted and expected_output is not None:
@@ -245,6 +269,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             return
         # non-combinatorial
         errors = []
+        the_obj.process_prompts_group_start()
         for eo in out:
             result = the_obj.process_prompt(
                 input_prompts.prompt,
@@ -254,7 +279,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             if self.interrupted != interrupted:
                 errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
             elif not self.interrupted and expected_output is not None:
-                result_prompt, result_negative_prompt, output_variables = (result[0] if result else (None, None, None))
+                result_prompt, result_negative_prompt, output_variables = result[0] if result else (None, None, None)
                 if result_prompt != eo.prompt or result_negative_prompt != eo.negative_prompt:
                     errors.append(
                         f"Incorrect result '{eo.prompt}' / '{eo.negative_prompt}', got '{result_prompt}' / '{result_negative_prompt}'"
@@ -273,6 +298,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                             f"Result '{eo.prompt}' / '{eo.negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}"
                         )
             seed += 1
+        the_obj.process_prompts_group_end()
         self.assertFalse(
             bool(errors),
             "\n" + "\n".join(errors),

@@ -125,6 +125,7 @@ class TestWildcards(TestPromptPostProcessorBase):
             InputTuple("the choices are: ___invalid__", ""),
             OutputTuple("the choices are: ___invalid__", ""),
             ppp="nocup",
+            interrupted=True,
         )
 
     def test_wc_wildcard1a_text(self):  # simple text wildcard
