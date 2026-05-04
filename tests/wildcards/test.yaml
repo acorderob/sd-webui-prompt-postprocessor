@@ -64,6 +64,15 @@ yaml:
     - { text: choice1 }
     - { text: choice2 }
     - { text: choice3 }
+  
+  wildcardContainer:
+    - {
+        count: 2,
+        container: "(prefix{1|2}-${_choices[&'/']}-suffix:1.5)",
+      }
+    - { weight: 3, text: choice1 }
+    - { weight: 2, text: choice2 }
+    - { weight: 1, text: choice3 }
 
   more_nested:
     even_more_nested: # this would be __yaml/more_nested/even_more_nested__

@@ -389,6 +389,12 @@ class TestWildcards(TestPromptPostProcessorBase):
             OutputTuple("the choices are: [(prefix2-choice2-suffix:1.5)]", ""),
         )
 
+    def test_wc_wildcardContainer_yaml(self):  # yaml wildcard with object formatted choices and options and container
+        self.process(
+            InputTuple("the choices are: [__yaml/wildcardContainer__]", ""),
+            OutputTuple("the choices are: [(prefix1-choice2/choice3-suffix:1.5)]", ""),
+        )
+
     def test_wc_wildcardAt_yaml(self):  # yaml wildcard with attention in choices
         self.process(
             InputTuple("the choices are: [__yaml/wildcardAt__]", ""),

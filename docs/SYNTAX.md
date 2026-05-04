@@ -134,22 +134,35 @@ The best format is a yaml file with a dictionary of wildcards inside. An editor 
 
 In a choice, the content after a `#`  is ignored.
 
-If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder).
+If the first choice follows the format of wildcard parameters (*including the final `$$`*), it will be used as default parameters for that wildcard (see examples in the tests folder). Unless the only property used is the wildcard description.
 
-The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files). If using the object format for a choice you can use a new `if` property for the condition, and the `labels` property (an array of strings) and `command` property (a boolean) in addition to the standard `weight` and `text`/`content`.
+The choices of the wildcard follow the same format as in the choices construct, or the object format of *Dynamic Prompts* (only in structured files).
+
+If using the object format for a choice you can use the following in addition to the standard `weight` and `text`/`content`:
+
+* `if`: the condition (a string)
+* `labels`: list of labels (an array of strings)
+* `command`: indicates the content is a command (a boolean)
 
 ```yaml
 { command: false, labels: ["some_label"], weight: 2, if: "_is_pony", content: "the text" } # "text" property can be used instead of "content"
 ```
 
-Wildcard parameters in a json/yaml file can also be in object format, and support two additional properties, prefix and suffix:
+Wildcard parameters in a json/yaml file can also be in object format, and support some additional properties, that are not included in the string format:
+
+* `prefix`: content to prefix the list of choices
+* `suffix`: content to suffix the list of choices
+* `container`: includes the prefix, choices array variable, and suffix
 
 ```yaml
+{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", container: "prefix-${_choices[&'/']}-suffix" }
 { sampler: "~", repeating: false, optional: false, count: 2, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
 { sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
 ```
 
 The prefix and suffix are added to the result along with the selected choices and separators. They can contain other constructs, but the separator can't.
+
+The container is a new option that replaces prefix/suffix/separator, and makes use of the recent support for array variables. Its value would be the concatenation of any prefix and/or suffix with the echoing (with the chosen separator) of a temporary `_choices[]` variable that holds the chosen values. This property is preferred over prefix/suffix/separator unless you only need the separator.
 
 It is recommended to use the object format for the wildcard parameters and for choices with complex options.
 
