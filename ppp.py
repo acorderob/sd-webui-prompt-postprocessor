@@ -1,4 +1,5 @@
 import dataclasses
+from enum import Enum
 import logging
 import os
 import re
@@ -583,6 +584,17 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         vs = self.state.variables
         vs.clear_system()
+
+        # Option related variables
+        for opt_name in self.defopt.keys():
+            opt_value = getattr(self.state.options, opt_name)
+            var_name = "_opt_" + opt_name
+            if isinstance(opt_value, (bool, str, int)):
+                vs.set_system(var_name, opt_value)
+            elif isinstance(opt_value, Enum):
+                vs.set_system(var_name, str(opt_value).split(".", 1)[-1])
+
+        # Model related variables
         sdchecks = {x: self.env_info.get("is_" + x, False) for x in self.known_models}
         sdchecks.update({"": True})
         model_name_val = next((k for k, v in sdchecks.items() if v), "")

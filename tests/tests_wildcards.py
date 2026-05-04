@@ -383,6 +383,18 @@ class TestWildcards(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
+    def test_wc_wildcardPS2_yaml(self):  # yaml wildcard with object formatted choices and options and prefix and suffix
+        self.process(
+            InputTuple("the choices are: [__yaml/wildcardPS2__]", ""),
+            OutputTuple("the choices are: [(prefix2-choice2-suffix:1.5)]", ""),
+        )
+
+    def test_wc_wildcardAt_yaml(self):  # yaml wildcard with attention in choices
+        self.process(
+            InputTuple("the choices are: [__yaml/wildcardAt__]", ""),
+            OutputTuple("the choices are: [(choice2:1.5)]", ""),
+        )
+
     def test_wc_anonymouswildcard_yaml(self):  # yaml anonymous wildcard
         self.process(
             InputTuple("the choices are: __yaml/anonwildcards__", ""),
