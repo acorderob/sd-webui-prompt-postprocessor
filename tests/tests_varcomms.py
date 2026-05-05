@@ -1064,3 +1064,9 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 self.extranetwork_maps_obj,
             ),
         )
+
+    def test_var_attention_merge(self):  # attention merge at variable boundary
+        self.process(
+            InputTuple("${v!=[content]}(${v}:1.5)", ""),
+            OutputTuple("(content:1.35)", ""),
+        )

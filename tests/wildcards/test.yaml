@@ -42,6 +42,15 @@ yaml:
     - (choice2:1.5)
     - (choice3:1)
 
+  wildcardAtBracket:
+    - "[the content]"
+
+  wildcardAlt:
+    - "[cat|dog]"
+
+  wildcardSched:
+    - "[cat:dog:0.5]"
+
   wildcardPS:
     - {
         sampler: "~",

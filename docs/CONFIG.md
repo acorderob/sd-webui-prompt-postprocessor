@@ -118,7 +118,7 @@ Options for cleanup processing, in case you want to change them from the default
 * **around_ands**: Removes consecutive ANDs and unnecessary commas and space around them.
 * **ands_with_eol**: Add a newline before ANDs.
 * **around_extranetwork_tags**: Removes spaces around extra network tags.
-* **merge_attention**: It merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested modifiers.
+* **merge_attention**: It merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested attention (even through choice/wildcard boundaries).
 * **remove_extranetwork_tags**: Removes all extra network tags.
 
 Please note that *ComfyUI* does not natively support the `BREAK` and `AND` constructs, but the related settings are kept in that UI in case you use a node that supports them and the extension is configured to allow them (see the configuration file below).
@@ -179,6 +179,6 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Clean up around ANDs**: Removes consecutive ANDs and unnecessary commas and space around them.
 * **Use EOL instead of Space before ANDs**: Add a newline before ANDs.
 * **Clean up around extra network tags**: Removes spaces around extra network tags.
-* **Merge attention modifiers (weights) when possible**: It merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested modifiers.
+* **Merge attention modifiers (weights) when possible**: It merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested attention (even through choice/wildcard boundaries).
 * **Remove extra spaces**: Removes other unnecessary spaces.
 * **Remove extra network tags**: Removes all extra network tags.

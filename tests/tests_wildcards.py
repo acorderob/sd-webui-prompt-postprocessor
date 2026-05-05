@@ -386,19 +386,37 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcardPS2_yaml(self):  # yaml wildcard with object formatted choices and options and prefix and suffix
         self.process(
             InputTuple("the choices are: [__yaml/wildcardPS2__]", ""),
-            OutputTuple("the choices are: [(prefix2-choice2-suffix:1.5)]", ""),
+            OutputTuple("the choices are: (prefix2-choice2-suffix:1.35)", ""),
         )
 
     def test_wc_wildcardContainer_yaml(self):  # yaml wildcard with object formatted choices and options and container
         self.process(
             InputTuple("the choices are: [__yaml/wildcardContainer__]", ""),
-            OutputTuple("the choices are: [(prefix1-choice2/choice3-suffix:1.5)]", ""),
+            OutputTuple("the choices are: (prefix1-choice2/choice3-suffix:1.35)", ""),
         )
 
     def test_wc_wildcardAt_yaml(self):  # yaml wildcard with attention in choices
         self.process(
             InputTuple("the choices are: [__yaml/wildcardAt__]", ""),
-            OutputTuple("the choices are: [(choice2:1.5)]", ""),
+            OutputTuple("the choices are: (choice2:1.35)", ""),
+        )
+
+    def test_wc_merge_attention_bracket(self):  # bracket attention from wildcard merges with outer attention
+        self.process(
+            InputTuple("(__yaml/wildcardAtBracket__:1.5)", ""),
+            OutputTuple("(the content:1.35)", ""),
+        )
+
+    def test_wc_no_merge_attention_alternation(self):  # alternation from wildcard is not merged as attention
+        self.process(
+            InputTuple("(__yaml/wildcardAlt__:1.5)", ""),
+            OutputTuple("([cat|dog]:1.5)", ""),
+        )
+
+    def test_wc_no_merge_attention_scheduling(self):  # scheduling from wildcard is not merged as attention
+        self.process(
+            InputTuple("(__yaml/wildcardSched__:1.5)", ""),
+            OutputTuple("([cat:dog:0.5]:1.5)", ""),
         )
 
     def test_wc_anonymouswildcard_yaml(self):  # yaml anonymous wildcard

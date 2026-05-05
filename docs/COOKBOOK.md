@@ -411,11 +411,11 @@ Only choices labelled `fantasy` across all matched files are eligible.
 
 Note: if no parameters are specified in the glob call, the parameters from the first matching file that defines them (sorted by key) are used. To avoid that, specify parameters explicitly in the call.
 
-## Prefix/suffix on wildcard parameters
+## Prefix/suffix or container on wildcard parameters
 
-Using the object format for wildcard parameters you can add a prefix and/or suffix that wrap every result. This is cleaner than repeating the wrapper in each choice.
+Using the object format for wildcard parameters you can set a prefix and/or suffix, or a container, that wraps the result. This is cleaner than repeating the wrapper in each choice.
 
-Without prefix/suffix, every choice needs to repeat the attention modifier:
+In this example, without prefix/suffix, every choice needs to repeat the attention modifier:
 
 ```yaml
 qualities:
@@ -434,7 +434,17 @@ qualities:
     - "intricate details"
 ```
 
-The prefix and suffix are added around the joined result (including the separator when multiple choices are selected). They can themselves contain constructs.
+The prefix and suffix are added around the wildcard's result. They can themselves contain constructs.
+
+Another way is with the container property, which does the same in a slightly more flexible way:
+
+```yaml
+qualities:
+    - { container: "(${__choices[]}:1.3)" }  # parameters line
+    - "ultra detailed"
+    - "highly detailed"
+    - "intricate details"
+```
 
 ## `ifundefined` / `?=` for safe defaults
 

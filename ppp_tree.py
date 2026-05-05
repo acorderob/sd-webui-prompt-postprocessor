@@ -933,6 +933,85 @@ class TreeProcessor(lark.visitors.Interpreter):
         t2 = time.monotonic_ns()
         self.__debug_end("alternate", start_result, t2 - t1)
 
+    @staticmethod
+    def _try_extract_attention(s: str) -> tuple[str, float] | None:
+        """
+        If s is entirely a single attention wrapper - (inner), (inner:W), or [inner] -
+        return (inner_content, weight). Otherwise return None.
+
+        Used for post-visit merging when a wildcard or choices construct expands to a
+        single attention that can be merged with an enclosing outer attention.
+        """
+        if not s:
+            return None
+        open_char = s[0]
+        if open_char == "(":
+            close_char = ")"
+        elif open_char == "[":
+            close_char = "]"
+        else:
+            return None
+        depth = 0
+        for i, c in enumerate(s):
+            if c == open_char:
+                depth += 1
+            elif c == close_char:
+                depth -= 1
+                if depth == 0:
+                    if i != len(s) - 1:
+                        return None  # wrapper closes before end of string -> multiple items
+                    break
+        else:
+            return None  # never fully closed
+        inner = s[1:-1]
+        if open_char == "[":
+            # Disambiguate from alternation [a|b] and scheduling [before:after:N].
+            # Both use [...] but are not attention constructs.
+            paren_depth = 0
+            bracket_depth = 0
+            top_level_pipes = 0
+            top_level_colons = 0
+            last_colon_pos = -1
+            for i, c in enumerate(inner):
+                if c == "(":
+                    paren_depth += 1
+                elif c == ")":
+                    paren_depth -= 1
+                elif c == "[":
+                    bracket_depth += 1
+                elif c == "]":
+                    bracket_depth -= 1
+                elif paren_depth == 0 and bracket_depth == 0:
+                    if c == "|":
+                        top_level_pipes += 1
+                    elif c == ":":
+                        top_level_colons += 1
+                        last_colon_pos = i
+            if top_level_pipes > 0:
+                return None  # alternation construct
+            if top_level_colons >= 2 and last_colon_pos >= 0:
+                try:
+                    float(inner[last_colon_pos + 1 :])
+                    return None  # scheduling construct: [before:after:N]
+                except ValueError:
+                    pass
+            return (inner, 0.9)
+        # Parenthesis form - scan backwards for a top-level :weight suffix
+        depth = 0
+        for i in range(len(inner) - 1, -1, -1):
+            c = inner[i]
+            if c in ")]":
+                depth += 1
+            elif c in "([":
+                depth -= 1
+            elif c == ":" and depth == 0:
+                try:
+                    w = float(inner[i + 1 :])
+                    return (inner[:i], w)
+                except ValueError:
+                    break
+        return (inner, 1.1)
+
     def attention(self, tree: lark.Tree):
         """
         Process a attention change construct in the tree and add it to the accumulated shell.
@@ -956,6 +1035,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.log(logging.DEBUG, f"Shell attention with weight {weight}")
         current_tree = tree.children[0]
         if self.state.options.cup_merge_attention:
+            # we check while the children are attentions, in which case we merge the weights
             while isinstance(current_tree, lark.Tree) and current_tree.data == "attention":
                 # we merge the weights
                 if len(current_tree.children) == 2:
@@ -967,6 +1047,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                 else:
                     inner_weight = 0.9
                 weight *= inner_weight
+                self.log(
+                    logging.DEBUG,
+                    f"Merging nested attention with weight {inner_weight}, cumulative weight now {weight}",
+                )
                 current_tree = current_tree.children[0]
             weight = math.floor(weight * 100) / 100  # we round to 2 decimals
             weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
@@ -1014,6 +1098,34 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.__result += starttag
                 self.__visit(current_tree)
                 endtag = f":{weight_str})"
+            # Post-visit merge: if the entire visited content is a single attention wrapper
+            # (e.g. from a wildcard or choices expansion), merge weights here.
+            # The static tree-walk above only covers direct attention children; this
+            # handles the case where the inner attention came from an expanded wildcard.
+            if self.state.options.cup_merge_attention:
+                visited_content = self.__result[len(start_result) + len(starttag) :]
+                merge = TreeProcessor._try_extract_attention(visited_content)
+                if merge is not None:
+                    inner_content, inner_weight = merge
+                    weight = math.floor(weight * inner_weight * 100) / 100
+                    self.log(
+                        logging.DEBUG,
+                        f"Merging nested attention with weight {inner_weight}, cumulative weight now {weight}",
+                    )
+                    weight_str = f"{weight:.2f}".rstrip("0").rstrip(".")
+                    if weight_str == "1.1":
+                        weight_kind = 2
+                        starttag = "("
+                        endtag = ")"
+                    elif weight_str == "0.9" and attention_processing != "parentheses":
+                        weight_kind = 1
+                        starttag = "["
+                        endtag = "]"
+                    else:
+                        weight_kind = 3
+                        starttag = "("
+                        endtag = f":{weight_str})"
+                    self.__result = start_result + starttag + inner_content
             if self.state.options.cup_empty_constructs and re.fullmatch(
                 re.escape(start_result + starttag) + r"\s*", self.__result
             ):

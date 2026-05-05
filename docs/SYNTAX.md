@@ -155,14 +155,14 @@ Wildcard parameters in a json/yaml file can also be in object format, and suppor
 * `container`: includes the prefix, choices array variable, and suffix
 
 ```yaml
-{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", container: "prefix-${_choices[&'/']}-suffix" }
+{ sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", container: "prefix-${__choices[&'/']}-suffix" }
 { sampler: "~", repeating: false, optional: false, count: 2, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
 { sampler: "~", repeating: false, optional: false, from: 2, to: 3, description: "test wildcard", prefix: "prefix-", suffix: "-suffix", separator: "/" }
 ```
 
 The prefix and suffix are added to the result along with the selected choices and separators. They can contain other constructs, but the separator can't.
 
-The container is a new option that replaces prefix/suffix/separator, and makes use of the recent support for array variables. Its value would be the concatenation of any prefix and/or suffix with the echoing (with the chosen separator) of a temporary `_choices[]` variable that holds the chosen values. This property is preferred over prefix/suffix/separator unless you only need the separator.
+The container is a new option that replaces prefix/suffix/separator, and makes use of the recent support for array variables. Its value would be the concatenation of any prefix and/or suffix with the echoing (with the chosen separator) of a temporary `__choices[]` variable that holds the chosen values. This property is preferred over prefix/suffix/separator unless you only need the separator.
 
 It is recommended to use the object format for the wildcard parameters and for choices with complex options.
 
