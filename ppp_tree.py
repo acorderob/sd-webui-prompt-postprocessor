@@ -2139,17 +2139,35 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__process_wildcard(tree)
 
     def __extract_filter_specifiers(self, filters: lark.Tree) -> list[list[str]]:
+        if (
+            len(filters.children) == 1
+            and len(filters.children[0].children) == 1
+            and isinstance(filters.children[0].children[0], lark.Tree)
+        ):
+            # special case when the whole filter is in a variable
+            # note that an individual label in a variable will also come through here
+            f = self.__visit(filters.children[0].children[0], False, True)
+            filters = parse_prompt(
+                self.state,
+                "filter specifier",
+                str(f),
+                self.state.parsers["wc_filter_or"],
+                True,
+            )
         filter_specifier = []
         for or_ in filters.children:
+            and_group = []
             for and_ in or_.children:
                 label = and_.children[0]
                 if isinstance(label, lark.Token):
                     # it's a literal, we can use it directly
-                    filter_specifier.append([str(label)])
+                    and_group.append(str(label))
                 else:
                     # it's a variable, we need to evaluate it
                     v = self.__visit(label, False, True)
-                    filter_specifier.append([v])
+                    # we remove commas and pluses to avoid confusion with the filter specifier syntax
+                    and_group.append(v.replace(",", "").replace("+", ""))
+            filter_specifier.append(and_group)
         return filter_specifier
 
     def choices(self, tree: lark.Tree):

@@ -205,6 +205,13 @@ class TestWildcards(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
+    def test_wc_test3_yaml_2(self):  # simple yaml wildcard build from variable
+        self.process(
+            InputTuple("${v=3}the choice is: __testwc/test${v}__", ""),
+            OutputTuple("the choice is: one choice", ""),
+            ppp="nocup",
+        )
+
     def test_wc_wildcard_filter_index(self):  # wildcard with positional index filter
         self.process(
             InputTuple("the choice is: __yaml/wildcard2'2'__", ""),
@@ -235,8 +242,8 @@ class TestWildcards(TestPromptPostProcessorBase):
 
     def test_wc_wildcard_filter_label3(self):  # wildcard with multiple label filter
         self.process(
-            InputTuple("the choice is: __yaml/wildcard2'label1,label2'__", ""),
-            OutputTuple("the choice is: choice3-choice1", ""),
+            InputTuple("the choice is: __4$$-$$yaml/wildcard2'label1,label2'__", ""),
+            OutputTuple("the choice is: choice1-choice3", ""),
             ppp="nocup",
         )
 
@@ -249,8 +256,15 @@ class TestWildcards(TestPromptPostProcessorBase):
 
     def test_wc_wildcard_filter_compound(self):  # wildcard with compound filter
         self.process(
-            InputTuple("the choice is: __yaml/wildcard2'label1+label3'__", ""),
-            OutputTuple("the choice is: choice3-choice1", ""),
+            InputTuple("the choice is: __4$$-$$yaml/wildcard2'label1+label3'__", ""),
+            OutputTuple("the choice is: choice3", ""),
+            ppp="nocup",
+        )
+
+    def test_wc_wildcard_filter_compound_var(self):  # wildcard with compound filter in a variable
+        self.process(
+            InputTuple("${v[]=*('label1','label3')}the choice is: __4$$-$$yaml/wildcard2'${v[&'+']}'__", ""),
+            OutputTuple("the choice is: choice3", ""),
             ppp="nocup",
         )
 
@@ -264,14 +278,14 @@ class TestWildcards(TestPromptPostProcessorBase):
     def test_wc_wildcard_filter_compound3(self):  # wildcard with doubly inherited compound filter
         self.process(
             InputTuple("the choice is: __yaml/wildcard2bisbis'#label1+label3'__", ""),
-            OutputTuple("the choice is: choice1bisbis", ""),
+            OutputTuple("the choice is: choice3bisbis", ""),
             ppp="nocup",
         )
 
     def test_wc_wildcard_filter_compound4(self):  # wildcard with doubly inherited compound filter with variable
         self.process(
             InputTuple("${v=label1}the choice is: __yaml/wildcard2bisbis'#${v}+label3'__", ""),
-            OutputTuple("the choice is: choice1bisbis", ""),
+            OutputTuple("the choice is: choice3bisbis", ""),
             ppp="nocup",
         )
 
@@ -281,7 +295,7 @@ class TestWildcards(TestPromptPostProcessorBase):
                 "<ppp:setwcdeffilter 'yaml/wildcard2' 'label1+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__",
                 "",
             ),
-            OutputTuple("the choice is: choice3-choice1, choice3-choice1- choice2 ", ""),
+            OutputTuple("the choice is: choice3-choice3, choice3-choice1- choice2 ", ""),
             ppp="nocup",
         )
 
@@ -291,7 +305,7 @@ class TestWildcards(TestPromptPostProcessorBase):
                 "${v=label1}<ppp:setwcdeffilter 'yaml/wildcard2' '${v}+label3' />the choice is: __yaml/wildcard2__, <ppp:setwcdeffilter 'yaml/wildcard2' />__yaml/wildcard2__",
                 "",
             ),
-            OutputTuple("the choice is: choice3-choice1, choice3-choice1- choice2 ", ""),
+            OutputTuple("the choice is: choice3-choice3, choice3-choice1- choice2 ", ""),
             ppp="nocup",
         )
 

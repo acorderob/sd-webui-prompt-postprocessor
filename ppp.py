@@ -269,6 +269,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     propagate_positions=True,
                     start="choicevalue",
                 ),
+                "wc_filter_or": lark.Lark(
+                    grammar_content_full,
+                    propagate_positions=True,
+                    start="wc_filter_or",
+                ),
             },
         )
         self.__init_sysvars()

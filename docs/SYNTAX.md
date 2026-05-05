@@ -94,7 +94,7 @@ Wildcards cannot be used inside an extranetwork tag (because some LoRA names con
 
 The filter can be used to filter specific choices from the wildcard. The filtering works before applying the choice conditions (if any). The surrounding quotes can be single or double.
 
-The filter is a comma separated list of an integer/range (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice).
+The filter is a comma separated list of an integer/range (positional choice index, zero-based) or choice label. You can also compound them with `+`. That is, the comma separated items act as an OR and the `+` inside them as an AND. Using labels can simplify the definitions of complex wildcards where you want to have direct access to specific choices on occasion (you don't need to create wildcards for each individual choice). You can use variables for individual labels (`${v}`) or a single variable for the whole filter (`${v}` or `${a[&',']}` or `${a[&'+']}`).
 
 There are some additional formats when using filters.
 
