@@ -22,7 +22,7 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical(self):  # cyclical sampler cycles through all choices
-        ppp_instance = self.init_obj("nocup")
+        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("the choices are: {@choice1|choice2|choice3}", ""),
             [
@@ -35,7 +35,7 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical_multiple_constructs(self):  # two independent @ constructs cycle together
-        ppp_instance = self.init_obj("nocup")
+        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("{@a|b} {@c|d}", ""),
             [
@@ -49,7 +49,7 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical_resets_on_prompt_change(self):  # state resets when the prompt pair changes
-        ppp_instance = self.init_obj("nocup")
+        ppp_instance = self.init_ppp("nocup")
         # Advance the cycle to position 1 (choice2).
         self.process(
             InputTuple("the choices are: {@choice1|choice2|choice3}", ""),
@@ -67,7 +67,7 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical_mixed_samplers(self):  # @ construct cycles while a ~ construct alongside is unaffected
-        ppp_instance = self.init_obj("nocup")
+        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("{@a|b|c} {x|y}", ""),
             [

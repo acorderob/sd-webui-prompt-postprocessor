@@ -1,4 +1,5 @@
 from dataclasses import replace
+import difflib
 import os
 import logging
 from typing import Any, NamedTuple, Optional
@@ -114,7 +115,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
     def interrupt(self):
         self.interrupted = True
 
-    def init_obj(
+    def init_ppp(
         self,
         ppp: Optional[str | PromptPostProcessor] = None,
         combinatorial: bool = False,
@@ -181,6 +182,16 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             )
         return the_obj
 
+    def _comp_diff(self, result: str, expected: str) -> list[str]:
+        return list(
+            difflib.ndiff(
+                result.splitlines(True),
+                expected.splitlines(True),
+                linejunk=None,
+                charjunk=None,
+            )
+        )
+
     def process(
         self,
         input_prompts: InputTuple,
@@ -220,7 +231,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 DEBUG_LEVEL.full,
                 specific_em_folders,
             )
-        the_obj: PromptPostProcessor = self.init_obj(ppp, combinatorial, combinatorial_limit)
+        the_obj: PromptPostProcessor = self.init_ppp(ppp, combinatorial, combinatorial_limit)
         out = (
             [OutputTuple("", "", None)]
             if expected_output is None
@@ -236,11 +247,13 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 seed,
             )
             the_obj.process_prompts_group_end()
-            if self.interrupted != interrupted:
-                errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
-            elif not self.interrupted and expected_output is not None:
+            self.assertTrue(
+                self.interrupted == interrupted,
+                f"Interrupted flag is incorrect: got {self.interrupted} but expected {interrupted}",
+            )
+            if not self.interrupted and expected_output is not None:
                 if len(result) != len(out):
-                    errors.append(f"Incorrect number of combinations (expected {len(out)}, got {len(result)})")
+                    errors.append(f"Incorrect number of combinations: got {len(result)} but expected {len(out)}")
                 for out_prompt, out_negative_prompt, out_variables in out:
                     found = None
                     for r_prompt, r_negative_prompt, r_variables in result:
@@ -248,25 +261,47 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                             found = OutputTuple(r_prompt, r_negative_prompt, r_variables)
                             break
                     if not found:
-                        errors.append(f"Combination '{out_prompt}' / '{out_negative_prompt}' not found in output")
+                        errors.extend(
+                            [
+                                "Combination not found in output",
+                                "Prompt:",
+                                out_prompt,
+                                "Negative Prompt:",
+                                out_negative_prompt,
+                            ]
+                        )
                     elif out_variables:
-                        unmatched_vars = {}
+                        missing_vars = {}
+                        incorrect_vars = {}
                         expected_values = {}
-                        for var_name, var_value in out_variables.items():
-                            if var_name not in found.variables or found.variables[var_name] != var_value:
-                                unmatched_vars[var_name] = (
-                                    found.variables[var_name] if var_name in found.variables else None
-                                )
+                        sorted_var_keys = sorted(out_variables.keys())
+                        for var_name in sorted_var_keys:
+                            var_value = out_variables[var_name]
+                            if var_name not in found.variables:
+                                missing_vars[var_name] = var_value
+                            elif found.variables[var_name] != var_value:
+                                incorrect_vars[var_name] = found.variables[var_name]
                                 expected_values[var_name] = var_value
-                        if unmatched_vars:
-                            errors.append(
-                                f"Combination '{out_prompt}' / '{out_negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}"
+                        if missing_vars or incorrect_vars:
+                            errors.extend(
+                                [
+                                    "Combination found, but variables do not match",
+                                    "Prompt:",
+                                    out_prompt,
+                                    "Negative Prompt:",
+                                    out_negative_prompt,
+                                ]
                             )
-            self.assertFalse(
-                bool(errors),
-                "\n" + "\n".join(errors),
-            )
+                            if missing_vars:
+                                errors.append("Missing variables:")
+                                errors.append(str(missing_vars))
+                            if incorrect_vars:
+                                errors.append("Incorrect variables:")
+                                errors.extend(self._comp_diff(str(incorrect_vars), str(expected_values)))
+            if errors:
+                raise AssertionError("\n".join(errors))
             return
+
         # non-combinatorial
         errors = []
         the_obj.process_prompts_group_start()
@@ -276,30 +311,41 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 input_prompts.negative_prompt,
                 seed,
             )
-            if self.interrupted != interrupted:
-                errors.append(f"Interrupted flag is incorrect: expected {interrupted}, got {self.interrupted}")
-            elif not self.interrupted and expected_output is not None:
+            self.assertTrue(
+                self.interrupted == interrupted,
+                f"Interrupted flag is incorrect: got {self.interrupted} but expected {interrupted}",
+            )
+            if not self.interrupted and expected_output is not None:
                 result_prompt, result_negative_prompt, output_variables = result[0] if result else (None, None, None)
                 if result_prompt != eo.prompt or result_negative_prompt != eo.negative_prompt:
-                    errors.append(
-                        f"Incorrect result '{eo.prompt}' / '{eo.negative_prompt}', got '{result_prompt}' / '{result_negative_prompt}'"
-                    )
+                    errors.append("Incorrect result")
+                    if result_prompt != eo.prompt:
+                        errors.append("Prompt:")
+                        errors.extend(self._comp_diff(result_prompt, eo.prompt))
+                    if result_negative_prompt != eo.negative_prompt:
+                        errors.append("Negative Prompt:")
+                        errors.extend(self._comp_diff(result_negative_prompt, eo.negative_prompt))
                 if eo.variables:
-                    unmatched_vars = {}
+                    missing_vars = {}
+                    incorrect_vars = {}
                     expected_values = {}
-                    for var_name, var_value in eo.variables.items():
-                        if var_name not in output_variables or output_variables[var_name] != var_value:
-                            unmatched_vars[var_name] = (
-                                output_variables[var_name] if var_name in output_variables else None
-                            )
+                    sorted_var_keys = sorted(eo.variables.keys())
+                    for var_name in sorted_var_keys:
+                        var_value = eo.variables[var_name]
+                        if var_name not in output_variables:
+                            missing_vars[var_name] = var_value
+                        elif output_variables[var_name] != var_value:
+                            incorrect_vars[var_name] = output_variables[var_name]
                             expected_values[var_name] = var_value
-                    if unmatched_vars:
-                        errors.append(
-                            f"Result '{eo.prompt}' / '{eo.negative_prompt}' found, but variables do not match: expected {expected_values}, got {unmatched_vars}"
-                        )
+                    if missing_vars or incorrect_vars:
+                        errors.append("Result correct, but variables do not match")
+                        if missing_vars:
+                            errors.append("Missing variables:")
+                            errors.append(str(missing_vars))
+                        if incorrect_vars:
+                            errors.append("Incorrect variables:")
+                            errors.extend(self._comp_diff(str(incorrect_vars), str(expected_values)))
             seed += 1
         the_obj.process_prompts_group_end()
-        self.assertFalse(
-            bool(errors),
-            "\n" + "\n".join(errors),
-        )
+        if errors:
+            raise AssertionError("\n".join(errors))
