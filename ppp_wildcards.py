@@ -92,7 +92,7 @@ class PPPWildcards:
         if wildcards_folders is not None or wildcards_input is not None:
             if wildcards_folders is not None:
                 for f in self.__wildcards_folders:
-                    self.__get_wildcards_in_directory(f, f)
+                    self.__get_wildcards_in_path(f if os.path.isdir(f) else os.path.dirname(f), f)
             if wildcards_input is not None:
                 self.__get_wildcards_in_input(wildcards_input)
         else:
@@ -514,30 +514,30 @@ class PPPWildcards:
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
         self.__add_wildcard(text_content, full_path, external_key_parts)
 
-    def __get_wildcards_in_directory(self, base: str, directory: str):
+    def __get_wildcards_in_path(self, base: str, path: str):
         """
-        Get all wildcards in a directory.
+        Get all wildcards in a path.
 
         Args:
             base (str): The base path for the wildcards.
-            directory (str): The path to the directory.
+            path (str): The path (folder or file).
         """
-        if not os.path.exists(directory):
+        if not os.path.exists(path):
             log(
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Wildcard directory '{escape_single_quotes(directory)}' does not exist!",
+                f"Wildcard path '{escape_single_quotes(path)}' does not exist!",
             )
             return
-        for filename in os.listdir(directory):
-            full_path = os.path.abspath(os.path.join(directory, filename))
+        if os.path.isfile(path):
+            self.__get_wildcards_in_file(base, path)
+            return
+        for filename in os.listdir(path):
+            full_path = os.path.abspath(os.path.join(path, filename))
             if os.path.basename(full_path).startswith("."):
                 continue
-            if os.path.isdir(full_path):
-                self.__get_wildcards_in_directory(base, full_path)
-            elif os.path.isfile(full_path):
-                self.__get_wildcards_in_file(base, full_path)
+            self.__get_wildcards_in_path(base, full_path)
 
     def set_wildcard_default_filter(self, wildcard_key: str, filter_options: Optional[list[list[str]]]):
         """

@@ -111,7 +111,7 @@ class PPPExtraNetworkMappings:
         if enmappings_folders is not None or enmappings_input is not None:
             if enmappings_folders is not None:
                 for f in self.__enmappings_folders:
-                    self.__get_extranetwork_mappings_in_directory(f)
+                    self.__get_extranetwork_mappings_in_path(f)
             if enmappings_input is not None:
                 self.__get_extranetwork_mappings_in_input(enmappings_input)
         else:
@@ -295,26 +295,26 @@ class PPPExtraNetworkMappings:
                 f"Error reading extra network mappings from file '{escape_single_quotes(full_path)}': {e}",
             )
 
-    def __get_extranetwork_mappings_in_directory(self, directory: str):
+    def __get_extranetwork_mappings_in_path(self, path: str):
         """
-        Get all extra network mappings in a directory.
+        Get all extra network mappings in a path.
 
         Args:
-            directory (str): The path to the directory.
+            path (str): The path (folder or file).
         """
-        if not os.path.exists(directory):
+        if not os.path.exists(path):
             log(
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Extra network mappings directory '{escape_single_quotes(directory)}' does not exist!",
+                f"Extra network mappings path '{escape_single_quotes(path)}' does not exist!",
             )
             return
-        for filename in os.listdir(directory):
-            full_path = os.path.abspath(os.path.join(directory, filename))
+        if os.path.isfile(path):
+            self.__get_extranetwork_mappings_in_file(path)
+            return
+        for filename in os.listdir(path):
+            full_path = os.path.abspath(os.path.join(path, filename))
             if os.path.basename(full_path).startswith("."):
                 continue
-            if os.path.isdir(full_path):
-                self.__get_extranetwork_mappings_in_directory(full_path)
-            elif os.path.isfile(full_path):
-                self.__get_extranetwork_mappings_in_file(full_path)
+            self.__get_extranetwork_mappings_in_path(full_path)
