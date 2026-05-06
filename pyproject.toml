@@ -1,18 +1,18 @@
 [project]
 name = "sd-webui-prompt-postprocessor"
-description = "Stable Diffusion WebUI & ComfyUI extension to post-process the prompt, including sending content from the prompt to the negative prompt and wildcards."
-version = "3.1.1"
+description = "Stable Diffusion WebUI & ComfyUI extension to post-process the prompt. Features include: wildcards, sending content from the prompt to the negative prompt, variables, model detection, extranetwork mapping, cleanup."
+version = "3.1.0"
 license = { file = "LICENSE.txt" }
 dependencies = ["lark", "numpy", "pyyaml", "pydantic"]
+requires-python = ">=3.10"
 
 [project.urls]
-Repository = "https://github.com/acorderob/sd-webui-prompt-postprocessor"
-#  Used by Comfy Registry https://comfyregistry.org
-Documentation = "https://github.com/acorderob/sd-webui-prompt-postprocessor/main/README.md"
-"Bug Tracker" = "https://github.com/acorderob/sd-webui-prompt-postprocessor/issues"
+repository = "https://github.com/acorderob/sd-webui-prompt-postprocessor"
+#  Used by Comfy Registry https://registry.comfy.org/
+documentation = "https://github.com/acorderob/sd-webui-prompt-postprocessor/main/README.md"
+issues = "https://github.com/acorderob/sd-webui-prompt-postprocessor/issues"
 
 [tool.comfy]
-PublisherId = "acorderob"
-#DisplayName = "sd-webui-prompt-postprocessor"
-DisplayName = "ACB Prompt PostProcessor"
-Icon = "https://raw.githubusercontent.com/acorderob/sd-webui-prompt-postprocessor/main/images/prompt-postprocessor-icon.png"
+publisher_id = "acorderob"
+display_name = "ACB Prompt PostProcessor"
+icon = "https://raw.githubusercontent.com/acorderob/sd-webui-prompt-postprocessor/main/images/prompt-postprocessor-icon.png"

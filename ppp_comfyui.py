@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 import folder_paths  # type: ignore
 import nodes  # type: ignore
@@ -96,6 +97,7 @@ class PromptPostProcessorComfyUINode:
                         "multiline": True,
                         "default": "",
                         "dynamicPrompts": False,
+                        "tooltip": "Positive prompt to process",
                     },
                 ),
                 "neg_prompt": (
@@ -104,6 +106,7 @@ class PromptPostProcessorComfyUINode:
                         "multiline": True,
                         "default": "",
                         "dynamicPrompts": False,
+                        "tooltip": "Negative prompt to process",
                     },
                 ),
             },
@@ -113,6 +116,7 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": "",
                         "placeholder": "internal model class name",
+                        "tooltip": "Model or model class name. Needed to know model kind.",
                     },
                 ),
                 "modelname": (
@@ -121,6 +125,7 @@ class PromptPostProcessorComfyUINode:
                         "default": "",
                         "placeholder": "full path of the model",
                         "dynamicPrompts": False,
+                        "tooltip": "Full path of the model. Needed to detect variants.",
                     },
                 ),
                 "seed": (
@@ -132,15 +137,17 @@ class PromptPostProcessorComfyUINode:
                     },
                 ),
                 "debug_level": (
-                    [e.value for e in DEBUG_LEVEL],
+                    "COMBO",
                     {
+                        "options": [e.value for e in DEBUG_LEVEL],
                         "default": PromptPostProcessor.DEFAULT_DEBUG_LEVEL,
                         "tooltip": "Debug level",
                     },
                 ),
                 "on_warnings": (
-                    [e.value for e in ONWARNING_CHOICES],
+                    "COMBO",
                     {
+                        "options": [e.value for e in ONWARNING_CHOICES],
                         "default": PromptPostProcessor.DEFAULT_ON_WARNING,
                         "tooltip": "How to handle invalid content warnings",
                     },
@@ -264,6 +271,11 @@ class PromptPostProcessorComfyUINode:
         "pos_prompt",
         "neg_prompt",
         "variables",
+    )
+    OUTPUT_TOOLTIPS = (
+        "Processed positive prompt (list of prompts if combinatorial mode is enabled)",
+        "Processed negative prompt (list of prompts if combinatorial mode is enabled)",
+        "Output variables (list of dictionaries if combinatorial mode is enabled)",
     )
 
     FUNCTION = "process"
@@ -465,8 +477,9 @@ class PromptPostProcessorWildcardOptionsComfyUINode:
                     },
                 ),
                 "if_wildcards": (
-                    [e.value for e in IFWILDCARDS_CHOICES],
+                    "COMBO",
                     {
+                        "options": [e.value for e in IFWILDCARDS_CHOICES],
                         "default": IFWILDCARDS_CHOICES.stop.value,
                         "tooltip": "How to handle invalid wildcards in the prompt",
                     },
@@ -797,6 +810,7 @@ class PromptPostProcessorSelectVariableComfyUINode:
                     "PPP_DICT",
                     {
                         "forceInput": True,
+                        "tooltip": "Dictionary of variables to select from",
                     },
                 ),
             },
@@ -808,12 +822,13 @@ class PromptPostProcessorSelectVariableComfyUINode:
                         "multiline": False,
                         "default": "",
                         "dynamicPrompts": False,
+                        "tooltip": "Name of the variable to select",
                     },
                 ),
             },
         }
 
-    RETURN_TYPES = ("STRING",)
+    RETURN_TYPES = ("*",)
     RETURN_NAMES = ("value",)
 
     FUNCTION = "select"
@@ -822,7 +837,7 @@ class PromptPostProcessorSelectVariableComfyUINode:
 
     def select(
         self,
-        variables: dict[str, str],
+        variables: dict[str, Any],
         name: str,
     ):
         value = ""

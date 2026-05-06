@@ -2,7 +2,7 @@
 
 ## Commands
 
-The extension uses a format for its commands similar to an extranetwork, but it has a "ppp:" prefix followed by the command, and then a space and any parameters (if any).
+The extension uses a format for its commands similar to an extranetwork, but it has a `ppp:` prefix followed by the command, and then a space and any parameters (if any).
 
 `<ppp:command parameters/>`
 
@@ -31,33 +31,33 @@ characters:
 
 The generic format is: `{parameters$$opt1::choice1|opt2::choice2|opt3::choice3}`
 
-Both the construct parameters (up to the `$$`) and the individual choice options (up to the '::') are optional.
+Both the construct parameters (up to the `$$`) and the individual choice options (up to the `::`) are optional.
 
 There is also a format where instead of `parameters$$` you just put the sampler, for compatibility with *Dynamic Prompts*.
 
 The construct parameters can be written with the following options (all are optional):
 
-* "**~**" (random) or "**@**" (cyclical): sampler (for compatibility with *Dynamic Prompts*). The cyclical sampler cycles through all combinations in order across consecutive `process_prompt` calls, resuming where the previous call left off (as long as the input prompt and negative prompt do not change).
-* "**r**": means it allows repetition of the choices.
-* "**o**": means it is "optional", and no error will be raised if there are no choices to select from.
-* "**n**" or "**n-m**" or "**n-**" or "**-m**": number or range of choices to select. Allows zero as the start of a range. Default is 1.
-* "**'description'**": optional description, only valid in wildcard definitions. Used only in the Wildcards Concat node in ComfyUI.
-* "**$$sep**": separator when multiple choices are selected. Default is set in settings.
-* "**$$**": end of the parameters (not optional if any parameters).
+* `~` (random) or `@` (cyclical): sampler (for compatibility with *Dynamic Prompts*). The cyclical sampler cycles through all combinations in order across consecutive `process_prompt` calls, resuming where the previous call left off (as long as the input prompt and negative prompt do not change).
+* `r`: means it allows repetition of the choices.
+* `o`: means it is optional, and no error will be raised if there are no choices to select from.
+* `n` or `n-m` or `n-` or `-m`: number or range of choices to select. Allows zero as the start of a range. Default is 1.
+* `'description'`: optional description (quoted), only valid in wildcard definitions. Used only in the Wildcards Concat node in ComfyUI.
+* `$$sep`: separator when multiple choices are selected. Default is set in settings.
+* `$$`: end of the parameters (not optional if any parameters).
 
-Regarding the "optional" flag, consider this scenario: due to their conditions no choice is available. It will raise an error. If you add the `o` then it will just return an empty string. This is only necessary if all choices have conditions and they could all be false. It is not the same as setting a range starting at 0, because that would be an allowed number of returned choices. If you do this and no choices are available, no error is raised.
+Regarding the optional flag, consider this scenario: due to their conditions no choice is available. It will raise an error. If you add the `o` then it will just return an empty string. This is only necessary if all choices have conditions and they could all be false. It is not the same as setting a range starting at 0, because that would be an allowed number of returned choices. If you do this and no choices are available, no error is raised.
 
 The choice options are as follows:
 
-* "**%**": indicates that the content of the choice is a command
-* "**'identifiers'**": comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
-* "**n**": weight of the choice (optional, default 1).
-* "**if condition**": filters out the choice if the condition is false (optional; this is an extension to the *Dynamic Prompts* syntax). Same conditions as in the `if` command.
-* "**::**": end of choice options (not optional if any options)
+* `%`: indicates that the content of the choice is a command
+* `'identifiers'`: comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
+* `n`: weight of the choice (optional, default 1).
+* `if condition`: filters out the choice if the condition is false (optional; this is an extension to the *Dynamic Prompts* syntax). Same conditions as in the `if` command.
+* `::`: end of choice options (not optional if any options)
 
 Whitespace is allowed between parameters/options.
 
-The only command available is `include wildcard`, which will include the choices of the specified wildcard in place of this choice. This allows composing choices from multiple wildcards. It also works in the choices of a wildcard, but note that in yaml you cannot start an array element with "%" and you will have to put the full choice in quotes, or use the object format.
+The only command available is `include wildcard`, which will include the choices of the specified wildcard in place of this choice. This allows composing choices from multiple wildcards. It also works in the choices of a wildcard, but note that in yaml you cannot start an array element with `%` and you will have to put the full choice in quotes, or use the object format.
 
 These are examples of formats you can use to insert a choice construct:
 
@@ -67,7 +67,7 @@ These are examples of formats you can use to insert a choice construct:
 | `{3$$choice1\|5 if _is_sd1::choice2\|choice3}`    | select 3 choices, one has a weight and a condition                                                                                    |
 | `{2-3$$2::choice1\|choice2\|choice3}`             | select 2 to 3 choices, one of them has a weight                                                                                       |
 | `{r2-3$$choice1\|choice2\|choice3}`               | select 2 to 3 choices allowing repetition                                                                                             |
-| `{2-3$$ / $$choice1\|choice2\|choice3}`           | select 2 to 3 choices with separator " / "                                                                                            |
+| `{2-3$$ / $$choice1\|choice2\|choice3}`           | select 2 to 3 choices with separator ` / `                                                                                            |
 | `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`   | select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional                          |
 | `{choice1\|choice2\|%0.5::include path/wildcard}` | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
 
@@ -114,13 +114,13 @@ These are examples of formats you can use to insert a wildcard:
 | `__wildcard__`                       | select 1 choice                                                          |
 | `__path/wildcard'0'__`               | select the first choice                                                  |
 | `__path/wildcard'1-2'__`             | select the second or third choice                                        |
-| `__path/wildcard'label'__`           | select the choices with label "label"                                    |
-| `__path/wildcard'0,label1,label2'__` | select the first choice and those with labels "label1" or "label2"       |
-| `__path/wildcard'0,label1+label2'__` | select the first choice and those with both labels "label1" and "label2" |
+| `__path/wildcard'label'__`           | select the choices with label `label`                                    |
+| `__path/wildcard'0,label1,label2'__` | select the first choice and those with labels `label1` or `label2`       |
+| `__path/wildcard'0,label1+label2'__` | select the first choice and those with both labels `label1` and `label2` |
 | `__3$$path/wildcard__`               | select 3 choices                                                         |
 | `__2-3$$path/wildcard__`             | select 2 to 3 choices                                                    |
 | `__r2-3$$path/wildcard__`            | select 2 to 3 choices allowing repetition                                |
-| `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator " / "                               |
+| `__2-3$$ / $$path/wildcard__`        | select 2 to 3 choices with separator ` / `                               |
 | `__path/wildcard(var=value)__`       | select 1 choice using the specified variable value in the evaluation.    |
 
 ### Wildcard definitions
@@ -220,10 +220,10 @@ If also supports the addition and undefined check as an extension of the *Dynami
 
 | Construct        | Meaning                              |
 | ---------        | -------                              |
-| `${var+=value}`  | equivalent to "add"                  |
-| `${var+=!value}` | equivalent to "evaluate add"         |
-| `${var?=value}`  | equivalent to "ifundefined"          |
-| `${var?=!value}` | equivalent to "evaluate ifundefined" |
+| `${var+=value}`  | equivalent to `add`                  |
+| `${var+=!value}` | equivalent to `evaluate add`         |
+| `${var?=value}`  | equivalent to `ifundefined`          |
+| `${var?=!value}` | equivalent to `evaluate ifundefined` |
 
 Set variables are included in the output variables with their last value.
 
@@ -330,7 +330,7 @@ The variable can be one set with the `set` command (user variables) or you can u
 
 | System variable    | Value                                                                                                                                                                                                                                                                                                                                 |
 | ---------------    | -----                                                                                                                                                                                                                                                                                                                                 |
-| `_model`           | the loaded model identifier (`"sd1"`, `"sd2"`, `"sdxl"`, `"sd3"`, `"flux"`, `"auraflow"`). `_sd` also works but is deprecated.                                                                                                                                                                                                        |
+| `_model`           | the loaded model identifier (`sd1`, `sd2`, `sdxl`, `sd3`, `flux`, `auraflow`). `_sd` also works but is deprecated.                                                                                                                                                                                                        |
 | `_modelname`       | the loaded model filename (without path). `_sdname` also works but is deprecated.                                                                                                                                                                                                                                                     |
 | `_modelfullname`   | the loaded model filename (with path). `_sdfullname` also works but is deprecated.                                                                                                                                                                                                                                                    |
 | `_modelclass`      | the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. |
@@ -343,7 +343,7 @@ The variable can be one set with the `set` command (user variables) or you can u
 | `_is_auraflow`     | true if the loaded model is AuraFlow                                                                                                                                                                                                                                                                                                  |
 | `_is_ssd`          | true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                       |
 | `_is_sdxl_no_ssd`  | true if the loaded model version is SDXL and not an SSD model.                                                                                                                                                                                                                                                                        |
-| `_is_sdxl_no_pony` | true if the loaded model version is SDXL and not a Pony model (the "pony" variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                |
+| `_is_sdxl_no_pony` | true if the loaded model version is SDXL and not a Pony model (the `pony` variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                |
 | `_is_vvvv`         | true if the loaded model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                              |
 | `_is_pure_kkkk`    | true if the loaded model is of kind *kkkk* (f.e. sdxl) and not a variant.                                                                                                                                                                                                                                                             |
 | `_is_variant_kkkk` | true if the loaded model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                             |
@@ -433,9 +433,9 @@ Each mapping can have any number of elements in its list of mappings. There are 
 
 * `extnettype`: the kind of extranetwork, for example `lora`.
 * `mappingname`: the name you want to give to the mapping, to be referenced in the command.
-* `condition`: the condition to check for this mapping to be used (usually it should be one of the `_is_*` variables). If the conditions of multiple mappings evaluate to True, one will be chosen randomly. If the condition is missing it is considered True, to be used in the last mapping to catch as an "else" condition, and will be used if no other mapping applies.
+* `condition`: the condition to check for this mapping to be used (usually it should be one of the `_is_*` variables). If the conditions of multiple mappings evaluate to True, one will be chosen randomly. If the condition is missing it is considered True, to be used in the last mapping to catch as an `else` condition, and will be used if no other mapping applies.
 * `name`: name of the real extranetwork. If it is missing no extranetwork tag will be added.
-* `parameters`: parameters for the real extranetwork. If it is missing it is assumed "1" for LoRAs and HyperNets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
+* `parameters`: parameters for the real extranetwork. If it is missing it is assumed `1` for LoRAs and HyperNets. If both this parameter and the parameter in the ext command are numbers they are multiplied for the result. In other case the parameter of the ext command, if it exists, is used.
 * `triggers`: list of trigger strings. If it is missing, only the inline triggers in the ext command will be added.
 * `weight`: weight for this variant, in case multiple of them apply, to choose one. Default is 1.
 

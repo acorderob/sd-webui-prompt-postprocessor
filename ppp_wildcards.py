@@ -1,7 +1,7 @@
 import fnmatch
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import logging
 import yaml
 
@@ -17,8 +17,8 @@ class PPPWildcard:
         key (str): The key of the wildcard.
         file (str): The path to the file where the wildcard is defined.
         unprocessed_choices (list[str]): The unprocessed choices of the wildcard.
-        choices (list[dict]): The processed choices of the wildcard.
         options (dict): The options of the wildcard.
+        choices (list[dict]): The processed choices of the wildcard.
     """
 
     def __init__(self, fullpath: str, key: str, choices: list[str]):
@@ -115,43 +115,24 @@ class PPPWildcards:
         keys = sorted(fnmatch.filter(self.wildcards.keys(), key))
         return [self.wildcards[k] for k in keys]
 
-    def __get_keys_in_dict(self, dictionary: dict, prefix="") -> list[str]:
+    def __get_wc_in_dict(self, dictionary: dict, prefix="") -> list[tuple[str, Any]]:
         """
-        Get all keys in a dictionary.
+        Get all wildcards in a dictionary, along their object.
 
         Args:
             dictionary (dict): The dictionary to check.
             prefix (str): The prefix for the current key.
 
         Returns:
-            list: A list of all keys in the dictionary, including nested keys.
+            list: A list of all leaf wildcards in the dictionary.
         """
-        keys = []
-        for key in dictionary.keys():
-            if isinstance(dictionary[key], dict):
-                keys.extend(self.__get_keys_in_dict(dictionary[key], prefix + key + "/"))
+        wc = []
+        for key, obj in dictionary.items():
+            if isinstance(obj, dict):
+                wc.extend(self.__get_wc_in_dict(obj, prefix + str(key) + "/"))
             else:
-                keys.append(prefix + str(key))
-        return keys
-
-    def __get_nested(self, dictionary: dict, keys: str) -> object:
-        """
-        Get a nested value from a dictionary.
-
-        Args:
-            dictionary (dict): The dictionary to check.
-            keys (str): The keys to get the value from.
-
-        Returns:
-            object: The value of the nested keys in the dictionary.
-        """
-        keys = keys.split("/")
-        current_dict = dictionary
-        for key in keys:
-            current_dict = current_dict.get(key)
-            if current_dict is None:
-                return None
-        return current_dict
+                wc.append((prefix + str(key), obj))
+        return wc
 
     def __remove_wildcards_from_path(self, full_path: str, debug=True):
         """
@@ -395,8 +376,8 @@ class PPPWildcards:
         key_parts = external_key_parts.copy()
         if isinstance(content, dict):
             key_parts.pop()
-            keys = self.__get_keys_in_dict(content)
-            for key in keys:
+            keys = self.__get_wc_in_dict(content)
+            for key, obj in keys:
                 tmp_key_parts = key_parts.copy()
                 tmp_key_parts.extend(key.split("/"))
                 fullkey = "/".join(tmp_key_parts)
@@ -408,7 +389,6 @@ class PPPWildcards:
                         f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!",
                     )
                 else:
-                    obj = self.__get_nested(content, key)
                     choices = self.__get_choices(obj, full_path, tmp_key_parts)
                     if choices is None:
                         log(

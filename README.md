@@ -12,10 +12,10 @@ These are some features:
 
 * Process wildcards. Compatible with the Dynamic Prompts extension.
 * Sending parts of the prompt to the negative prompt (the original function of the extension). This allows for useful tricks when using wildcards since you can add negative content from choices made in the positive prompt.
-* Set and modify local variables.
-* Define model variants (pony, illustrious, ...).
-* Filter content based on the loaded SD model/variant or a variable.
-* Map extranetworks (LoRAs) depending on conditions (like the loaded model variant). This allows you to add "virtual" LoRAs to the prompt that will be translated to the correct one.
+* Define model variants (pony, illustrious, ...) and have them set as system variables along with the current model, to detect which one is being used.
+* Set and modify user variables.
+* Set content based on conditions (like the system/user variables).
+* Map extranetworks (LoRAs) depending on conditions (like the loaded model/variant). This allows you to add "virtual" LoRAs to the prompt that will be translated to the correct one.
 * Clean up the prompt of unnecessary separators or spaces.
 * Combinatorial mode.
 
