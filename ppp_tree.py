@@ -2108,7 +2108,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 options = wildcard.unprocessed_choices[0]
                 container = options.get("container", None)
                 container_kind = "specified"
-                if container is None or not isinstance(container, str):
+                if container is None:
                     container_kind = "assembled"
                     has_separator = "separator" in options
                     has_prefix = "prefix" in options
@@ -2130,7 +2130,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                     options.pop("prefix", None)
                     options.pop("suffix", None)
                     options.pop("container", None)
-                if container is not None:
+                if container is not None and isinstance(container, str):
                     try:
                         options["container"] = parse_prompt(
                             self.state, "choicevalue", container, self.state.parsers["choicevalue"], True
