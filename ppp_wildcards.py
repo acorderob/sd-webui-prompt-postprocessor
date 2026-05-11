@@ -76,6 +76,7 @@ class PPPWildcards:
         """
         Initialize the wildcards.
         """
+        self.reset_default_filters()
         self.__debug_level = debug_level
         self.__wildcards_folders = wildcards_folders or []
         # log(self.__logger, self.__debug_level, logging.INFO, "Refreshing wildcards...")
@@ -564,3 +565,9 @@ class PPPWildcards:
             Optional[list[list[str]]]: The filter options or None if not set.
         """
         return self.__wildcard_default_filters.get(wildcard_key, None)
+
+    def reset_default_filters(self):
+        """
+        Reset all default filters.
+        """
+        self.__wildcard_default_filters = {}
