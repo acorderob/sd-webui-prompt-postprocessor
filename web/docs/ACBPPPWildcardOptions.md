@@ -1,5 +1,9 @@
 # ACB PPP Wildcard Options node
 
+Provides wildcard options to the main PPP node.
+
+## Inputs
+
 * **folders**: You can enter multiple folders separated by commas. You can leave it empty (the default) and add a `ppp_wildcards` or `wildcards` entry in the **extra_model_paths.yaml** file (recommended).
 * **definitions**: Wildcards definitions (in yaml or json format). Direct input added to the ones found in the wildcards folders. Allows wildcards to be included in the workflow.
 * **if_wildcards**: Select what do you want to do with any found wildcards/choices (when process wildcards is off or after the processing).
@@ -9,3 +13,7 @@
   * **Stop the generation**: detect wildcards and stop the generation.
 * **choice_separator**: What do you want to use by default to separate multiple choices when the options allow it (by default it's ', ").
 * **keep_choices_order**: If checked, a multiple choice construct will return them in the order they are in the construct.
+
+## Outputs
+
+* **options**: The options to send to the PPP node.

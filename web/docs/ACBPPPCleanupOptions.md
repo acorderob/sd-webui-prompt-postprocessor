@@ -1,5 +1,9 @@
 # ACB PPP Cleanup Options node
 
+Provides clean up options to the main PPP node.
+
+## Inputs
+
 * **extra_spaces**: Removes other unnecessary spaces.
 * **empty_constructs**: Removes attention/scheduling/alternation constructs when they are invalid.
 * **extra_separators**: Removes unnecessary separators. This applies to the configured separator and regular commas.
@@ -14,3 +18,7 @@
 * **remove_extranetwork_tags**: Removes all extra network tags.
 
 Please note that *ComfyUI* does not natively support the `BREAK` and `AND` constructs, but the related settings are kept in that UI in case you use a node that supports them and the extension is configured to allow them (see the configuration file below).
+
+## Outputs
+
+* **options**: The options to send to the PPP node.

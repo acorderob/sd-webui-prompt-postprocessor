@@ -1,5 +1,7 @@
 # ACB Prompt Post Processor node
 
+Main PPP node that processes prompts.
+
 ## Inputs
 
 * **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
@@ -24,7 +26,11 @@ The options nodes are optional. If you don't need to change any of the default v
 
 ## Outputs
 
-The outputs are the final positive and negative prompt and a variables dictionary.
+* **positive_prompt**: Resulting positive prompt.
+* **negative_prompt**: Resulting negative prompt.
+* **variables**: Resulting output variables.
+
+## Notes
 
 You can use the "**ACB PPP Select Variable**" node to choose one and output its value. You can use this to send only part of the prompt to, for example, a detailer node. For example:
 
