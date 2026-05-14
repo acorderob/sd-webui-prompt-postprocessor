@@ -6,11 +6,11 @@ import math
 import re
 import textwrap
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import lark
 import numpy as np
 
-from ppp_classes import IFWILDCARDS_CHOICES, PPPState
+from ppp_classes import IFWILDCARDS_CHOICES, SUPPORTED_APPS, PPPState
 from ppp_enmappings import PPPENMappingVariant
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import escape_single_quotes
@@ -37,9 +37,10 @@ class TreeProcessor(lark.visitors.Interpreter):
     AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
     NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
 
-    def __init__(self, state: PPPState, rng: np.random.Generator):
+    def __init__(self, state: PPPState, rng: np.random.Generator, on_model_info_update: Optional[Callable[[], None]] = None):
         super().__init__()
         self.state = state
+        self.__on_model_info_update = on_model_info_update
         self.__debug_level = state.options.debug_level
         self.__rng = rng
         self.__shell: list[TreeProcessor.AccumulatedShell] = []  # type: ignore
@@ -1232,10 +1233,37 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.__result
+        settable_sysvars = {"_modelfullname": "model_filename", "_modelclass": "model_class"}
         if self.state.variables.name_is_system(variable_name):
-            self.warn_or_stop(
-                f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
-            )
+            if (variable_name not in settable_sysvars and variable_name != "_modelinfo"):
+                self.warn_or_stop(
+                    f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
+                )
+                return
+            app = self.state.env_info.get("app", "")
+            if app not in (SUPPORTED_APPS.comfyui.value, SUPPORTED_APPS.tests.value):
+                self.warn_or_stop(
+                    f"Setting '{escape_single_quotes(variable_name)}' is only supported in ComfyUI."
+                )
+                return
+            evaluated = self.__visit(content, restore_state=False, discard_content=True)
+            if variable_name == "_modelinfo":
+                # Format: <class>@<filename>
+                at_pos = evaluated.find("@")
+                if at_pos < 0:
+                    self.warn_or_stop(
+                        f"Invalid value for '_modelinfo': expected '<class>@<filename>', got '{escape_single_quotes(evaluated)}'."
+                    )
+                    return
+                self.state.env_info["model_class"] = evaluated[:at_pos]
+                self.state.env_info["model_filename"] = evaluated[at_pos + 1 :]
+            else:
+                self.state.env_info[settable_sysvars[variable_name]] = evaluated
+            if self.__on_model_info_update is not None:
+                self.__on_model_info_update()
+            info = variable_name + " = " + f"'{escape_single_quotes(evaluated)}'"
+            t2 = time.monotonic_ns()
+            self.__debug_end(command, start_result, t2 - t1, info)
             return
         info = variable_name
         is_array = variable_name[-2:] == "[]"

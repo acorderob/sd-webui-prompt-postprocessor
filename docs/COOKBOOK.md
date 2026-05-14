@@ -477,6 +477,12 @@ You can also use `evaluate ifundefined` (`?=!`) to resolve the wildcard immediat
 ${quality?=!__qualities__}
 ```
 
+## Choosing the model from the prompt
+
+In ComfyUI, you can leave the model and modelname inputs disconnected and set the `_modelinfo` system variable (or `_modelfullname` and `_modelclass`) at the start of the prompt (maybe through a wildcard or a choice construct). Then extract the `_modelfullname` output variable using the `Select Variable` node and use its value to actually load that model.
+
+You can also set and extract user variables for other ksampler inputs, like sampler, scheduler, steps, cfg and latent size. The numeric ones will need to be transformed from string to int/float using some other node.
+
 ## Debugging tips
 
 When something isn't generating as expected, the debug setting is your first tool. Enable it in the extension settings; it will log all system variables at generation time, which tells you exactly what values are available for your conditions.

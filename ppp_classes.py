@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from logging import Logger
 import re
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from lark import Lark
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -257,6 +257,7 @@ class PPPState:
     """State object passed to various PPP components during prompt processing."""
 
     logger: Logger
+    env_info: dict[str, Any] = field(default_factory=dict)
     host_config: HostConfig = field(default_factory=HostConfig)
     options: PPPStateOptions = field(default_factory=PPPStateOptions)
     variables: VariableRepository = field(default_factory=VariableRepository)

@@ -45,6 +45,8 @@ Inputs:
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 
+The model/modelname are also optional, but if you don't set them you will not be capable of changing content based on that. You can however set them from the prompt.
+
 Outputs:
 
 * **pos_prompt**: the resulting positive prompt
