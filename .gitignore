@@ -3,8 +3,6 @@
 venv
 
 .vscode/**/*
-!.vscode/settings.json
-!.vscode/launch.json
 
 logs
 tests/tests_local.py

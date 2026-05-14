@@ -6,17 +6,56 @@
 		}
 	],
 	"settings": {
+		"python.analysis.extraPaths": [
+			"../.."
+		],
+		"python.testing.unittestArgs": [
+			"-v",
+			"-s",
+			".",
+			"-p",
+			"test*.py"
+		],
+		"python.testing.pytestEnabled": false,
+		"python.testing.unittestEnabled": true,
+		"python.analysis.typeCheckingMode": "off",
+		"yaml.schemaStore.enable": false,
+		"powershell.cwd": "sd-webui-prompt-postprocessor",
 		"[python]": {
 			"editor.defaultFormatter": "ms-python.black-formatter"
 		},
-		"yaml.schemaStore.enable": false,
-		"cSpell.enabledFiletypes": [
-			"lark"
+		"black-formatter.args": [
+			"--line-length=120"
 		],
-		"powershell.cwd": "sd-webui-prompt-postprocessor"
+		"python-envs.pythonProjects": [
+			{
+				"path": ".",
+				"envManager": "ms-python.python:venv",
+				"packageManager": "ms-python.python:pip"
+			}
+		]
 	},
 	"launch": {
 		"version": "0.2.0",
-		"configurations": []
+		"configurations": [
+			{
+				"name": "Python Debugger: Attach using Process Id",
+				"type": "debugpy",
+				"request": "attach",
+				"processId": "${command:pickProcess}"
+			},
+			{
+				"name": "Python: Debug Tests (Testing Panel)",
+				"type": "debugpy",
+				"request": "launch",
+				"purpose": [
+					"debug-test"
+				],
+				"console": "integratedTerminal",
+				"justMyCode": false,
+				"cwd": "${workspaceFolder}"
+			}
+		],
+		"compounds": []
 	}
 }

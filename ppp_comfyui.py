@@ -288,7 +288,6 @@ class PromptPostProcessorComfyUINode:
 
     def process(
         self,
-        model,
         modelname,
         pos_prompt,
         neg_prompt,
@@ -301,6 +300,7 @@ class PromptPostProcessorComfyUINode:
         do_combinatorial,
         combinatorial_shuffle,
         combinatorial_limit,
+        model=None,
         wc_options=None,
         stn_options=None,
         cup_options=None,
@@ -315,14 +315,14 @@ class PromptPostProcessorComfyUINode:
                 self.logger,
                 DEBUG_LEVEL.minimal,
                 logging.WARNING,
-                "Model class is not provided. System variables might not be properly set.",
+                "Model class is not provided. System model variables will not be properly set.",
             )
         if modelname == "":
             log(
                 self.logger,
                 DEBUG_LEVEL.minimal,
                 logging.WARNING,
-                "Modelname is not provided. System variables will not be properly set.",
+                "Modelname is not provided. System model and variant variables will not be properly set.",
             )
         # model class values in ComfyUI\comfy\supported_models.py
         env_info = {
