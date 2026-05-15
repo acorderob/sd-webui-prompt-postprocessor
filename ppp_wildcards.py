@@ -1,5 +1,4 @@
 import fnmatch
-import os
 from pathlib import Path
 from typing import Any, Optional
 import logging
@@ -15,15 +14,15 @@ class PPPWildcard:
 
     Attributes:
         key (str): The key of the wildcard.
-        file (str): The path to the file where the wildcard is defined.
+        file (Path | None): The path to the file where the wildcard is defined, or None if from inline input.
         unprocessed_choices (list[str]): The unprocessed choices of the wildcard.
         options (dict): The options of the wildcard.
         choices (list[dict]): The processed choices of the wildcard.
     """
 
-    def __init__(self, fullpath: str, key: str, choices: list[str]):
+    def __init__(self, fullpath: Path | None, key: str, choices: list[str]):
         self.key: str = key
-        self.file: str = fullpath
+        self.file: Path | None = fullpath
         self.unprocessed_choices: list[str] = choices
         self.choices: list[dict] = None
         self.options: dict = None
@@ -35,7 +34,7 @@ class PPPWildcard:
     def __sizeof__(self):
         return (
             self.key.__sizeof__()
-            + self.file.__sizeof__()
+            + (self.file.__sizeof__() if self.file is not None else 0)
             + self.unprocessed_choices.__sizeof__()
             + self.choices.__sizeof__()
             + self.options.__sizeof__()
@@ -51,13 +50,13 @@ class PPPWildcards:
     """
 
     DEFAULT_WILDCARDS_FOLDER = "wildcards"
-    LOCALINPUT_FILENAME = R"//INPUT\\"
 
     def __init__(self, logger=None):
         self.__logger: logging.Logger = logger
         self.__debug_level = DEBUG_LEVEL.none
-        self.__wildcards_folders = []
-        self.__wildcard_files = {}
+        self.__wildcards_folders: list[Path] = []
+        self.__wildcard_files: dict[Path, float] = {}
+        self.__local_input_hash: int | None = None
         self.__wildcard_default_filters: dict[str, list[list[str]]] = {}
         self.wildcards: dict[str, PPPWildcard] = {}
 
@@ -70,7 +69,7 @@ class PPPWildcards:
     def refresh_wildcards(
         self,
         debug_level: DEBUG_LEVEL,
-        wildcards_folders: Optional[list[str]],
+        wildcards_folders: Optional[list[Path]],
         wildcards_input: str = None,
     ):
         """
@@ -78,27 +77,26 @@ class PPPWildcards:
         """
         self.reset_default_filters()
         self.__debug_level = debug_level
-        self.__wildcards_folders = wildcards_folders or []
+        self.__wildcards_folders = [Path(f) for f in (wildcards_folders or [])]
         # log(self.__logger, self.__debug_level, logging.INFO, "Refreshing wildcards...")
         # t1 = time.monotonic_ns()
         for fullpath in list(self.__wildcard_files.keys()):
-            if fullpath != self.LOCALINPUT_FILENAME:
-                path = os.path.dirname(fullpath)
-                if not os.path.exists(fullpath) or not any(
-                    Path(path).is_relative_to(folder) for folder in self.__wildcards_folders
-                ):
-                    self.__remove_wildcards_from_path(fullpath)
-            elif wildcards_input is None:
+            if not fullpath.exists() or not any(
+                fullpath.parent.is_relative_to(folder) for folder in self.__wildcards_folders
+            ):
                 self.__remove_wildcards_from_path(fullpath)
+        if wildcards_input is None and self.__local_input_hash is not None:
+            self.__remove_wildcards_from_input()
         if wildcards_folders is not None or wildcards_input is not None:
             if wildcards_folders is not None:
                 for f in self.__wildcards_folders:
-                    self.__get_wildcards_in_path(f if os.path.isdir(f) else os.path.dirname(f), f)
+                    self.__get_wildcards_in_path(f if f.is_dir() else f.parent, f)
             if wildcards_input is not None:
                 self.__get_wildcards_in_input(wildcards_input)
         else:
             self.wildcards = {}
             self.__wildcard_files = {}
+            self.__local_input_hash = None
         # t2 = time.monotonic_ns()
         # log(self.__logger, self.__debug_level, logging.INFO, f"Wildcards refresh time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
@@ -134,46 +132,55 @@ class PPPWildcards:
                 wc.append((prefix + str(key), obj))
         return wc
 
-    def __remove_wildcards_from_path(self, full_path: str, debug=True):
+    def __remove_wildcards_from_path(self, full_path: Path, debug=True):
         """
-        Clear all wildcards in a file.
+        Clear all wildcards from a file.
 
         Args:
-            full_path (str): The path to the file.
+            full_path (Path): The path to the file.
             debug (bool): Whether to print debug messages or not.
         """
-        last_modified_cached = self.__wildcard_files.get(full_path, None)  # a time or a hash
-        if debug and last_modified_cached is not None:
-            if full_path == self.LOCALINPUT_FILENAME:
-                log(self.__logger, self.__debug_level, logging.DEBUG, "Removing from memory wildcards from input")
-            else:
-                log(
-                    self.__logger,
-                    self.__debug_level,
-                    logging.DEBUG,
-                    f"Removing from memory wildcards from file: {full_path}",
-                )
-        if full_path in self.__wildcard_files.keys():
+        if debug and full_path in self.__wildcard_files:
+            log(
+                self.__logger,
+                self.__debug_level,
+                logging.DEBUG,
+                f"Removing from memory wildcards from file: {full_path}",
+            )
+        if full_path in self.__wildcard_files:
             del self.__wildcard_files[full_path]
         for key in list(self.wildcards.keys()):
             if self.wildcards[key].file == full_path:
                 del self.wildcards[key]
 
-    def __get_wildcards_in_file(self, base, full_path: str):
+    def __remove_wildcards_from_input(self, debug=True):
+        """
+        Clear all wildcards loaded from inline input.
+
+        Args:
+            debug (bool): Whether to print debug messages or not.
+        """
+        if debug and self.__local_input_hash is not None:
+            log(self.__logger, self.__debug_level, logging.DEBUG, "Removing from memory wildcards from input")
+        self.__local_input_hash = None
+        for key in list(self.wildcards.keys()):
+            if self.wildcards[key].file is None:
+                del self.wildcards[key]
+
+    def __get_wildcards_in_file(self, base: Path, full_path: Path):
         """
         Get all wildcards in a file.
 
         Args:
-            base (str): The base path for the wildcards.
-            full_path (str): The path to the file.
+            base (Path): The base path for the wildcards.
+            full_path (Path): The path to the file.
         """
         try:
-            last_modified = os.path.getmtime(full_path)
+            last_modified = full_path.stat().st_mtime
             last_modified_cached = self.__wildcard_files.get(full_path, None)
             if last_modified_cached is not None and last_modified == self.__wildcard_files[full_path]:
                 return
-            filename = os.path.basename(full_path)
-            _, extension = os.path.splitext(filename)
+            extension = full_path.suffix
             if extension not in (".txt", ".json", ".yaml", ".yml"):
                 return
             self.__remove_wildcards_from_path(full_path, False)
@@ -189,7 +196,7 @@ class PPPWildcards:
                 self.__logger,
                 self.__debug_level,
                 logging.ERROR,
-                f"Error reading wildcard file '{escape_single_quotes(full_path)}': {e}",
+                f"Error reading wildcard file '{escape_single_quotes(str(full_path))}': {e}",
             )
 
     def __get_wildcards_in_input(self, wildcards_input: str):
@@ -201,11 +208,11 @@ class PPPWildcards:
         """
         try:
             new_h = hash(wildcards_input)
-            h = self.__wildcard_files.get(self.LOCALINPUT_FILENAME, None)
-            if h == new_h:
+            if new_h == self.__local_input_hash:
                 return
-            self.__remove_wildcards_from_path(self.LOCALINPUT_FILENAME, False)
-            if h is not None:
+            was_loaded = self.__local_input_hash is not None
+            self.__remove_wildcards_from_input(False)
+            if was_loaded:
                 log(self.__logger, self.__debug_level, logging.DEBUG, "Updating wildcards from input")
             wildcards_input = wildcards_input.strip()
             if wildcards_input != "":
@@ -215,8 +222,8 @@ class PPPWildcards:
                     log(self.__logger, self.__debug_level, logging.WARNING, f"Invalid format for input wildcards: {e}")
                     return
                 if content is not None:
-                    self.__add_wildcard(content, self.LOCALINPUT_FILENAME, [self.LOCALINPUT_FILENAME])
-            self.__wildcard_files[self.LOCALINPUT_FILENAME] = new_h
+                    self.__add_wildcard(content, None, [""])
+            self.__local_input_hash = new_h
         except Exception as e:  # pylint: disable=broad-except
             log(self.__logger, self.__debug_level, logging.ERROR, f"Error reading wildcards input: {e}")
 
@@ -262,13 +269,13 @@ class PPPWildcards:
         """
         return all(k in ["command", "labels", "weight", "if", "content", "text"] for k in d.keys())
 
-    def __get_choices(self, obj: object, full_path: str, key_parts: list[str]) -> list:
+    def __get_choices(self, obj: object, full_path: Path | None, key_parts: list[str]) -> list:
         """
         We process the choices in the object and return them as a list.
 
         Args:
             obj (object): the value of a wildcard
-            full_path (str): path to the file where the wildcard is defined
+            full_path (Path | None): path to the file where the wildcard is defined, or None if from inline input
             key_parts (list[str]): parts of the key for the wildcard
 
         Returns:
@@ -280,12 +287,13 @@ class PPPWildcards:
             return [obj]
         if isinstance(obj, (int, float, bool)):
             return [str(obj)]
+        file_str = str(full_path) if full_path is not None else "input"
         if not isinstance(obj, list) or len(obj) == 0:
             log(
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Invalid format in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(full_path)}'!",
+                f"Invalid format in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(file_str)}'!",
             )
             return None
         choices = []
@@ -302,17 +310,17 @@ class PPPWildcards:
                     self.__logger,
                     self.__debug_level,
                     logging.WARNING,
-                    f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(full_path)}'!",
+                    f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(file_str)}'!",
                 )
         return choices
 
-    def __process_dict_choice(self, c: dict, full_path: str, key_parts: list[str], i: int) -> dict:
+    def __process_dict_choice(self, c: dict, full_path: Path | None, key_parts: list[str], i: int) -> dict:
         """
         Process a dictionary choice.
 
         Args:
             c (dict): The dictionary choice.
-            full_path (str): The path to the file.
+            full_path (Path | None): The path to the file, or None if from inline input.
             key_parts (list[str]): The parts of the key.
             i (int): The index of the choice.
 
@@ -335,20 +343,21 @@ class PPPWildcards:
             # we assume it is an anonymous wildcard with options
             firstkey = list(c.keys())[0]
             return self.__create_anonymous_wildcard(full_path, key_parts, i, c[firstkey], firstkey)
+        file_str = str(full_path) if full_path is not None else "input"
         log(
             self.__logger,
             self.__debug_level,
             logging.WARNING,
-            f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(full_path)}'!",
+            f"Invalid choice {i+1} in wildcard '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(file_str)}'!",
         )
         return None
 
-    def __create_anonymous_wildcard(self, full_path, key_parts, i, content, options=None):
+    def __create_anonymous_wildcard(self, full_path: Path | None, key_parts, i, content, options=None):
         """
         Create an anonymous wildcard.
 
         Args:
-            full_path (str): The path to the file that contains it.
+            full_path (Path | None): The path to the file that contains it, or None if from inline input.
             key_parts (list[str]): The parts of the key.
             i (int): The index of the wildcard.
             content (object): The content of the wildcard.
@@ -364,15 +373,20 @@ class PPPWildcards:
             value = f"{options}::{value}"
         return value
 
-    def __add_wildcard(self, content: object, full_path: str, external_key_parts: list[str]):
+    def __add_wildcard(self, content: object, full_path: Path | None, external_key_parts: list[str]):
         """
         Add a wildcard to the wildcards dictionary.
 
         Args:
             content (object): The content of the wildcard.
-            full_path (str): The path to the file that contains it.
+            full_path (Path | None): The path to the file that contains it, or None if from inline input.
             external_key_parts (list[str]): The parts of the key.
         """
+        file_str = str(full_path) if full_path is not None else "input"
+
+        def existing_file_str(wc):
+            return str(wc.file) if wc.file is not None else "input"
+
         key_parts = external_key_parts.copy()
         if isinstance(content, dict):
             key_parts.pop()
@@ -386,7 +400,7 @@ class PPPWildcards:
                         self.__logger,
                         self.__debug_level,
                         logging.WARNING,
-                        f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!",
+                        f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}' and '{escape_single_quotes(existing_file_str(self.wildcards[fullkey]))}'!",
                     )
                 else:
                     choices = self.__get_choices(obj, full_path, tmp_key_parts)
@@ -395,14 +409,14 @@ class PPPWildcards:
                             self.__logger,
                             self.__debug_level,
                             logging.WARNING,
-                            f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!",
+                            f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}'!",
                         )
                     elif fullkey.startswith("_"):
                         log(
                             self.__logger,
                             self.__debug_level,
                             logging.WARNING,
-                            f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)",
+                            f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}'! (cannot start with underscore)",
                         )
                     else:
                         self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
@@ -416,7 +430,7 @@ class PPPWildcards:
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Invalid wildcard in file '{escape_single_quotes(full_path)}'!",
+                f"Invalid wildcard in file '{escape_single_quotes(file_str)}'!",
             )
             return
         fullkey = "/".join(key_parts)
@@ -425,7 +439,7 @@ class PPPWildcards:
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}' and '{escape_single_quotes(self.wildcards[fullkey].file)}'!",
+                f"Duplicate wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}' and '{escape_single_quotes(existing_file_str(self.wildcards[fullkey]))}'!",
             )
         else:
             choices = self.__get_choices(content, full_path, key_parts)
@@ -434,28 +448,27 @@ class PPPWildcards:
                     self.__logger,
                     self.__debug_level,
                     logging.WARNING,
-                    f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'!",
+                    f"Invalid wildcard '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}'!",
                 )
             elif fullkey.startswith("_"):
                 log(
                     self.__logger,
                     self.__debug_level,
                     logging.WARNING,
-                    f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(full_path)}'! (cannot start with underscore)",
+                    f"Invalid wildcard name '{escape_single_quotes(fullkey)}' in file '{escape_single_quotes(file_str)}'! (cannot start with underscore)",
                 )
             else:
                 self.wildcards[fullkey] = PPPWildcard(full_path, fullkey, choices)
 
-    def __get_wildcards_in_structured_file(self, full_path, base):
+    def __get_wildcards_in_structured_file(self, full_path: Path, base: Path):
         """
         Get all wildcards in a structured file.
 
         Args:
-            full_path (str): The path to the file.
-            base (str): The base path for the wildcards.
+            full_path (Path): The path to the file.
+            base (Path): The base path for the wildcards.
         """
-        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
-        external_key_parts = external_key.split(os.sep)
+        external_key_parts = list(full_path.with_suffix("").relative_to(base).parts)
         try:
             with open(full_path, "r", encoding="utf-8") as file:
                 content = yaml.safe_load(file)
@@ -464,22 +477,21 @@ class PPPWildcards:
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252...",
+                f"Could not read file '{escape_single_quotes(str(full_path))}' with utf-8 encoding, trying windows-1252...",
             )
             with open(full_path, "r", encoding="windows-1252") as file:
                 content = yaml.safe_load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
 
-    def __get_wildcards_in_text_file(self, full_path, base):
+    def __get_wildcards_in_text_file(self, full_path: Path, base: Path):
         """
         Get all wildcards in a text file.
 
         Args:
-            full_path (str): The path to the file.
-            base (str): The base path for the wildcards.
+            full_path (Path): The path to the file.
+            base (Path): The base path for the wildcards.
         """
-        external_key: str = os.path.relpath(os.path.splitext(full_path)[0], base)
-        external_key_parts = external_key.split(os.sep)
+        external_key_parts = list(full_path.with_suffix("").relative_to(base).parts)
         try:
             with open(full_path, "r", encoding="utf-8") as file:
                 text_content = map(lambda x: x.strip("\n\r"), file.readlines())
@@ -488,7 +500,7 @@ class PPPWildcards:
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Could not read file '{escape_single_quotes(full_path)}' with utf-8 encoding, trying windows-1252...",
+                f"Could not read file '{escape_single_quotes(str(full_path))}' with utf-8 encoding, trying windows-1252...",
             )
             with open(full_path, "r", encoding="windows-1252") as file:
                 text_content = map(lambda x: x.strip("\n\r"), file.readlines())
@@ -496,30 +508,29 @@ class PPPWildcards:
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
         self.__add_wildcard(text_content, full_path, external_key_parts)
 
-    def __get_wildcards_in_path(self, base: str, path: str):
+    def __get_wildcards_in_path(self, base: Path, path: Path):
         """
         Get all wildcards in a path.
 
         Args:
-            base (str): The base path for the wildcards.
-            path (str): The path (folder or file).
+            base (Path): The base path for the wildcards.
+            path (Path): The path (folder or file).
         """
-        if not os.path.exists(path):
+        if not path.exists():
             log(
                 self.__logger,
                 self.__debug_level,
                 logging.WARNING,
-                f"Wildcard path '{escape_single_quotes(path)}' does not exist!",
+                f"Wildcard path '{escape_single_quotes(str(path))}' does not exist!",
             )
             return
-        if os.path.isfile(path):
+        if path.is_file():
             self.__get_wildcards_in_file(base, path)
             return
-        for filename in os.listdir(path):
-            full_path = os.path.abspath(os.path.join(path, filename))
-            if os.path.basename(full_path).startswith("."):
+        for child in path.iterdir():
+            if child.name.startswith("."):
                 continue
-            self.__get_wildcards_in_path(base, full_path)
+            self.__get_wildcards_in_path(base, child)
 
     def set_wildcard_default_filter(self, wildcard_key: str, filter_options: Optional[list[list[str]]]):
         """

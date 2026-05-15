@@ -1,7 +1,7 @@
 import dataclasses
 from enum import Enum
 import logging
-import os
+from pathlib import Path
 import re
 import time
 from typing import Any, Callable, Optional
@@ -47,7 +47,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         version_str = "0.0.0"
         try:
-            pyproject_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pyproject.toml")
+            pyproject_path = Path(__file__).resolve().parent / "pyproject.toml"
             with open(pyproject_path, "r", encoding="utf-8") as file:
                 for line in file:
                     if line.startswith("version = "):
@@ -285,7 +285,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def __load_config_and_detect(self, env_info: dict[str, Any]) -> HostConfig:
         """Loads config files, performs model detection, and returns the resolved host config."""
-        default_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml.defaults")
+        default_config_file = str(Path(__file__).resolve().parent / "ppp_config.yaml.defaults")
         try:
             with open(default_config_file, "r", encoding="utf-8") as f:
                 default_raw: dict[str, Any] = yaml.safe_load(f)
@@ -312,13 +312,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         import folder_paths  # type: ignore
 
                         user_dir = folder_paths.get_user_directory()
-                        if user_dir and os.path.isdir(user_dir):
-                            user_config_file = os.path.join(user_dir, "default", "ppp_config.yaml")
+                        if user_dir and Path(user_dir).is_dir():
+                            user_config_file = str(Path(user_dir) / "default" / "ppp_config.yaml")
                     except Exception:  # pylint: disable=broad-exception-caught
                         self.log(logging.WARNING, "Failed to get user directory for PPP config.")
-                if not user_config_file or not os.path.exists(user_config_file):
-                    user_config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ppp_config.yaml")
-            if user_config_file and os.path.exists(user_config_file):
+                if not user_config_file or not Path(user_config_file).exists():
+                    user_config_file = str(Path(__file__).resolve().parent / "ppp_config.yaml")
+            if user_config_file and Path(user_config_file).exists():
                 with open(user_config_file, "r", encoding="utf-8") as f:
                     user_raw = yaml.safe_load(f)
                 user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
@@ -374,7 +374,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             model_class = get_model_class_from_filename(model_name)
             if model_class:
                 env_info["model_class"] = model_class
-                self.log(logging.DEBUG, f"Detected model class '{model_class}' from filename '{model_name}'", min_level=DEBUG_LEVEL.minimal)
+                self.log(
+                    logging.DEBUG,
+                    f"Detected model class '{model_class}' from filename '{model_name}'",
+                    min_level=DEBUG_LEVEL.minimal,
+                )
         app = env_info.get("app", "")
         for m in self.known_models:
             env_info["is_" + m] = False
@@ -620,8 +624,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         vs.set_system("_sdfullname", model_filename)  # deprecated
         vs.set_system("_modelfullname", model_filename)
         vs.set_system("_modelinfo", f"{self.state.env_info.get('model_class', '')}@{model_filename}")
-        vs.set_system("_sdname", os.path.basename(model_filename))  # deprecated
-        vs.set_system("_modelname", os.path.basename(model_filename))
+        vs.set_system("_sdname", Path(model_filename).name)  # deprecated
+        vs.set_system("_modelname", Path(model_filename).name)
         vs.set_system("_modelclass", self.state.env_info.get("model_class", ""))
         is_models = {}
         for model_name, model_type_and_substrings in self.variants_definitions.items():

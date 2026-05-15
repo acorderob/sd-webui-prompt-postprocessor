@@ -44,6 +44,7 @@ class ONWARNING_CHOICES(Enum):
     warn = "warn"
     stop = "stop"
 
+
 # ------------------- Host configuration -------------------
 
 AttentionOption = Literal["ok", "parentheses", "disable", "remove", "error"]
@@ -172,7 +173,9 @@ class PPPConfig(BaseModel):
             raise ValueError("At least one of 'hosts' or 'models' must be specified")
         return self
 
+
 # ------------------- State object -------------------
+
 
 @dataclass(frozen=True)
 class PPPStateOptions:
@@ -220,6 +223,7 @@ class PPPStateOptions:
             object.__setattr__(self, "cup_extranetwork_tags", False)
             object.__setattr__(self, "cup_merge_attention", False)
             object.__setattr__(self, "cup_remove_extranetwork_tags", False)
+
 
 class CyclicalSamplerState:
     """Maintains the cycling position for '@' choice samplers across process_prompt calls."""

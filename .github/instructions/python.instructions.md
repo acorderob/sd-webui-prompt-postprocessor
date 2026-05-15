@@ -1,12 +1,14 @@
 ---
-description: "Use when writing, editing, or reviewing Python code. Enforces Python 3.10 compatibility — avoid syntax and stdlib features introduced in 3.11 or later."
+description: "Use when writing, editing, or reviewing Python code."
 applyTo: "**/*.py"
 ---
-# Python 3.10 Compatibility
+# Python code
+
+## Python 3.10 Compatibility
 
 All Python code must be compatible with Python 3.10. Do not use language features or standard-library additions introduced in 3.11 or later.
 
-## Forbidden (3.11+)
+### Forbidden (3.11+)
 
 | Avoid | Use instead |
 |-------|-------------|
@@ -18,7 +20,7 @@ All Python code must be compatible with Python 3.10. Do not use language feature
 | `except*` / `ExceptionGroup` | Not available; raise/catch normally |
 | `asyncio.TaskGroup`, `asyncio.timeout()` | `asyncio.gather()` / `asyncio.wait_for()` |
 
-## Forbidden (3.12+)
+### Forbidden (3.12+)
 
 | Avoid | Use instead |
 |-------|-------------|
@@ -27,7 +29,7 @@ All Python code must be compatible with Python 3.10. Do not use language feature
 | `@typing.override` | Omit or use comment |
 | `itertools.batched()` | Manual chunking or `more-itertools` |
 
-## Safe to use (available in 3.10)
+### Safe to use (available in 3.10)
 
 - `match`/`case` structural pattern matching
 - `X | Y` union type syntax in annotations (e.g., `int | None`)
@@ -35,3 +37,7 @@ All Python code must be compatible with Python 3.10. Do not use language feature
 - `list[int]`, `dict[str, int]` — built-in generic aliases
 - `zip(..., strict=True)`
 - `str.removeprefix()` / `str.removesuffix()`
+
+## Paths
+
+Use `pathlib.Path` for filesystem paths instead of `str` paths or `os.path`.

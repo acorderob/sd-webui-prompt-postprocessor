@@ -1,6 +1,6 @@
 import ast
 import logging
-import os
+from pathlib import Path
 import re
 import textwrap
 import time
@@ -92,7 +92,7 @@ def warn_or_stop(state: PPPState, is_negative: bool, message: str, e: Exception 
 
 def load_grammar() -> str:
     # Process with lark (debug with https://www.lark-parser.org/ide/)
-    grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammar.lark")
+    grammar_filename = Path(__file__).resolve().parent / "grammar.lark"
     with open(grammar_filename, "r", encoding="utf-8") as file:
         grammar_content = file.read()
     return grammar_content
@@ -197,6 +197,7 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
         )
     return "\n".join(result_lines)
 
+
 def get_model_class_from_filename(filename: str) -> str:
     try:
         import folder_paths  # type: ignore
@@ -208,9 +209,11 @@ def get_model_class_from_filename(filename: str) -> str:
 
     if not filename:
         return ""
-    full_path = folder_paths.get_full_path("checkpoints", filename)
-    if not full_path:
-        full_path = folder_paths.get_full_path("diffusion_models", filename)
+    full_path = (
+        folder_paths.get_full_path("diffusion_models", filename)
+        or folder_paths.get_full_path("checkpoints", filename)
+        or folder_paths.get_full_path("unet", filename)
+    )
     if not full_path or not full_path.lower().endswith((".safetensors", ".sft")):
         return ""
     try:

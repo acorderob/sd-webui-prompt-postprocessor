@@ -1,6 +1,6 @@
-import os
+from pathlib import Path
 
-requirements_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "requirements.txt")
+requirements_filename = str(Path(__file__).resolve().parent / "requirements.txt")
 
 try:
     from modules.launch_utils import requirements_met, run_pip  # A1111

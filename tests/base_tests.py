@@ -1,7 +1,7 @@
 from dataclasses import replace
 import difflib
-import os
 import logging
+from pathlib import Path
 from typing import Any, NamedTuple, Optional
 import unittest
 import datetime
@@ -91,8 +91,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.wildcards_obj.refresh_wildcards(
             DEBUG_LEVEL.full,
             [
-                os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards")),
-                os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards2")),
+                Path(__file__).parent / "wildcards",
+                Path(__file__).parent / "wildcards2",
             ],
             """
             yaml_input:
@@ -104,11 +104,11 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         )
         self.extranetwork_maps_obj.refresh_extranetwork_mappings(
             DEBUG_LEVEL.full,
-            [os.path.abspath(os.path.join(os.path.dirname(__file__), "enmappings"))],
+            [Path(__file__).parent / "enmappings"],
             """
             """,
         )
-        grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
+        grammar_filename = Path(__file__).resolve().parent.parent / "grammar.lark"
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
 
@@ -201,8 +201,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         interrupted: bool = False,
         combinatorial: bool = False,
         combinatorial_limit: int = 0,
-        specific_wc_folders: Optional[list[str]] = None,
-        specific_em_folders: Optional[list[str]] = None,
+        specific_wc_folders: Optional[list[Path]] = None,
+        specific_em_folders: Optional[list[Path]] = None,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
@@ -215,8 +215,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             interrupted (bool, optional): The interrupted flag. Defaults to False.
             combinatorial (bool, optional): The combinatorial flag. Defaults to False.
             combinatorial_limit (int, optional): The combinatorial limit. Defaults to 0.
-            specific_wc_folders (Optional[list[str]], optional): A list of specific wildcard folders to refresh. Defaults to None.
-            specific_em_folders (Optional[list[str]], optional): A list of specific extranetwork mapping folders to refresh. Defaults to None.
+            specific_wc_folders (Optional[list[Path]], optional): A list of specific wildcard folders to refresh. Defaults to None.
+            specific_em_folders (Optional[list[Path]], optional): A list of specific extranetwork mapping folders to refresh. Defaults to None.
 
         Returns:
             None

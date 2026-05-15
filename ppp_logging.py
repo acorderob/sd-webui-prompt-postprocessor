@@ -54,7 +54,7 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
             colored_record.levelname = f"{seq}{levelname:8s}{self.COLORS['RESET']}"
             return super().format(colored_record)
 
-    def __init__(self, filename = None):
+    def __init__(self, filename=None):
         """
         Initializes the PromptPostProcessor class.
 
@@ -98,7 +98,16 @@ class PromptPostProcessorLogCustomAdapter(logging.LoggerAdapter):
         """
         return f"[PPP] {msg}", kwargs
 
-def log(logger: logging.Logger, debug_level: DEBUG_LEVEL, kind: int, message: str, min_level: DEBUG_LEVEL | None = None, formatted: bool = True, exc_info: bool = False):
+
+def log(
+    logger: logging.Logger,
+    debug_level: DEBUG_LEVEL,
+    kind: int,
+    message: str,
+    min_level: DEBUG_LEVEL | None = None,
+    formatted: bool = True,
+    exc_info: bool = False,
+):
     if logger:
         if min_level is None:
             if kind == logging.DEBUG:

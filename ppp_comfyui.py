@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 import folder_paths  # type: ignore
@@ -17,7 +18,7 @@ if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
 
 
-def _resolve_wildcards_folders(override: str = "") -> list[str]:
+def _resolve_wildcards_folders(override: str = "") -> list[Path]:
     """Return the resolved list of wildcard folder paths."""
     folders_str = override
     if folders_str == "":
@@ -33,13 +34,13 @@ def _resolve_wildcards_folders(override: str = "") -> list[str]:
     if folders_str == "":
         folders_str = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
     return [
-        (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
+        (Path(f) if Path(f).is_absolute() else (Path(folder_paths.models_dir) / f).resolve())
         for f in folders_str.split(",")
         if f.strip() != ""
     ]
 
 
-def _resolve_enmappings_folders(override: str = "") -> list[str]:
+def _resolve_enmappings_folders(override: str = "") -> list[Path]:
     """Return the resolved list of extra-network mapping folder paths."""
     folders_str = override
     if folders_str == "":
@@ -51,7 +52,7 @@ def _resolve_enmappings_folders(override: str = "") -> list[str]:
     if folders_str == "":
         folders_str = os.getenv("EXTRANETWORKMAPPINGS_DIR", PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER)
     return [
-        (f if os.path.isabs(f) else os.path.abspath(os.path.join(folder_paths.models_dir, f)))
+        (Path(f) if Path(f).is_absolute() else (Path(folder_paths.models_dir) / f).resolve())
         for f in folders_str.split(",")
         if f.strip() != ""
     ]
@@ -67,7 +68,7 @@ class PromptPostProcessorComfyUINode:
     def __init__(self):
         lf = PromptPostProcessorLogFactory()
         self.logger = lf.log
-        grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "grammar.lark")
+        grammar_filename = Path(__file__).resolve().parent / "grammar.lark"
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.wildcards_obj = PPPWildcards(lf.log)
@@ -438,7 +439,7 @@ class PromptPostProcessorComfyUINode:
         results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
         self.ppp.process_prompts_group_end()
 
-        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs", "last_prompts_comfyui.txt"), "w", encoding="utf-8") as f:
+        # with open(Path(__file__).parent / "logs" / "last_prompts_comfyui.txt", "w", encoding="utf-8") as f:
         #     f.write(f"Seed: {seed if seed is not None else 1}\n")
         #     f.write(f"In Positive: {pos_prompt}\n")
         #     f.write(f"In Negative: {neg_prompt}\n")

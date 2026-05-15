@@ -37,7 +37,12 @@ class TreeProcessor(lark.visitors.Interpreter):
     AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
     NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
 
-    def __init__(self, state: PPPState, rng: np.random.Generator, on_model_info_update: Optional[Callable[[], None]] = None):
+    def __init__(
+        self,
+        state: PPPState,
+        rng: np.random.Generator,
+        on_model_info_update: Optional[Callable[[], None]] = None,
+    ):
         super().__init__()
         self.state = state
         self.__on_model_info_update = on_model_info_update
@@ -1235,16 +1240,14 @@ class TreeProcessor(lark.visitors.Interpreter):
         start_result = self.__result
         settable_sysvars = {"_modelfullname": "model_filename", "_modelclass": "model_class"}
         if self.state.variables.name_is_system(variable_name):
-            if (variable_name not in settable_sysvars and variable_name != "_modelinfo"):
+            if variable_name not in settable_sysvars and variable_name != "_modelinfo":
                 self.warn_or_stop(
                     f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
                 )
                 return
             app = self.state.env_info.get("app", "")
             if app not in (SUPPORTED_APPS.comfyui.value, SUPPORTED_APPS.tests.value):
-                self.warn_or_stop(
-                    f"Setting '{escape_single_quotes(variable_name)}' is only supported in ComfyUI."
-                )
+                self.warn_or_stop(f"Setting '{escape_single_quotes(variable_name)}' is only supported in ComfyUI.")
                 return
             evaluated = self.__visit(content, restore_state=False, discard_content=True)
             if variable_name == "_modelinfo":

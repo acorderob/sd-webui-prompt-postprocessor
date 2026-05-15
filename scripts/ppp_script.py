@@ -61,9 +61,10 @@ class PromptPostProcessorA1111Script(scripts.Script):
         Returns:
             None
         """
+        super().__init__()
         self.instance_index = self.increment_instance_count()
         self.name = PromptPostProcessor.NAME
-        grammar_filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../grammar.lark")
+        grammar_filename = Path(__file__).resolve().parent.parent / "grammar.lark"
         with open(grammar_filename, "r", encoding="utf-8") as file:
             self.grammar_content = file.read()
         self.ppp_logger = None
@@ -311,7 +312,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
         wildcards_folders = [
-            (f if os.path.isabs(f) else os.path.abspath(os.path.join(models_path, f)))
+            (Path(f) if Path(f).is_absolute() else (Path(models_path) / f).resolve())
             for f in wc_wildcards_folders.split(",")
             if f.strip() != ""
         ]
@@ -322,7 +323,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 PPPExtraNetworkMappings.DEFAULT_ENMAPPINGS_FOLDER,
             )
         enmappings_folders = [
-            (f if os.path.isabs(f) else os.path.abspath(os.path.join(models_path, f)))
+            (Path(f) if Path(f).is_absolute() else (Path(models_path) / f).resolve())
             for f in en_mappings_folders.split(",")
             if f.strip() != ""
         ]
@@ -383,11 +384,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
         regular_type = "regular"
         rpr: list[str] = getattr(p, "all_prompts", None)
         rnr: list[str] = getattr(p, "all_negative_prompts", None)
-        regular_exists = rpr is not None and rnr is not None
+        regular_exists = bool(rpr) and bool(rnr)
         hiresfix_type = "hiresfix"
         rph: list[str] = getattr(p, "all_hr_prompts", None)
         rnh: list[str] = getattr(p, "all_hr_negative_prompts", None)
-        hiresfix_exists = rph is not None and rnh is not None
+        hiresfix_exists = bool(rph) and bool(rnh)
         for i in range(len(calculated_seeds)):
             if regular_exists:
                 prompts_list[(regular_type, i)] = None
@@ -461,7 +462,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 prompts_list[(prompttype, typeindex)] = cached
         ppp.process_prompts_group_end()
 
-        # with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "logs", f"last_prompts_{app.value}.txt"), "w", encoding="utf-8") as f:
+        # with open(Path(__file__).parent.parent / "logs" / f"last_prompts_{app.value}.txt", "w", encoding="utf-8") as f:
         #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():
         #         f.write(f"Key: {prompttype}[{typeindex}]\n")
         #         f.write(f"Seed: {calculated_seeds[typeindex]}\n")
