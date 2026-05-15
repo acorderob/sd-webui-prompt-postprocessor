@@ -285,7 +285,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def __load_config_and_detect(self, env_info: dict[str, Any]) -> HostConfig:
         """Loads config files, performs model detection, and returns the resolved host config."""
-        default_config_file = str(Path(__file__).resolve().parent / "ppp_config.yaml.defaults")
+        main_folder = Path(__file__).resolve().parent
+        default_config_file = str(main_folder / "ppp_config.yaml.defaults")
         try:
             with open(default_config_file, "r", encoding="utf-8") as f:
                 default_raw: dict[str, Any] = yaml.safe_load(f)
@@ -317,7 +318,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     except Exception:  # pylint: disable=broad-exception-caught
                         self.log(logging.WARNING, "Failed to get user directory for PPP config.")
                 if not user_config_file or not Path(user_config_file).exists():
-                    user_config_file = str(Path(__file__).resolve().parent / "ppp_config.yaml")
+                    user_config_file = str(main_folder / "ppp_config.yaml")
             if user_config_file and Path(user_config_file).exists():
                 with open(user_config_file, "r", encoding="utf-8") as f:
                     user_raw = yaml.safe_load(f)
@@ -399,7 +400,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """Called when _modelfullname or _modelclass are set via a prompt command."""
         self.__run_model_detection(self.state.env_info)
         self.__init_sysvars()
-        self.log(logging.INFO, f"Updated system variables: {self.state.variables.get_all_system()}")
+        self.log(logging.INFO, f"Updated system variables: {self.state.variables.all_system}")
 
     def update(
         self,
@@ -576,6 +577,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             result,
         )
 
+    @property
     def envinfo_hash(self) -> str:
         """
         Generates a hash string based on the environment information.
@@ -585,6 +587,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         return hash(tuple(sorted(self.state.env_info.items())))
 
+    @property
     def options_hash(self) -> str:
         """
         Generates a hash string based on the options.
@@ -940,7 +943,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
 
-        v = self.state.variables.get_all_system()
+        v = self.state.variables.all_system
         v.update(variables)
         return prompt, negative_prompt, v
 
@@ -1004,7 +1007,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
-        self.log(logging.INFO, f"System variables: {self.state.variables.get_all_system()}")
+        self.log(logging.INFO, f"System variables: {self.state.variables.all_system}")
         self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
 
     def process_prompt(

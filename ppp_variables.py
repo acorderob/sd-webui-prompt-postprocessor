@@ -46,7 +46,8 @@ class VariableRepository:
         """Remove all system variables."""
         self._system.clear()
 
-    def get_all_system(self) -> dict[str, Any]:
+    @property
+    def all_system(self) -> dict[str, Any]:
         """Return a shallow copy of all system variables."""
         return self._system.copy()
 
@@ -98,6 +99,7 @@ class VariableRepository:
             return self._system.get(name, default)
         return self._user.get(name, default)
 
+    @property
     def all_user_or_echoed_keys(self) -> set[str]:
         """Return the union of user-variable and echoed-variable keys."""
         return set(self._user.keys()) | set(self._echoed.keys())

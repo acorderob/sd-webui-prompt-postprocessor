@@ -364,7 +364,7 @@ The operands can be a variable (`variable`, `array[]`, `array[index]`), a quoted
 
 When an operand is or contains a variable, it is resolved to the variable's current value before the operation.
 
-Variable values `true` and `false` are considered a boolean, and an all digits value is an integer. Except in substring operations indicated below.
+Variable values `true` and `false` are considered a boolean, and numeric content is an integer or float. Except in substring operations indicated below. String comparisons are case insensitive.
 
 The operation can be preceded by `not` for readability, instead of using it in the front.
 

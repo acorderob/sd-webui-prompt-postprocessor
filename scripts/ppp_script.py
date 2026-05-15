@@ -21,6 +21,7 @@ from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_cache import PPPLRUCache
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
+from ppp_common import load_grammar
 
 
 class PromptPostProcessorA1111Script(scripts.Script):
@@ -64,9 +65,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         super().__init__()
         self.instance_index = self.increment_instance_count()
         self.name = PromptPostProcessor.NAME
-        grammar_filename = Path(__file__).resolve().parent.parent / "grammar.lark"
-        with open(grammar_filename, "r", encoding="utf-8") as file:
-            self.grammar_content = file.read()
+        self.grammar_content = load_grammar()
         self.ppp_logger = None
         self.ppp_debug_level = DEBUG_LEVEL.none.value
         self.lru_cache = None
@@ -340,9 +339,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.wildcards_obj,
             self.extranetwork_mappings_obj,
         )
-        hash_fullenv = hash(
-            (ppp.envinfo_hash(), ppp.options_hash(), self.wildcards_obj, self.extranetwork_mappings_obj)
-        )
+        hash_fullenv = hash((ppp.envinfo_hash, ppp.options_hash, self.wildcards_obj, self.extranetwork_mappings_obj))
 
         if input_force_equal_seeds:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Forcing equal seeds")

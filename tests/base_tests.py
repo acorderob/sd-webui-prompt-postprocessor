@@ -11,6 +11,7 @@ from ppp_enmappings import PPPExtraNetworkMappings  # type: ignore
 from ppp_wildcards import PPPWildcards  # type: ignore
 from ppp import PromptPostProcessor  # type: ignore
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory  # type: ignore
+from ppp_common import load_grammar  # type: ignore
 
 
 class InputTuple(NamedTuple):
@@ -88,11 +89,12 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         self.interrupted = False
         self.wildcards_obj = PPPWildcards(self.lf.log)
         self.extranetwork_maps_obj = PPPExtraNetworkMappings(self.lf.log)
+        tests_folder = Path(__file__).parent
         self.wildcards_obj.refresh_wildcards(
             DEBUG_LEVEL.full,
             [
-                Path(__file__).parent / "wildcards",
-                Path(__file__).parent / "wildcards2",
+                tests_folder / "wildcards",
+                tests_folder / "wildcards2",
             ],
             """
             yaml_input:
@@ -104,13 +106,11 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         )
         self.extranetwork_maps_obj.refresh_extranetwork_mappings(
             DEBUG_LEVEL.full,
-            [Path(__file__).parent / "enmappings"],
+            [tests_folder / "enmappings"],
             """
             """,
         )
-        grammar_filename = Path(__file__).resolve().parent.parent / "grammar.lark"
-        with open(grammar_filename, "r", encoding="utf-8") as file:
-            self.grammar_content = file.read()
+        self.grammar_content = load_grammar()
 
     def interrupt(self):
         self.interrupted = True

@@ -172,7 +172,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         return results
 
     def __finalize_echoed_variables(self):
-        var_keys = self.state.variables.all_user_or_echoed_keys()
+        var_keys = self.state.variables.all_user_or_echoed_keys
         for k in var_keys:
             ev = self.state.variables.get_echoed_value(k)
             if ev is None:

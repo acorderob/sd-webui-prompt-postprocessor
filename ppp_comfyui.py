@@ -8,7 +8,7 @@ import nodes  # type: ignore
 
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
-from ppp_common import get_model_class_from_filename
+from ppp_common import get_model_class_from_filename, load_grammar
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
 from ppp_wildcards import PPPWildcards
@@ -68,9 +68,7 @@ class PromptPostProcessorComfyUINode:
     def __init__(self):
         lf = PromptPostProcessorLogFactory()
         self.logger = lf.log
-        grammar_filename = Path(__file__).resolve().parent / "grammar.lark"
-        with open(grammar_filename, "r", encoding="utf-8") as file:
-            self.grammar_content = file.read()
+        self.grammar_content = load_grammar()
         self.wildcards_obj = PPPWildcards(lf.log)
         self.extranetwork_mappings_obj = PPPExtraNetworkMappings(lf.log)
         self.ppp: PromptPostProcessor | None = None
