@@ -7,6 +7,7 @@ import nodes  # type: ignore
 
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
+from ppp_common import get_model_class_from_filename
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
 from ppp_wildcards import PPPWildcards
@@ -310,6 +311,15 @@ class PromptPostProcessorComfyUINode:
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
         ) or ""
+        if modelclass == "":
+            modelclass = get_model_class_from_filename(modelname)
+            if modelclass:
+                log(
+                    self.logger,
+                    DEBUG_LEVEL.minimal,
+                    logging.DEBUG,
+                    f"Detected model class '{modelclass}' from filename '{modelname}'",
+                )
         if modelclass == "":
             log(
                 self.logger,

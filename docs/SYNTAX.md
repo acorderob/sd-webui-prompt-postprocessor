@@ -41,7 +41,7 @@ The construct parameters can be written with the following options (all are opti
 * `r`: means it allows repetition of the choices.
 * `o`: means it is optional, and no error will be raised if there are no choices to select from.
 * `n` or `n-m` or `n-` or `-m`: number or range of choices to select. Allows zero as the start of a range. Default is 1.
-* `'description'`: optional description (quoted), only valid in wildcard definitions. Used only in the Wildcards Concat node in ComfyUI.
+* `'description'`: optional description (quoted), only valid in wildcard definitions. Used only in the Wildcards Concat node in *ComfyUI*.
 * `$$sep`: separator when multiple choices are selected. Default is set in settings.
 * `$$`: end of the parameters (not optional if any parameters).
 
@@ -71,10 +71,10 @@ These are examples of formats you can use to insert a choice construct:
 | `{o$$if _is_sd1::choice1\|if _is_sd2::choice2}`   | select 1 choice, both have conditions, if none matches it is allowed because we indicate that it is optional                          |
 | `{choice1\|choice2\|%0.5::include path/wildcard}` | select 1 choice from the two specified and the ones inside the path/wildcard wildcard, which will be weighted with half their weights |
 
-Notes:
-
-* The *Dynamic Prompts* format `{2$$__flavours__}` does not work as expected because the wildcard is considered only one possible choice (it will only output one value). You can write it instead as a wildcard with parameters `__2$$flavours__`.
-* Whitespace around the choices is not ignored like in *Dynamic Prompts*, but will be cleaned up if the appropriate cleaning settings are selected.
+> [!NOTE]
+> The *Dynamic Prompts* format `{2$$__flavours__}` does not work as expected because the wildcard is considered only one possible choice (it will only output one value). You can write it instead as a wildcard with parameters `__2$$flavours__`.
+>
+> Whitespace around the choices is not ignored like in *Dynamic Prompts*, but will be cleaned up if the appropriate cleaning settings are selected.
 
 ## Wildcards
 
@@ -82,7 +82,8 @@ The generic format is: `__parameters$$wildcard'filter'(var=value)__`
 
 The parameters, the filter, and the setting of a variable are optional. The parameters follow the same format as for the choices.
 
-Wildcards cannot be used inside an extranetwork tag (because some LoRA names contain double underscores). If you need to choose from multiple LoRAs put the whole extranetwork tag inside a wildcard, or use choices.
+> [!WARNING]
+> Wildcards cannot be used inside an extranetwork tag (because some LoRA names contain double underscores). If you need to choose from multiple LoRAs put the whole extranetwork tag inside a wildcard, or use choices.
 
 ### Identifier
 
@@ -174,13 +175,15 @@ A choice inside a wildcard can also be a list or a dictionary of one element con
 
 Remember you can use the include command on choices to compose a wildcard from other wildcards' choices.
 
-Note: the files should have UTF-8 encoding. The extension will also try with windows-1252 if that fails.
+> [!IMPORTANT]
+> The files should have UTF-8 encoding. The extension will also try with windows-1252 if that fails.
 
 Wildcard definitions are reloaded automatically on each generation if they change.
 
 ### Detection of remaining wildcards
 
-This extension should run after any other wildcard extensions, so if you don't use the internal wildcards processing, any remaining wildcards present in the prompt or negative_prompt at this point must be invalid. Usually you might not notice this problem until you check the image metadata, so this option gives you some ways to detect and treat the problem.
+> [!IMPORTANT]
+> This extension should run after any other wildcard extensions, so if you don't use the internal wildcards processing, any remaining wildcards present in the prompt or negative_prompt at this point must be invalid. Usually you might not notice this problem until you check the image metadata, so this option gives you some ways to detect and treat the problem.
 
 ## Set Wildcard Default Filter command
 
@@ -205,26 +208,25 @@ All these variables can be used to output content or behave differently based on
 
 Names starting with an underscore are reserved for system variables:
 
-| System variable    | Value                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------------    | -----                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `_model`           | the loaded model identifier (`sd1`, `sd2`, `sdxl`, `sd3`, `flux`, `auraflow`). `_sd` also works but is deprecated.                                                                                                                                                                                                                                                                                                                             |
-| `_modelname`       | the loaded model filename (without path). `_sdname` also works but is deprecated.                                                                                                                                                                                                                                                                                                                                                              |
-| `_modelfullname`   | the loaded model filename (with path). `_sdfullname` also works but is deprecated. In ComfyUI this variable can also be **set** to override the filename used for model detection (see below).                                                                                                                                                                                                                                                 |
-| `_modelclass`      | the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. In ComfyUI this variable can also be **set** to override the class used for model detection (see below). |
-| `_modelinfo`       | Contains both class and model full name separated with `@`. In ComfyUI can be set to change both `_modelfullname` and `_modelclass` at once (see below).                                                                                                                                                                                                                                                                                       |
-| `_is_sd`           | true if the loaded model version is any version of SD                                                                                                                                                                                                                                                                                                                                                                                          |
-| `_is_sd1`          | true if the loaded model version is SD 1.x                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `_is_sd2`          | true if the loaded model version is SD 2.x                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `_is_sdxl`         | true if the loaded model version is SDXL (includes Pony models)                                                                                                                                                                                                                                                                                                                                                                                |
-| `_is_sd3`          | true if the loaded model version is SD 3.x                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `_is_flux`         | true if the loaded model is Flux                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `_is_auraflow`     | true if the loaded model is AuraFlow                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `_is_ssd`          | true if the loaded model version is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                                                                                                                                |
-| `_is_sdxl_no_ssd`  | true if the loaded model version is SDXL and not an SSD model.                                                                                                                                                                                                                                                                                                                                                                                 |
-| `_is_sdxl_no_pony` | true if the loaded model version is SDXL and not a Pony model (the `pony` variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                                                                                                                         |
-| `_is_vvvv`         | true if the loaded model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                                                                                                                       |
-| `_is_pure_kkkk`    | true if the loaded model is of kind *kkkk* (f.e. sdxl) and not a variant.                                                                                                                                                                                                                                                                                                                                                                      |
-| `_is_variant_kkkk` | true if the loaded model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                                                                                                                      |
+| System variable    | Value                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------    | -----                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `_model`           | the model identifier (`sd1`, `sd2`, `sdxl`, `sd3`, `flux`, `auraflow`). `_sd` also works but is deprecated.                                                                                                                                                                                                                                                                                                                                      |
+| `_modelname`       | the model filename (without path). `_sdname` also works but is deprecated.                                                                                                                                                                                                                                                                                                                                                                       |
+| `_modelfullname`   | the model filename (with path). `_sdfullname` also works but is deprecated. In *ComfyUI* this variable can also be **set** to override the filename used for model detection (see below).                                                                                                                                                                                                                                                        |
+| `_modelclass`      | the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. In *ComfyUI* this variable can also be **set** to override the class used for model detection (see below). |
+| `_modelinfo`       | Contains both class and model full name separated with `@`. In *ComfyUI* can be set to change both `_modelfullname` and `_modelclass` at once (see below).                                                                                                                                                                                                                                                                                       |
+| `_is_kkkk`         | true if the model is of kind *kkkk* (the model identifier, f.e. sdxl; those set in the ppp_config.yaml file)                                                                                                                                                                                                                                                                                                                                     |
+| `_is_vvvv`         | true if the model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                                                                                                                                |
+| `_is_pure_kkkk`    | true if the model is of kind *kkkk* and not a variant.                                                                                                                                                                                                                                                                                                                                                                                           |
+| `_is_variant_kkkk` | true if the model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                                                                                                                               |
+| `_is_sd`           | true if the model is any version of SD                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `_is_ssd`          | true if the model is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                                                                                                                                                 |
+| `_is_sdxl_no_ssd`  | true if the model is SDXL and not an SSD model.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `_is_sdxl_no_pony` | true if the model is SDXL and not a Pony model (the `pony` variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                                                                                                                                          |
+| `_opt_...`         | All the options.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+> [!NOTE]
+> The model path is relative to the checkpoint/difussion_models folder, just as it appears in the load nodes.
 
 ## Set command
 
@@ -262,14 +264,19 @@ System variables cannot be set, except in some cases (see next point).
 
 ### Overriding model information from the prompt (ComfyUI only)
 
-In ComfyUI, `_modelfullname`, `_modelclass`, and `_modelinfo` can be **set** from the prompt using the `set` command or `${}` syntax. Setting any of them triggers a re-evaluation of all `_is_*` system variables, so conditions that come later in the prompt will reflect the new values.
+In *ComfyUI*, `_modelfullname`, `_modelclass`, and `_modelinfo` can be **set** from the prompt using the `set` command or `${}` syntax. Setting any of them triggers a re-evaluation of all `_is_*` system variables, so conditions that come later in the prompt will reflect the new values.
 
-This is useful in workflows where the model information is not passed through the standard ComfyUI model input but is known at prompt time. And the `_modelfullname` variable can be extracted later by using the Select Variable node to actually load that model.
+This is useful in workflows where the model information is not passed through the standard *ComfyUI* model input but is known at prompt time. And the `_modelfullname` variable can be extracted later by using the Select Variable node to actually load that model.
 
 `_modelinfo` is a shorthand that sets both `_modelfullname` and `_modelclass` in a single call. Its value must use the format `<class>@<filename>`:
 
+If a class is not specified (either in the `_modelinfo` or in `_modelclass`) but a the modelname is, it will try to detect the class from the file.
+
+Model filename is relative to the specific model folder (checkpoints, diffusion_models).
+
 ```text
 ${_modelinfo=Flux@fluxmodel.safetensors}
+${_modelinfo=@fluxmodel.safetensors}
 ```
 
 Or individually:
@@ -278,7 +285,8 @@ Or individually:
 ${_modelclass=Flux}${_modelfullname=fluxmodel.safetensors}
 ```
 
-Attempting to set these variables in any other host will trigger a warning or error depending on the **What to do on invalid content warnings?** setting.
+> [!WARNING]
+> Attempting to set these variables in any other host will trigger a warning or error depending on the **What to do on invalid content warnings?** setting.
 
 ## Echo command
 

@@ -27,7 +27,7 @@ from ppp_variables import VariableRepository
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes
-from ppp_common import load_grammar, parse_prompt, preprocess_grammar, warn_or_stop
+from ppp_common import get_model_class_from_filename, load_grammar, parse_prompt, preprocess_grammar, warn_or_stop
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
 
@@ -369,6 +369,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """Updates the is_* model detection flags in env_info based on model_class."""
         prop_base = env_info.get("property_base", None)
         model_class = env_info.get("model_class", "")
+        model_name = env_info.get("model_filename", "")
+        if not model_class and model_name and env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
+            model_class = get_model_class_from_filename(model_name)
+            if model_class:
+                env_info["model_class"] = model_class
+                self.log(logging.DEBUG, f"Detected model class '{model_class}' from filename '{model_name}'", min_level=DEBUG_LEVEL.minimal)
         app = env_info.get("app", "")
         for m in self.known_models:
             env_info["is_" + m] = False
@@ -377,7 +383,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             model_detect_for_app: ModelDetectConfig | None = model_detect.get(app)
             if model_detect_for_app is not None:
                 cls_list = model_detect_for_app.class_ or []
-                if model_class in cls_list:
+                if model_class and model_class in cls_list:
                     env_info["is_" + m] = True
                 elif model_detect_for_app.property is not None and prop_base is not None:
                     prop = model_detect_for_app.property

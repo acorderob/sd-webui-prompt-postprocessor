@@ -19,7 +19,12 @@ These are some features:
 * Clean up the prompt of unnecessary separators or spaces.
 * Combinatorial mode.
 
-Note: when used in an *A1111* compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension). Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out. When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
+> [!NOTE]
+> When used in an *A1111* compatible webui, the extension must be loaded after any other extension that modifies the prompt (like another wildcards extension).
+>
+> Usually extensions load by their folder name in alphanumeric order, so if the extensions are not loading in the correct order just rename this extension's folder so the ordering works out.
+>
+> When in doubt, just rename this extension's folder with a "z" in front (for example) so that it is the last one to load, or manually set such folder name when installing it.
 
 If the extension runs before others, like Dynamic Prompts, and the "Process wildcards" option is enabled, the wildcards will be processed by PPP and those extensions will not get them. If you disable processing the wildcards, and you intend another extension to process them, you should keep the "What to do with remaining wildcards?" option as "ignore".
 
@@ -40,7 +45,8 @@ Notes:
     I also recommend a node to add LoRAs from the prompt, like:
         [LoRA Tag Loader for ComfyUI](https://github.com/badjeff/comfyui_lora_tag_loader)
 
-    In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
+    > [!WARNING]
+    > In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
 
     Does not recognize tokenizer separators like `TE2:` and `TE3:`, so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
 

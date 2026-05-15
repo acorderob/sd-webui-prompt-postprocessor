@@ -85,7 +85,7 @@ Then use `__colors_warm__` or `__colors_cold__`, or `__colors'warm'__` or `__col
 
 ## Prompt building
 
-You can create a complex set of wildcards that build a full prompt, by using the wildcards along with variables with default values. The variables allow you to choose what parts of the prompt you want to change for specific content, or just leave the defaults. Then, inside the UI, you can use styles (with an appropiate styles node if using ComfyUI) to choose which variables to set. This makes it easy to quickly select what do you want to prompt for.
+You can create a complex set of wildcards that build a full prompt, by using the wildcards along with variables with default values. The variables allow you to choose what parts of the prompt you want to change for specific content, or just leave the defaults. Then, inside the UI, you can use styles (with an appropiate styles node if using *ComfyUI*) to choose which variables to set. This makes it easy to quickly select what do you want to prompt for.
 
 Wildcards:
 
@@ -166,7 +166,10 @@ name,prompt,negative_prompt
 "Character","__character__",""
 ```
 
-You first select the styles that set the variables that you are interested in changing from the default, and you end with the main wildcard that uses them to build the prompt. Note that the order of the variables don't usually matter because they are only evaluated when echoed to the prompt. This allows you to use variables inside wildcards that are inside other variables, and only at the end they will be evaluated.
+You first select the styles that set the variables that you are interested in changing from the default, and you end with the main wildcard that uses them to build the prompt.
+
+> [!TIP]
+> The order of the variables don't usually matter because they are only evaluated when echoed to the prompt. This allows you to use variables inside wildcards that are inside other variables, and only at the end they will be evaluated.
 
 Sample style selections:
 
@@ -196,7 +199,7 @@ This would create this prompt:
 
 ## Using variables for detailer prompts
 
-This only applies to ComfyUI, because the variables cannot be used in the ADetailer prompts of the A1111 UIs.
+This only applies to *ComfyUI*, because the variables cannot be used in the ADetailer prompts of the A1111 UIs.
 
 You can put parts of the prompt to be set into variables, and then extract this variables from the output and use them in the prompts of the detailer nodes.
 
@@ -479,7 +482,7 @@ ${quality?=!__qualities__}
 
 ## Choosing the model from the prompt
 
-In ComfyUI, you can leave the model and modelname inputs disconnected and set the `_modelinfo` system variable (or `_modelfullname` and `_modelclass`) at the start of the prompt (maybe through a wildcard or a choice construct). Then extract the `_modelfullname` output variable using the `Select Variable` node and use its value to actually load that model.
+In *ComfyUI*, you can leave the model and modelname inputs disconnected and set the `_modelinfo` system variable (or `_modelfullname` and `_modelclass`) at the start of the prompt (maybe through a wildcard or a choice construct). Then extract the `_modelfullname` output variable using the `Select Variable` node and use its value to actually load that model.
 
 You can also set and extract user variables for other ksampler inputs, like sampler, scheduler, steps, cfg and latent size. The numeric ones will need to be transformed from string to int/float using some other node.
 

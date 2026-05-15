@@ -4,7 +4,7 @@
 
 The extension supports a configuration file `ppp_config.yaml` with some settings that don't usually change.
 
-By default this configuration is read from the file `ppp_config.yaml.defaults` in the extension folder. That file must not be modified. If you want to personalize any settings you should first copy it as `ppp_config.yaml` in the same folder, or in the ComfyUI user folder (preferred, but only possible in ComfyUI). The options in this new file will take precedence over those in the defaults file.
+By default this configuration is read from the file `ppp_config.yaml.defaults` in the extension folder. That file must not be modified. If you want to personalize any settings you should first copy it as `ppp_config.yaml` in the same folder, or in the *ComfyUI* user folder (preferred, but only possible in *ComfyUI*). The options in this new file will take precedence over those in the defaults file.
 
 This file contains some options for how the host applications (WebUIs) should act in certain operations, and also define the supported models, including how to detect them and the model variants definitions. Host names are fixed values (those supported by the extension). The defaults file contains comments to explain the available options.
 
@@ -25,7 +25,7 @@ The main node that processes the prompt.
 Inputs:
 
 * **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
-* **modelname**: Name of the model. Needed for the detection of model variants.
+* **modelname**: Filename of the model (with relative path). Needed for the detection of model variants.
 * **seed**: Connect here the seed used. By default it is -1 (random).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
 * **neg_prompt**: Connect here the negative prompt text, or fill it as a widget.
@@ -45,7 +45,9 @@ Inputs:
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 
-The model/modelname are also optional, but if you don't set them you will not be capable of changing content based on that. You can however set them from the prompt.
+The model and modelname are also optional, but if you don't set them you will not be capable of choosing content based on the model type or variant. Native model loader nodes do not output the filename, but there are custom nodes that do (like those from [ComfyUI Image Saver](https://github.com/alexopus/ComfyUI-Image-Saver)). And setting only the modelname will try to detect its class from the file contents.
+
+You can instead set them from the prompt and load the model afterwards.
 
 Outputs:
 
@@ -53,13 +55,17 @@ Outputs:
 * **neg_prompt**: the resulting negative prompt
 * **variables**: the dictionary of variables set or echoed.
 
-The outputs are lists, and in combinatorial mode there will be multiple elements that ComfyUI will process sequentially.
+The outputs are lists, and in combinatorial mode there will be multiple elements that *ComfyUI* will process sequentially.
 
 ### ACB PPP Select Variable node
 
 Lets you extract the variables used from the output (or just one of them). You can use this to send only part of the prompt to, for example, a detailer node. For example:
 
-With this prompt: `__quality__, 1girl, ${head:__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__` then you extract the `head` variable and use it as prompt for the head/face detailer.
+With this prompt:
+
+`__quality__, 1girl, ${head:__eyes__, __hair__, __expression__}, __body__, __clothes__, __background__, __style__`
+
+You can then extract the `head` variable and use it as prompt for the head/face detailer.
 
 Inputs:
 
@@ -72,7 +78,7 @@ Output:
 
 ### ACB PPP Wildcards Concat node
 
-This node lets you select up to 10 wildcards that will be concatenated with a chosen separator. You can't specify wildcard folders in the node, so use the other available options to set them.
+This node lets you select up to 10 wildcards that will be concatenated with a chosen separator. You can't specify wildcard folders in the node, so use the **extra_model_paths.yaml** options (see node below) to set them.
 
 Inputs:
 

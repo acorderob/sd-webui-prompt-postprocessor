@@ -196,3 +196,41 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
             f"Found {len(skip_current_block)} unclosed conditional directive(s) at the end of the grammar file"
         )
     return "\n".join(result_lines)
+
+def get_model_class_from_filename(filename: str) -> str:
+    try:
+        import folder_paths  # type: ignore
+        import comfy.utils  # type: ignore
+        import comfy.model_detection as model_detection  # type: ignore
+    except ImportError:
+        return ""
+    import json
+
+    if not filename:
+        return ""
+    full_path = folder_paths.get_full_path("checkpoints", filename)
+    if not full_path:
+        full_path = folder_paths.get_full_path("diffusion_models", filename)
+    if not full_path or not full_path.lower().endswith((".safetensors", ".sft")):
+        return ""
+    try:
+        header_bytes = comfy.utils.safetensors_header(full_path)
+        if header_bytes is None:
+            return ""
+        header = json.loads(header_bytes)
+
+        # Build a mock state dict — detection only needs key names and shapes
+        class _ShapeProxy:
+            def __init__(self, shape):
+                self.shape = shape
+
+            def __getitem__(self, i):
+                return self.shape[i]  # shape[i] access
+
+        mock_sd = {k: _ShapeProxy(v["shape"]) for k, v in header.items() if k != "__metadata__" and "shape" in v}
+
+        prefix = model_detection.unet_prefix_from_state_dict(mock_sd)
+        config = model_detection.model_config_from_unet(mock_sd, prefix)
+        return config.__class__.__name__ if config else ""
+    except Exception:  # pylint: disable=broad-except
+        return ""

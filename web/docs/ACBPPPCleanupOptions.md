@@ -17,7 +17,8 @@ Provides clean up options to the main PPP node.
 * **merge_attention**: It merges attention modifiers when possible (merges into one, multiplying their values). Only merges individually nested modifiers.
 * **remove_extranetwork_tags**: Removes all extra network tags.
 
-Please note that *ComfyUI* does not natively support the `BREAK` and `AND` constructs, but the related settings are kept in that UI in case you use a node that supports them and the extension is configured to allow them (see the configuration file below).
+> [!NOTE]
+> *ComfyUI* does not natively support the `BREAK` and `AND` constructs, but the related settings are kept in that UI in case you use a node that supports them and the extension is configured to allow them (see the configuration file below).
 
 ## Outputs
 
