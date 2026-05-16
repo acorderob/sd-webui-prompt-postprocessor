@@ -275,7 +275,7 @@ class TreeProcessor(lark.visitors.Interpreter):
 
     def __get_variable_value(
         self, name: str, specifier: str | None = None, evaluate=True, visit=False
-    ) -> str | list[str] | None:
+    ) -> str | int | float | bool | list | None:
         """
         Get the value of a variable.
 
@@ -286,7 +286,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             visit (bool): Whether to also visit the variable (add to result).
 
         Returns:
-            str|list[str]|None: The value of the variable.
+            str|int|float|bool|list|None: The value of the variable, with strings coerced to their most specific type.
         """
 
         def visit_value(v):
@@ -299,8 +299,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                     v = self.__get_original_node_content(v, "")
             elif isinstance(v, lark.Token):
                 v = str(v)
+            if isinstance(v, str):
+                v = self.__coerce_value(v)
             if visit and not visited:
-                self.__result += v
+                self.__result += self.__value_to_str(v)
             return v
 
         v = self.state.variables.get(name)
@@ -369,8 +371,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             _, sep, _ = self.__parse_array_specifier(specifier)
             if sep is None:
                 sep = self.state.options.choice_separator
-            v = sep.join(str(item) for item in v)
-        return str(v)
+            v = sep.join(self.__value_to_str(item) for item in v)
+        return self.__value_to_str(v)
 
     def __debug_end(self, construct: str, start_result: str, duration: int, info=None):
         """
@@ -389,16 +391,11 @@ class TreeProcessor(lark.visitors.Interpreter):
                 output = f" >> '{escape_single_quotes(output)}'"
             self.log(logging.DEBUG, f"TreeProcessor.{construct} {info}({duration / 1_000_000_000:.3f} seconds){output}")
 
-    def __adjust_strnum(self, s: str) -> str | int | float:
+    @staticmethod
+    def __coerce_value(s: str) -> str | int | float | bool:
         """
-        Adjust a string that may represent a number to its appropriate type.
-        If it is a number, it is converted to an integer or float.
-
-        Args:
-            s (str): The string to adjust.
-
-        Returns:
-            str | int | float: The adjusted string, integer, or float.
+        Convert a string variable value to its most specific scalar type.
+        Empty strings are left as-is; "true"/"false" (case-insensitive) become bools.
         """
         try:
             return int(s)
@@ -406,7 +403,18 @@ class TreeProcessor(lark.visitors.Interpreter):
             pass
         if bool(re.match(r"^[+-]?\d+\.\d+$", s)):
             return float(s)
-        return s.lower()
+        if s.lower() == "true":
+            return True
+        if s.lower() == "false":
+            return False
+        return s
+
+    @staticmethod
+    def __value_to_str(v: str | int | float | bool) -> str:
+        """Convert a typed value back to its string representation. Bools use lowercase."""
+        if isinstance(v, bool):
+            return str(v).lower()
+        return str(v)
 
     def __warn_mixedtype(self, desc: str, operand1, operand2, operation):
         """
@@ -451,7 +459,10 @@ class TreeProcessor(lark.visitors.Interpreter):
             str | bool | int | float: The resolved operand value (in lowercase for strings).
         """
         if c.startswith('"') and c.endswith('"') or c.startswith("'") and c.endswith("'"):
-            return c[1:-1].lower() if self.state.options.strict_operators else self.__adjust_strnum(c[1:-1])
+            v = c[1:-1] if self.state.options.strict_operators else self.__coerce_value(c[1:-1])
+            if isinstance(v, str):
+                v = v.lower()
+            return v
         try:
             return int(c)
         except ValueError:
@@ -470,16 +481,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             vartype = "system" if self.state.variables.name_is_system(c) else "user"
             self.warn_or_stop(f"Unknown {vartype} variable '{escape_single_quotes(c)}'")
         if isinstance(val, str):
-            try:
-                return int(val)
-            except ValueError:
-                pass
-            if bool(re.match(r"^[+-]?\d+\.\d+$", val)):
-                return float(val)
-            if val in ("false", ""):
+            if val == "":
                 return False
-            if val == "true":
-                return True
             val = val.lower()
         return val
 
@@ -564,27 +567,15 @@ class TreeProcessor(lark.visitors.Interpreter):
                     "le": lambda: len(operand1_value) == len(operand2_value)
                     and self.__pairwise_all(cond_desc, operand1_value, operand2_value, lambda x, y: x <= y),
                     "in": lambda: self.__alltoone_all(cond_desc, operand1_value, operand2_value, lambda x, y: x in y),
-                    # all(
-                    #     self.__wmt(cond_desc, a, operand2_value, lambda x, y: x in y) for a in operand1_value
-                    # ),
                     "any_in": lambda: self.__alltoone_any(
                         cond_desc, operand1_value, operand2_value, lambda x, y: x in y
                     ),
-                    # any(
-                    #     self.__wmt(cond_desc, a, operand2_value, lambda x, y: x in y) for a in operand1_value
-                    # ),
                     "contains": lambda: self.__alltoone_all(
                         cond_desc, operand2_value, operand1_value, lambda x, y: x in y
                     ),
-                    # all(
-                    #     self.__wmt(cond_desc, a, operand1_value, lambda x, y: x in y) for a in operand2_value
-                    # ),
                     "contains_any": lambda: self.__alltoone_any(
                         cond_desc, operand2_value, operand1_value, lambda x, y: x in y
                     ),
-                    # any(
-                    #     self.__wmt(cond_desc, a, operand1_value, lambda x, y: x in y) for a in operand2_value
-                    # ),
                 }
             elif operand1_isarray and not operand2_isarray:
                 if self.state.options.strict_operators:
@@ -1402,9 +1393,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             if currentvalue is None:
                 info += "error"
             elif isinstance(currentvalue, list):
-                info += "[" + ", ".join(f"'{escape_single_quotes(str(v))}'" for v in currentvalue) + "]"
+                info += "[" + ", ".join(f"'{escape_single_quotes(self.__value_to_str(v))}'" for v in currentvalue) + "]"
             else:
-                info += f"'{escape_single_quotes(currentvalue)}'"
+                info += f"'{escape_single_quotes(self.__value_to_str(currentvalue))}'"
         t2 = time.monotonic_ns()
         self.__debug_end(command, start_result, t2 - t1, info)
 
