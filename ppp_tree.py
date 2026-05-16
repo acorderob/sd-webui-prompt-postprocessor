@@ -6,15 +6,16 @@ import math
 import re
 import textwrap
 import time
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 import lark
 import numpy as np
 
 from ppp_classes import IFWILDCARDS_CHOICES, SUPPORTED_APPS, PPPState
 from ppp_enmappings import PPPENMappingVariant
 from ppp_logging import DEBUG_LEVEL, log
-from ppp_utils import escape_single_quotes
+from ppp_utils import escape_single_quotes, repr_value
 from ppp_common import parse_prompt, warn_or_stop
+from ppp_variables import ScalarValue, VariableEntry
 from ppp_wildcards import PPPWildcard
 
 
@@ -87,7 +88,7 @@ class TreeProcessor(lark.visitors.Interpreter):
     def start_visit(
         self,
         parsed: lark.Tree,
-    ) -> list[tuple[str, list[tuple[str, bool]], tuple[dict[str, Any], dict[str, str]]]]:
+    ) -> list[tuple[str, list[tuple[str, bool]], dict[str, VariableEntry]]]:
         """
         Process the positive and negative prompts in a unified way using the same processor.
         STN insertions are applied to the negative result directly inside this processor.
@@ -96,8 +97,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             parsed (Tree): The parsed unified prompt.
 
         Returns:
-            list[tuple[str, list[tuple[str,bool]], tuple[dict[str, Any], dict[str, str]]]]: A list of
-                (processed prompt, detected wildcards, variables snapshot) triples — one entry per
+            list[tuple[str, list[tuple[str,bool]], dict[str, VariableEntry]]]: A list of
+                (processed prompt, detected wildcards, variables snapshot) triples - one entry per
                 combination in combinatorial mode, or a single entry otherwise. The variables snapshot
                 is the return value of ``state.variables.backup_user_and_echoed()`` captured after processing.
         """
@@ -111,17 +112,17 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.__cycl_forced_path = list(self.state.cyclical_state.current_path)
             self.__cycl_trace = []
             self.visit(parsed)
-            self.__finalize_echoed_variables()
+            self.__finalize_variables()
             if self.__cycl_trace:
                 self.state.cyclical_state.last_trace = self.__cycl_trace[:]
                 self.state.cyclical_state.advance()
-            return [(self.__result, self.__detectedWildcards, self.state.variables.backup_user_and_echoed())]
+            return [(self.__result, self.__detectedWildcards, self.state.variables.backup_user())]
 
         # Combinatorial mode: explore every possible path through choices and wildcards via DFS.
         # __comb_forced_path drives which option is selected at each decision point;
         # __comb_trace records how many options were available at each point so the DFS can
         # correctly enumerate unexplored branches after each run.
-        initial_vars = self.state.variables.backup_user_and_echoed()
+        initial_vars = self.state.variables.backup_user()
         results: list[tuple[str, list[tuple[str, bool]], tuple]] = []
         limit = self.state.options.combinatorial_limit
 
@@ -130,12 +131,10 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.__comb_forced_path = list(forced_path)
             self.__comb_trace = []
             self.__reset_run_state()
-            self.state.variables.restore_user_and_echoed(initial_vars)
+            self.state.variables.restore_user(initial_vars)
             self.visit(parsed)
-            self.__finalize_echoed_variables()
-            results.append(
-                (self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user_and_echoed())
-            )
+            self.__finalize_variables()
+            results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user()))
             if len(results) == 1:
                 first_run_estimate = reduce(lambda x, y: x * y, self.__comb_trace, 1)
                 self.log(logging.INFO, f"Estimated combinations (lower bound): {first_run_estimate}")
@@ -171,16 +170,19 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.log(logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations have been skipped.")
         return results
 
-    def __finalize_echoed_variables(self):
-        var_keys = self.state.variables.all_user_or_echoed_keys
-        for k in var_keys:
-            ev = self.state.variables.get_echoed_value(k)
-            if ev is None:
-                ev = self.state.variables.get_user(k)
-            if ev is None or ev.__class__ != str:  # strict check to avoid problems with Tokens
+    def __finalize_variables(self):
+        """
+        Ensure all variables have either an echoed value or their value evaluated as
+        a scalar at the end of processing, so they are included in the output snapshots.
+        """
+        for k in self.state.variables.all_user:
+            if self.state.variables.get_echoed_value(k) is None and not isinstance(
+                self.state.variables.get_user(k), ScalarValue
+            ):
                 self.log(logging.DEBUG, f"Completing variable: {k}")
-                ev = self.get_final_variable(k)
-                self.state.variables.echo(k, ev)  # ensure all variables are echoed so they are included in the snapshot
+                name, specifier = self.__separate_arrayref(k)
+                value = self.get_final_scalar_variable(name, specifier)
+                self.state.variables.set_user(k, value)
 
     def __visit(
         self,
@@ -209,7 +211,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             backup_add_at = self.__add_at.copy()
             backup_insertion_at = self.__insertion_at.copy()
             backup_detectedwildcards = self.__detectedWildcards.copy()
-            backup_vars = self.state.variables.backup_user_and_echoed()
+            backup_vars = self.state.variables.backup_user()
         if node is not None:
             if isinstance(node, list):
                 for child in node:
@@ -233,7 +235,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.__add_at = backup_add_at
             self.__insertion_at = backup_insertion_at
             self.__detectedWildcards = backup_detectedwildcards
-            self.state.variables.restore_user_and_echoed(backup_vars)
+            self.state.variables.restore_user(backup_vars)
         return added_result
 
     def __get_original_node_content(self, node: lark.Tree | lark.Token, default=None) -> str:
@@ -267,14 +269,20 @@ class TreeProcessor(lark.visitors.Interpreter):
             return None, specifier[2:-1], False
         if not specifier.isdecimal():
             # bare identifier: resolve as variable
-            specifier = self.get_final_variable(specifier)
+            name, spe = self.__separate_arrayref(specifier)
+            specifier = self.__value_to_str(self.__get_variable_value(name, spe, True, False))
         if specifier.isdecimal():
             return int(specifier), None, False
         # invalid specifier
         return None, None, False
 
     def __get_variable_value(
-        self, name: str, specifier: str | None = None, evaluate=True, visit=False
+        self,
+        name: str,
+        specifier: str | None = None,
+        evaluate=True,
+        add_to_content=False,
+        restore_state=True,
     ) -> str | int | float | bool | list | None:
         """
         Get the value of a variable.
@@ -283,7 +291,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             name (str): The name of the variable.
             specifier (str|None): The specifier for an array variable.
             evaluate (bool): Whether to evaluate the variable.
-            visit (bool): Whether to also visit the variable (add to result).
+            add_to_content (bool): Whether to add the content after visiting.
+            restore_state (bool): Whether to restore the state after visiting.
 
         Returns:
             str|int|float|bool|list|None: The value of the variable, with strings coerced to their most specific type.
@@ -293,15 +302,15 @@ class TreeProcessor(lark.visitors.Interpreter):
             visited = False
             if isinstance(v, lark.Tree):
                 if evaluate:
-                    v = self.__visit(v, restore_state=not visit, discard_content=not visit)
-                    visited = visit
+                    v = self.__visit(v, restore_state=restore_state, discard_content=not add_to_content)
+                    visited = add_to_content
                 else:
-                    v = self.__get_original_node_content(v, "")
+                    v = self.__get_original_node_content(v, "(cannot evaluate)")
             elif isinstance(v, lark.Token):
                 v = str(v)
             if isinstance(v, str):
                 v = self.__coerce_value(v)
-            if visit and not visited:
+            if add_to_content and not visited:
                 self.__result += self.__value_to_str(v)
             return v
 
@@ -314,7 +323,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 idx, sep, cnt = self.__parse_array_specifier(specifier)
                 if cnt:
                     v = len(v)
-                    if visit:
+                    if add_to_content:
                         self.__result += str(v)
                 elif idx is not None:
                     if 0 <= idx < len(v):
@@ -327,10 +336,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                     v2 = []
                     for i, item in enumerate(v):
                         v2.append(visit_value(item))
-                        if visit and i < len(v) - 1:
+                        if add_to_content and i < len(v) - 1:
                             self.__result += sep
                     v = v2
-            else:
+            elif not isinstance(v, str):  # if it is a string we assume it has already been evaluated and joined
                 v = None  # error
         elif specifier is not None:
             v = None  # error
@@ -355,24 +364,24 @@ class TreeProcessor(lark.visitors.Interpreter):
             specifier = None
         return name, specifier
 
-    def get_final_variable(self, name_specifier: str) -> str:
+    def get_final_scalar_variable(self, name: str, specifier: str | None) -> ScalarValue:
         """
-        Get the final value of a variable, resolving any references if needed.
+        Get the final scalar value of a variable, resolving any references if needed.
 
         Args:
-            name_specifier (str): The variable reference string.
+            name (str): The name of the variable.
+            specifier (str|None): The specifier for an array variable.
 
         Returns:
-            str: The final value of the variable.
+            ScalarValue: The final value of the variable.
         """
-        name, specifier = self.__separate_arrayref(name_specifier)
-        v = self.__get_variable_value(name, specifier, True, False)
+        v = self.__get_variable_value(name, specifier, True, False, False)
         if isinstance(v, list):
             _, sep, _ = self.__parse_array_specifier(specifier)
             if sep is None:
                 sep = self.state.options.choice_separator
             v = sep.join(self.__value_to_str(item) for item in v)
-        return self.__value_to_str(v)
+        return v
 
     def __debug_end(self, construct: str, start_result: str, duration: int, info=None):
         """
@@ -475,7 +484,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             return True
         # Bare identifier - resolve as variable reference
         varname, varspecifier = self.__separate_arrayref(c)
-        val = self.__get_variable_value(varname, varspecifier)
+        val = self.__get_variable_value(varname, varspecifier, True, False)
         if val is None:
             val = ""
             vartype = "system" if self.state.variables.name_is_system(c) else "user"
@@ -795,6 +804,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         x = tree.children[0]
         self.__result += x.value
         self.__is_negative = True
+        self.__finalize_variables()  # finalize variables here to capture their state at the point of separation
         t2 = time.monotonic_ns()
         self.__debug_end("negative_sep", start_result, t2 - t1)
 
@@ -1269,6 +1279,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                 return
             info = f"{variable_name[0:-2]}[{variable_specifier}]"
         value_description = self.__get_original_node_content(content, None)
+        if value_description is None:
+            value_description = ""
+        else:
+            value_description = self.__coerce_value(value_description)
         value = content
         raw_oldvalue = self.state.variables.get_user(variable_name)
         newvalue = None
@@ -1299,7 +1313,32 @@ class TreeProcessor(lark.visitors.Interpreter):
             modifiers_str: list[str] = [str(m) for m in modifiers.children] if modifiers is not None else []
             if any(item in modifiers_str for item in ["+", "add"]):
                 adding = True
-                info += f" += '{escape_single_quotes(value_description or '')}'"
+                info += f" += {repr_value(value_description)}"
+
+                def build_addition(old, added) -> lark.Tree:
+                    if old is None:
+                        return added
+                    elif isinstance(old, ScalarValue):
+                        if isinstance(added, ScalarValue):
+                            evaluated_added = added
+                        else:
+                            evaluated_added = self.__coerce_value(self.__visit(added, False, True))
+                        if isinstance(evaluated_added, (str, int, float)):
+                            if old.__class__ == evaluated_added.__class__:
+                                return old + evaluated_added
+                            return str(old) + str(evaluated_added)
+                        return lark.Tree(
+                            lark.Token("RULE", "varvalue"),
+                            [lark.Token("plain", self.__value_to_str(old)), added],
+                            # Meta should be {"content": str(old) + added.meta.content},
+                        )
+                    else:  # lark.Tree
+                        return lark.Tree(
+                            lark.Token("RULE", "varvalue"),
+                            [old, added],
+                            # Meta should be {"content": old.meta.content + added.meta.content},
+                        )
+
                 if raw_oldvalue is None:
                     newvalue = value
                     self.warn_or_stop(f"Unknown variable {escape_single_quotes(variable_name)}")
@@ -1308,22 +1347,14 @@ class TreeProcessor(lark.visitors.Interpreter):
                         self.warn_or_stop(
                             f"Invalid variable value for '{escape_single_quotes(variable_name)}'! Cannot add to a non-array value."
                         )
+                    elif variable_specifier is not None:
+                        newvalue = build_addition(raw_oldvalue[int(variable_specifier)], value)
                     else:
                         newvalue = value
-                elif isinstance(raw_oldvalue, str):
-                    newvalue = lark.Tree(
-                        lark.Token("RULE", "varvalue"),
-                        [lark.Token("plain", raw_oldvalue), value],
-                        # Meta should be {"content": raw_oldvalue + value},
-                    )
-                else:  # lark.Tree
-                    newvalue = lark.Tree(
-                        lark.Token("RULE", "varvalue"),
-                        [raw_oldvalue, value],
-                        # Meta should be {"content": raw_oldvalue.meta.content + value.meta.content},
-                    )
+                else:
+                    newvalue = build_addition(raw_oldvalue, value)
             elif any(item in modifiers_str for item in ["?", "ifundefined"]):
-                info += f" ?= '{escape_single_quotes(value_description or '')}'"
+                info += f" ?= {repr_value(value_description)}"
                 if raw_oldvalue is None:
                     newvalue = value
                 else:
@@ -1347,7 +1378,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         if vardescriptor_specifier is not None:
                             newvalue = None
                         else:
-                            newvalue = self.__get_variable_value(vardescriptor_name, None)
+                            newvalue = self.__get_variable_value(vardescriptor_name, None, True, False)
                     elif newvalue.children[0].data == "listvalue":
                         newvalue = list(
                             self.__resolve_operand(c) for c in self.__get_cond_operand(newvalue.children[0])
@@ -1389,13 +1420,14 @@ class TreeProcessor(lark.visitors.Interpreter):
                         else:
                             newvalue = raw_oldvalue + [newvalue]
             self.state.variables.set_user(variable_name, newvalue)
-            currentvalue = self.__get_variable_value(variable_name, variable_specifier, False)
+            currentvalue = self.__get_variable_value(variable_name, variable_specifier, False, False)
             if currentvalue is None:
                 info += "error"
             elif isinstance(currentvalue, list):
-                info += "[" + ", ".join(f"'{escape_single_quotes(self.__value_to_str(v))}'" for v in currentvalue) + "]"
+                info_elems = [repr_value(v) for v in currentvalue]
+                info += "[" + ", ".join(info_elems) + "]"
             else:
-                info += f"'{escape_single_quotes(self.__value_to_str(currentvalue))}'"
+                info += repr_value(currentvalue)
         t2 = time.monotonic_ns()
         self.__debug_end(command, start_result, t2 - t1, info)
 
@@ -1431,11 +1463,10 @@ class TreeProcessor(lark.visitors.Interpreter):
         t1 = time.monotonic_ns()
         start_result = self.__result
         default_value = None
-        # if default is not None:
-        #     default_value = self.__visit(default, True)  # for log
         is_array = variable_name[-2:] == "[]"
         vname = f"{variable_name[0:-2]}[{variable_specifier}]" if variable_specifier is not None else variable_name
-        value = self.__get_variable_value(variable_name, variable_specifier, True, True)
+        # value = self.__get_variable_value(variable_name, variable_specifier, True, True)
+        value = self.get_final_scalar_variable(variable_name, variable_specifier)
         if value is None:
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
@@ -1446,8 +1477,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
                 default_value = ""
                 value = ""
+        else:
+            self.__result += self.__value_to_str(value)
         if not self.state.variables.name_is_system(variable_name):
-            self.state.variables.echo(vname, value)
+            self.state.variables.set_echoed_value(vname, value)
         t2 = time.monotonic_ns()
         info = variable_name
         if is_array and variable_specifier is not None:

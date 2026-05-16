@@ -23,7 +23,7 @@ from ppp_classes import (
     PPPState,
     PPPStateOptions,
 )
-from ppp_variables import VariableRepository
+from ppp_variables import VariableRepository, VariableEntry
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes
@@ -845,10 +845,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def __postprocess_result(
         self,
-        result: tuple[str, list[tuple[str, bool]], tuple[dict[str, str | None], dict[str, str | None]]],
+        result: tuple[str, list[tuple[str, bool]], dict[str, VariableEntry]],
     ) -> tuple[str, str, dict[str, str | None]]:
         variables = {}
-        unified_prompt, rem_wildcards, (_, echoed_variables_snapshot) = result
+        unified_prompt, rem_wildcards, variables_snapshot = result
 
         # Split the unified prompt back into prompt and negative prompt
         split_parts = unified_prompt.split("\x1d", 1)
@@ -862,13 +862,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.log(logging.INFO, f"Result prompt: {prompt}")
         self.log(logging.INFO, f"Result negative_prompt: {negative_prompt}")
         try:
-            # Get and clean variables
-            var_keys = sorted(echoed_variables_snapshot.keys())
+            # Get and clean variables - prefer the explicitly echoed value; fall back to the evaluated value.
+            var_keys = sorted(variables_snapshot.keys())
             for k in var_keys:
-                ev = echoed_variables_snapshot.get(k)
-                variables[k] = self.__cleanup(ev, 0) if self.state.options.cup_cleanup_variables else ev
-
-            self.log(logging.DEBUG, f"Result variables: {variables}")
+                entry = variables_snapshot[k]
+                ev = entry.last_echoed_value if entry.last_echoed_value is not None else entry.value
+                if ev is not None:
+                    if isinstance(ev, str) and self.state.options.cup_cleanup_variables:
+                        ev = self.__cleanup(ev, 0)
+                    variables[k] = ev
+            self.log(logging.INFO, f"Result variables: {variables}")
 
             # Result checks
             warnings = []
@@ -962,7 +965,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             list: A list of tuples, each containing the processed prompt, negative prompt, and all variables.
         """
         self.state.variables.clear_user()
-        self.state.variables.clear_echoed()
 
         # Parse both prompts
         processor = TreeProcessor(self.state, rng, on_model_info_update=self.__on_model_info_update)

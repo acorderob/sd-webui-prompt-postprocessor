@@ -202,6 +202,8 @@ The wildcard identifier supports globbing. The filter does not allow the `^` or 
 
 The prompt has access to some system variables that contain model information, options, and other things. There is also the possibility of defining user variables.
 
+Variable values `true` and `false` are considered a boolean, and numeric content is an integer or float.
+
 All these variables can be used to output content or behave differently based on their values.
 
 ### System variables
@@ -237,7 +239,7 @@ The format is: `<ppp:set varname [modifiers]>value<ppp:/set>`
 These are the available optional modifiers:
 
 * `evaluate`: the value of the variable is evaluated at this moment, instead of when it is used.
-* `add`: the value is added to the current value of the variable. It does not force an immediate evaluation of the old nor the added value.
+* `add`: the value is "added" to the current value of the variable (depending on their type). When possible, it does not force an immediate evaluation of the old or added values.
 * `ifundefined`: the value will only be set if the variable is undefined.
 
 The `add` and `ifundefined` modifiers are mutually exclusive and cannot be used together.
@@ -364,7 +366,7 @@ The operands can be a variable (`variable`, `array[]`, `array[index]`), a quoted
 
 When an operand is or contains a variable, it is resolved to the variable's current value before the operation.
 
-Variable values `true` and `false` are considered a boolean, and numeric content is an integer or float. Except in substring operations indicated below. String comparisons are case insensitive.
+String comparisons are case insensitive, and substring comparisons (see below) are always considered as strings.
 
 The operation can be preceded by `not` for readability, instead of using it in the front.
 

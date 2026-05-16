@@ -1,23 +1,33 @@
+from dataclasses import dataclass, field
 from typing import Any
+
+ScalarValue = str | int | float | bool
+VariableValue = ScalarValue | list | None
+
+
+@dataclass
+class VariableEntry:
+    """Holds all state for a single user variable."""
+
+    value: Any = field(default=None)  # raw unevaluated value or evaluated on set
+    last_echoed_value: ScalarValue | None = field(default=None)
 
 
 class VariableRepository:
     """
-    Unified repository for system, user, and echoed prompt variables.
+    Unified repository for system and user prompt variables.
 
     System variables (underscore-prefixed names like ``_model``) are populated
     once per processing session and are read-only during prompt evaluation.
 
     User variables are created and mutated by set/echo constructs in the prompt.
-
-    Echoed variables record which user variables have already been output and
-    with what resolved string value.
+    Each user variable is stored as a :class:`VariableEntry` that tracks the
+    set value and the last value that was echoed into the prompt output.
     """
 
     def __init__(self) -> None:
-        self._system: dict[str, Any] = {}
-        self._user: dict[str, Any] = {}
-        self._echoed: dict[str, str] = {}
+        self._system: dict[str, VariableValue] = {}
+        self._vars: dict[str, VariableEntry] = {}
 
     def name_is_system(self, name: str) -> bool:
         """Return True if *name* is a system variable (i.e. starts with an underscore)."""
@@ -25,17 +35,17 @@ class VariableRepository:
 
     # ---- System variables ----
 
-    def get_system(self, name: str, default: Any = None) -> Any:
+    def get_system(self, name: str, default: VariableValue = None) -> VariableValue:
         """Return the value of a system variable, or *default* if absent."""
         return self._system.get(name, default)
 
-    def set_system(self, name: str, value: Any) -> None:
+    def set_system(self, name: str, value: VariableValue) -> None:
         """Set a system variable."""
         if not self.name_is_system(name):
             raise ValueError(f"Invalid system variable name '{name}': must start with an underscore")
         self._system[name] = value
 
-    def update_system(self, mapping: dict[str, Any]) -> None:
+    def update_system(self, mapping: dict[str, VariableValue]) -> None:
         """Bulk-update system variables from *mapping*."""
         for name in mapping:
             if not self.name_is_system(name):
@@ -47,43 +57,79 @@ class VariableRepository:
         self._system.clear()
 
     @property
-    def all_system(self) -> dict[str, Any]:
+    def all_system(self) -> dict[str, VariableValue]:
         """Return a shallow copy of all system variables."""
         return self._system.copy()
 
     # ---- User variables ----
 
+    def _entry(self, name: str) -> VariableEntry:
+        """Return (creating if necessary) the :class:`VariableEntry` for *name*."""
+        if name not in self._vars:
+            self._vars[name] = VariableEntry()
+        return self._vars[name]
+
     def get_user(self, name: str, default: Any = None) -> Any:
         """Return the value of a user variable, or *default* if absent."""
-        return self._user.get(name, default)
+        entry = self._vars.get(name)
+        if entry is None or entry.value is None:
+            return default
+        return entry.value
 
     def set_user(self, name: str, value: Any) -> None:
-        """Set a user variable."""
+        """Set the value of a user variable."""
         if self.name_is_system(name):
             raise ValueError(f"Invalid user variable name '{name}': must not start with an underscore")
-        self._user[name] = value
+        entry = self._entry(name)
+        entry.value = value
 
     def delete_user(self, name: str) -> None:
-        """Remove a user variable (no-op if it does not exist)."""
-        self._user.pop(name, None)
+        """
+        Remove the value for a user variable.
+        """
+        entry = self._vars.get(name)
+        if entry is None:
+            return
+        del self._vars[name]
 
     def clear_user(self) -> None:
-        """Remove all user variables."""
-        self._user.clear()
+        """
+        Clear the values for all user variables.
+        """
+        self._vars.clear()
 
-    # ---- Echoed variables ----
+    @property
+    def all_user(self) -> set[str]:
+        """Return the set of all user-variable keys (those with any non-None field)."""
+        return set(self._vars)
 
-    def get_echoed_value(self, name: str, default: str | None = None) -> str | None:
-        """Return the echoed string value for *name*, or *default* if not echoed."""
-        return self._echoed.get(name, default)
+    def set_echoed_value(self, name: str, value: ScalarValue) -> None:
+        """Record that *name* was echoed into the prompt with *value*."""
+        self._entry(name).last_echoed_value = value
 
-    def echo(self, name: str, value: str) -> None:
-        """Record that *name* was echoed with *value*."""
-        self._echoed[name] = value
+    def get_echoed_value(self, name: str, default: ScalarValue | None = None) -> ScalarValue | None:
+        """Return the last echoed value for *name*, or *default* if it has not been echoed."""
+        entry = self._vars.get(name)
+        if entry is None:
+            return default
+        return entry.last_echoed_value if entry.last_echoed_value is not None else default
 
-    def clear_echoed(self) -> None:
-        """Remove all echoed-variable records."""
-        self._echoed.clear()
+    def backup_user(self) -> dict[str, VariableEntry]:
+        """Return a per-entry shallow-copy snapshot of all user variables for rollback."""
+        return {
+            name: VariableEntry(entry.value, entry.last_echoed_value)
+            for name, entry in self._vars.items()
+        }
+
+    def restore_user(self, backup: dict[str, VariableEntry]) -> None:
+        """Restore user variables from a snapshot made by :meth:`backup_user_and_echoed`."""
+        self._vars.clear()
+        self._vars.update(
+            {
+                name: VariableEntry(entry.value, entry.last_echoed_value)
+                for name, entry in backup.items()
+            }
+        )
 
     # ---- Combined queries ----
 
@@ -97,23 +143,4 @@ class VariableRepository:
         """
         if name in self._system:
             return self._system.get(name, default)
-        return self._user.get(name, default)
-
-    @property
-    def all_user_or_echoed_keys(self) -> set[str]:
-        """Return the union of user-variable and echoed-variable keys."""
-        return set(self._user.keys()) | set(self._echoed.keys())
-
-    # ---- State backup / restore ----
-
-    def backup_user_and_echoed(self) -> tuple[dict[str, Any], dict[str, str]]:
-        """Return shallow-copy snapshots of user and echoed variables for rollback."""
-        return self._user.copy(), self._echoed.copy()
-
-    def restore_user_and_echoed(self, backup: tuple[dict[str, Any], dict[str, str]]) -> None:
-        """Restore user and echoed variables from a snapshot made by :meth:`backup_user_and_echoed`."""
-        user_backup, echoed_backup = backup
-        self._user.clear()
-        self._user.update(user_backup)
-        self._echoed.clear()
-        self._echoed.update(echoed_backup)
+        return self.get_user(name, default)

@@ -1,3 +1,6 @@
+from typing import Any
+
+
 def deep_freeze(obj):
     """
     Deep freeze an object.
@@ -41,6 +44,22 @@ def escape_double_quotes(s: str):
         str: The escaped string.
     """
     return s.replace('"', '\\"')
+
+
+def repr_value(s: Any):
+    """
+    Return a string representation of a value, escaping single quotes.
+
+    Args:
+        s (Any): The value to represent.
+    Returns:
+        str: The string representation of the value.
+    """
+    if isinstance(s, str):
+        return f"'{escape_single_quotes(s)}'"
+    if isinstance(s, bool):
+        return "true" if s else "false"
+    return str(s)
 
 
 def format_output(text: str) -> str:

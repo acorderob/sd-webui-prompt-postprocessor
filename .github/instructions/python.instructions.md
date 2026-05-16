@@ -41,3 +41,7 @@ All Python code must be compatible with Python 3.10. Do not use language feature
 ## Paths
 
 Use `pathlib.Path` for filesystem paths instead of `str` paths or `os.path`.
+
+## Comments
+
+Do not use emdashes (—) in comments. Use a single dash (-) or parentheses instead. Also avoid any other typographical punctuation that is not basic ASCII.

@@ -222,7 +222,7 @@ def get_model_class_from_filename(filename: str) -> str:
             return ""
         header = json.loads(header_bytes)
 
-        # Build a mock state dict — detection only needs key names and shapes
+        # Build a mock state dict - detection only needs key names and shapes
         class _ShapeProxy:
             def __init__(self, shape):
                 self.shape = shape

@@ -21,7 +21,21 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "${v1=}<ppp:set v2><ppp:/set>${v3:}",
                 "",
             ),
-            OutputTuple("", "",{"v1": "", "v2": "", "v3": ""}),
+            OutputTuple("", "", {"v1": "", "v2": "", "v3": ""}),
+        )
+
+    # Typed and output variables test
+    def test_typed_output_variables(self):
+        self.process(
+            InputTuple(
+                "${str=value}${int=42}${float=3.14}${array[]=*('a','b','c')}${bool=true}${str2:default1},${str2:default2}",
+                "",
+            ),
+            OutputTuple(
+                "default1,default2",
+                "",
+                {"str": "value", "int": 42, "float": 3.14, "array[]": "a, b, c", "bool": True, "str2": "default2"},
+            ),
         )
 
     # Echoed variables tests
@@ -99,31 +113,53 @@ class TestVarCommands(TestPromptPostProcessorBase):
 
     # Array variable tests
 
-    def test_array_variable_1(self):  # array variable set with += and test of index value and full array with and without default separator
+    def test_array_variable_1(
+        self,
+    ):  # array variable set with += and test of index value and full array with and without default separator
         self.process(
             InputTuple(
                 "${v1[]=val1}${v1[]+=val2}${v1[]+=val3}${v1[1]:defval},${v1[]:defval2},${v1[&'.']:defval3}",
                 "",
             ),
-            OutputTuple("val2,val1, val2, val3,val1.val2.val3", "", {"v1[]": "val1, val2, val3", "v1[1]": "val2", "v1[&'.']": "val1.val2.val3"}),
+            OutputTuple(
+                "val2,val1, val2, val3,val1.val2.val3",
+                "",
+                {"v1[]": "val1, val2, val3", "v1[1]": "val2", "v1[&'.']": "val1.val2.val3"},
+            ),
         )
 
-    def test_array_variable_2(self):  # override of array variable value, test of default value when array variable is empty, test of default value when array variable is not set
+    def test_array_variable_2(
+        self,
+    ):  # override of array variable value, test of default value when array variable is empty, test of default value when array variable is not set
         self.process(
             InputTuple(
                 "${v1[]=val1}${v1[]=val2}${v1[]:defval},${v2[]:defval2},${v2[1]:defval3},${v3[]=}${v3[]:defval4}",
                 "",
             ),
-            OutputTuple("val2,defval2,defval3", "", {"v1[]": "val2", "v2[]": "defval2", "v2[1]": "defval3", "v3[]": ""}),
+            OutputTuple(
+                "val2,defval2,defval3", "", {"v1[]": "val2", "v2[]": "defval2", "v2[1]": "defval3", "v3[]": ""}
+            ),
         )
 
-    def test_array_variable_3(self):  # access array index by variable, set array variable to expanded array variable and add expanded array
+    def test_array_variable_3(
+        self,
+    ):  # access array index by variable, set array variable to expanded array variable and add expanded array
         self.process(
             InputTuple(
                 "${v1[]=val1}${v1[]+=val2}${v2=1}${v1[v2]:defval1}${v3[]=${v1[]}}${v3[]+=${v1[]}}, ${v3[&'.']}",
                 "",
             ),
-            OutputTuple("val2, val1, val2.val1, val2", "", {"v1[]": "val1, val2", "v2": "1", "v1[v2]": "val2", "v3[]": "val1, val2, val1, val2", "v3[&'.']": "val1, val2.val1, val2"}),
+            OutputTuple(
+                "val2, val1, val2.val1, val2",
+                "",
+                {
+                    "v1[]": "val1, val2",
+                    "v2": 1,
+                    "v1[v2]": "val2",
+                    "v3[]": "val1, val2, val1, val2",
+                    "v3[&'.']": "val1, val2.val1, val2",
+                },
+            ),
         )
 
     def test_array_variable_4(self):  # test list in array
@@ -177,7 +213,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "${v1[]=val1}${v1[]+=val2}${v1[]+=val3}${v1[#]:defval}, <ppp:if v1[#] eq 3>OK<ppp:else>not OK<ppp:/if>",
                 "",
             ),
-            OutputTuple("3, OK", "", {"v1[]": "val1, val2, val3", "v1[#]": "3"}),
+            OutputTuple("3, OK", "", {"v1[]": "val1, val2, val3", "v1[#]": 3}),
         )
 
     def test_array_variable_10(self):  # array variable set with expanded values from wildcards in command format
@@ -187,6 +223,15 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             OutputTuple("choice3", "", {"v1[]": "choice2, choice1, choice3, choice1"}),
+        )
+
+    def test_array_variable_11(self):  # array variable set and indexed value added
+        self.process(
+            InputTuple(
+                "${v1[]=*(1,2,3)}${v1[0]+=10}${v2[]=*('1','2','3')}${v2[1]+=10}",
+                "",
+            ),
+            OutputTuple("", "", {"v1[]": "11, 2, 3", "v2[]": "1, 210, 3"}),
         )
 
     # Operator tests
@@ -635,7 +680,6 @@ class TestVarCommands(TestPromptPostProcessorBase):
             ),
             OutputTuple("OK", ""),
         )
-
 
     # NaN/undefined variable integer comparison tests
 
