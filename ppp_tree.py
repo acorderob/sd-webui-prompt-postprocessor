@@ -1570,13 +1570,13 @@ class TreeProcessor(lark.visitors.Interpreter):
                 compiled_extra_triggers = None
                 if is_mapping:
                     found = self.state.extranetwork_mappings_obj.cached_mappings.get(extnet_id, None)
-                    # we assume the conditions do not change inside the prompt
+                    # we assume the conditions do not change inside the prompt (although they could in some circumstances)
                     found_in_cache = found is not None
                     if found is None:
                         found_mappings: list[PPPENMappingVariant] = []
                         else_mapping = None
                         if self.state.extranetwork_mappings_obj:
-                            enmapping = self.state.extranetwork_mappings_obj.extranetwork_mappings.get(extnet_id, None)
+                            enmapping = self.state.extranetwork_mappings_obj.get_mapping(extnet_id)
                             if enmapping:
                                 for v in enmapping.variants:
                                     cond = str(v.condition) if v.condition is not None else None

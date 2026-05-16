@@ -92,6 +92,20 @@ class PPPExtraNetworkMappings:
             + self.cached_mappings.__sizeof__()
         )
 
+    def get_mapping(self, key: str) -> PPPENMapping | None:
+        """
+        Get an extra network mapping by key.
+
+        Args:
+            key (str): The key of the extra network mapping in the format "kind:name".
+        Returns:
+            PPPENMapping | None: The extra network mapping if found, or None if not found
+        """
+        for k, v in self.extranetwork_mappings.items():
+            if k.lower() == key.lower():
+                return v
+        return None
+
     def refresh_extranetwork_mappings(
         self,
         debug_level: DEBUG_LEVEL,
