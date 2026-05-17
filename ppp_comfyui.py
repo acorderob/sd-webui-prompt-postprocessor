@@ -63,8 +63,6 @@ class PromptPostProcessorComfyUINode:
     Node for processing prompts.
     """
 
-    logger = None
-
     def __init__(self):
         lf = PromptPostProcessorLogFactory()
         self.logger = lf.log
@@ -809,7 +807,8 @@ class PromptPostProcessorSelectVariableComfyUINode:
     """
 
     def __init__(self):
-        pass
+        lf = PromptPostProcessorLogFactory()
+        self.logger = lf.log
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -834,6 +833,23 @@ class PromptPostProcessorSelectVariableComfyUINode:
                         "tooltip": "Name of the variable to select",
                     },
                 ),
+                "if_not_found": (
+                    "COMBO",
+                    {
+                        "options": [e.value for e in ONWARNING_CHOICES],
+                        "default": ONWARNING_CHOICES.warn.value,
+                        "tooltip": "How to handle the case when the variable name is not found in the input dictionary",
+                    },
+                ),
+                "default": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "dynamicPrompts": False,
+                        "tooltip": "Default value if the variable is not found",
+                    },
+                ),
             },
         }
 
@@ -848,13 +864,18 @@ class PromptPostProcessorSelectVariableComfyUINode:
         self,
         variables: dict[str, Any],
         name: str,
+        if_not_found: str = ONWARNING_CHOICES.warn.value,
+        default: str = "",
     ):
         if variables:
             if name == "":
                 return ("\n".join(f"{k}: {v}" for k, v in variables.items()),)
             if name in variables:
                 return (variables[name],)
-            raise ValueError(f"Variable '{name}' not found in the input variables")
+            if if_not_found == ONWARNING_CHOICES.stop.value:
+                raise ValueError(f"Variable '{name}' not found in the input variables")
+            self.logger.warning(f"Variable '{name}' not found in the input variables")
+            return (default,)
         raise ValueError("No variables provided to select from")
 
 

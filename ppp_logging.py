@@ -56,13 +56,12 @@ class PromptPostProcessorLogFactory:  # pylint: disable=too-few-public-methods
 
     def __init__(self, filename=None):
         """
-        Initializes the PromptPostProcessor class.
+        Initializes the PromptPostProcessorLogFactory class.
 
         This method sets up the logger for the PromptPostProcessor class and configures its log level and handlers.
 
         Args:
             filename (str, optional): The name of the file to log to. Defaults to None.
-            app (SUPPORTED_APPS): The application for which the logger is being created.
 
         Returns:
             None
