@@ -15,6 +15,7 @@ from modules.processing import StableDiffusionProcessing  # type: ignore
 from modules.shared import opts  # type: ignore
 from modules.paths import models_path  # type: ignore
 import gradio as gr  # type: ignore
+
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, SUPPORTED_APPS_NAMES, PPPStateOptions
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log

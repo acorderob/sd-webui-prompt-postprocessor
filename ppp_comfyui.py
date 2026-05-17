@@ -1,3 +1,6 @@
+if __name__ == "__main__":
+    raise SystemExit("This script must be run from ComfyUI")
+
 import logging
 import os
 from pathlib import Path
@@ -13,9 +16,6 @@ from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
-
-if __name__ == "__main__":
-    raise SystemExit("This script must be run from ComfyUI")
 
 
 def _resolve_wildcards_folders(override: str = "") -> list[Path]:
@@ -849,13 +849,13 @@ class PromptPostProcessorSelectVariableComfyUINode:
         variables: dict[str, Any],
         name: str,
     ):
-        value = ""
         if variables:
             if name == "":
-                value = "\n".join(f"{k}: {v}" for k, v in variables.items())
-            elif name in variables:
-                value = variables[name]
-        return (value,)
+                return ("\n".join(f"{k}: {v}" for k, v in variables.items()),)
+            if name in variables:
+                return (variables[name],)
+            raise ValueError(f"Variable '{name}' not found in the input variables")
+        raise ValueError("No variables provided to select from")
 
 
 class PromptPostProcessorWildcardConcatComfyUINode:
