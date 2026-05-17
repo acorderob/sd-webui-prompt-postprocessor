@@ -434,11 +434,11 @@ class PromptPostProcessorComfyUINode:
                 self.extranetwork_mappings_obj,
             )
         self.ppp.process_prompts_group_start()
-        results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else 1)
+        results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else -1)
         self.ppp.process_prompts_group_end()
 
         # with open(Path(__file__).parent / "logs" / "last_prompts_comfyui.txt", "w", encoding="utf-8") as f:
-        #     f.write(f"Seed: {seed if seed is not None else 1}\n")
+        #     f.write(f"Seed: {seed if seed is not None else -1}\n")
         #     f.write(f"In Positive: {pos_prompt}\n")
         #     f.write(f"In Negative: {neg_prompt}\n")
         #     f.write("\n")

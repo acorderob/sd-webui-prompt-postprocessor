@@ -225,6 +225,15 @@ class PPPStateOptions:
             object.__setattr__(self, "cup_remove_extranetwork_tags", False)
 
 
+@dataclass
+class PPPStateInputs:
+    """Structured inputs for a single prompt processing call."""
+
+    seed: int = -1
+    pos_prompt: str = ""
+    neg_prompt: str = ""
+
+
 class CyclicalSamplerState:
     """Maintains the cycling position for '@' choice samplers across process_prompt calls."""
 
@@ -264,6 +273,7 @@ class PPPState:
     env_info: dict[str, Any] = field(default_factory=dict)
     host_config: HostConfig = field(default_factory=HostConfig)
     options: PPPStateOptions = field(default_factory=PPPStateOptions)
+    inputs: PPPStateInputs = field(default_factory=PPPStateInputs)
     variables: VariableRepository = field(default_factory=VariableRepository)
     wildcards_obj: PPPWildcards = field(default_factory=PPPWildcards)
     extranetwork_mappings_obj: PPPExtraNetworkMappings = field(default_factory=PPPExtraNetworkMappings)

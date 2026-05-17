@@ -43,7 +43,10 @@ class VariableRepository:
         """Set a system variable."""
         if not self.name_is_system(name):
             raise ValueError(f"Invalid system variable name '{name}': must start with an underscore")
-        self._system[name] = value
+        if value is None:
+            self._system.pop(name, None)
+        else:
+            self._system[name] = value
 
     def update_system(self, mapping: dict[str, VariableValue]) -> None:
         """Bulk-update system variables from *mapping*."""

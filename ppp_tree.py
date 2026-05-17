@@ -144,6 +144,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         limit_reached = False
 
         def _dfs(forced_path: tuple[int, ...]):
+            """Recursively explore combinatorial branches via Depth First Search (DFS)."""
             nonlocal limit_reached
             if 0 < limit <= len(results):
                 limit_reached = True
@@ -173,13 +174,13 @@ class TreeProcessor(lark.visitors.Interpreter):
     def __finalize_variables(self):
         """
         Ensure all variables have either an echoed value or their value evaluated as
-        a scalar at the end of processing, so they are included in the output snapshots.
+        a scalar at the end of processing, so they are included correctly in the output.
         """
         for k in self.state.variables.all_user:
             if self.state.variables.get_echoed_value(k) is None and not isinstance(
                 self.state.variables.get_user(k), ScalarValue
             ):
-                self.log(logging.DEBUG, f"Completing variable: {k}")
+                self.log(logging.DEBUG, f"Finalizing variable: {k}")
                 name, specifier = self.__separate_arrayref(k)
                 value = self.get_final_scalar_variable(name, specifier)
                 self.state.variables.set_user(k, value)

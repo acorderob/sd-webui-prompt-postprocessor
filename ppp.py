@@ -22,6 +22,7 @@ from ppp_classes import (
     PPPInterrupt,
     PPPState,
     PPPStateOptions,
+    PPPStateInputs,
 )
 from ppp_variables import VariableRepository, VariableEntry
 from ppp_logging import DEBUG_LEVEL, log
@@ -139,6 +140,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             env_info=env_info,
             host_config=host_config,
             options=options,
+            inputs=PPPStateInputs(),
             variables=VariableRepository(),
             wildcards_obj=wildcards_obj,
             extranetwork_mappings_obj=extranetwork_mappings_obj,
@@ -409,7 +411,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         wildcards_obj: PPPWildcards,
         extranetwork_mappings_obj: PPPExtraNetworkMappings,
     ) -> None:
-        """Updates env_info, options, wildcards and enmappings while preserving the cyclical state and compiled parsers."""
+        """Updates env_info, options, wildcards and enmappings while preserving the inputs, cyclical state and compiled parsers."""
         self.debug_level = options.debug_level
         host_config = self.__load_config_and_detect(env_info)
         self.state = PPPState(
@@ -417,6 +419,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             env_info=env_info,
             host_config=host_config,
             options=options,
+            inputs=self.state.inputs,
             variables=VariableRepository(),
             wildcards_obj=wildcards_obj,
             extranetwork_mappings_obj=extranetwork_mappings_obj,
@@ -606,13 +609,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Initializes the system variables.
         """
         vs = self.state.variables
+
+        # We keep any existing input variables
+        input_vars = {k: v for k, v in vs.all_system.items() if k.startswith("_input_")}
         vs.clear_system()
 
         # Option related variables
         for opt_name in self.defopt.keys():
             opt_value = getattr(self.state.options, opt_name)
             var_name = "_opt_" + opt_name
-            if isinstance(opt_value, (bool, str, int)):
+            if isinstance(opt_value, (bool, str, int, float)):
                 vs.set_system(var_name, opt_value)
             elif isinstance(opt_value, Enum):
                 vs.set_system(var_name, str(opt_value).split(".", 1)[-1])
@@ -658,6 +664,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         vs.set_system("_is_sdxl_no_ssd", sdchecks["sdxl"] and not is_ssd)
         # backcompatibility (but the modern one to use would be _is_pure_sdxl)
         vs.set_system("_is_sdxl_no_pony", sdchecks["sdxl"] and not vs.get_system("_is_pony", False))
+
+        vs.update_system(input_vars)
+
 
     def init_wildcards_options(self):
         """Initializes the wildcard options."""
@@ -847,7 +856,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self,
         result: tuple[str, list[tuple[str, bool]], dict[str, VariableEntry]],
     ) -> tuple[str, str, dict[str, str | None]]:
-        variables = {}
+        all_variables = self.state.variables.all_system
         unified_prompt, rem_wildcards, variables_snapshot = result
 
         # Split the unified prompt back into prompt and negative prompt
@@ -870,8 +879,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if ev is not None:
                     if isinstance(ev, str) and self.state.options.cup_cleanup_variables:
                         ev = self.__cleanup(ev, 0)
-                    variables[k] = ev
-            self.log(logging.INFO, f"Result variables: {variables}")
+                    all_variables[k] = ev
+
+            self.log(logging.INFO, f"Result variables: {all_variables}")
 
             # Result checks
             warnings = []
@@ -946,25 +956,47 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
 
-        v = self.state.variables.all_system
-        v.update(variables)
-        return prompt, negative_prompt, v
+        return prompt, negative_prompt, all_variables
 
     def __processprompts(
-        self, rng: np.random.Generator, prompt: str, negative_prompt: str
-    ) -> list[tuple[str, str, dict[str, str | None]]]:
+        self,
+        prompt: str,
+        negative_prompt: str,
+        seed: int,
+    ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Process the prompt and negative prompt.
 
         Args:
-            rng (numpy.random.Generator): The random number generator.
             prompt (str): The prompt.
             negative_prompt (str): The negative prompt.
+            seed (int): The seed for the random number generator.
 
         Returns:
-            list: A list of tuples, each containing the processed prompt, negative prompt, and all variables.
+            list[tuple[str, str, dict[str, Any]]]: A list of tuples, each containing the processed prompt, negative prompt, and all variables.
         """
         self.state.variables.clear_user()
+
+        # We update the input state
+        self.state.inputs.seed = int(seed & 0xFFFFFFFF)
+        self.state.inputs.pos_prompt = prompt
+        self.state.inputs.neg_prompt = negative_prompt
+
+        # Input related system variables
+        for input_name in self.state.inputs.__dict__.keys():
+            input_value = getattr(self.state.inputs, input_name)
+            var_name = "_input_" + input_name
+            if isinstance(input_value, (bool, str, int, float)):
+                self.state.variables.set_system(var_name, input_value)
+            elif isinstance(input_value, Enum):
+                self.state.variables.set_system(var_name, str(input_value).split(".", 1)[-1])
+            else:
+                self.log(logging.WARNING, f"Input '{input_name}' has unsupported type {type(input_value).__name__} for system variable and will be skipped.")
+
+        filtered_sysvars_inputs = {k: v for k, v in self.state.variables.all_system.items() if k.startswith("_input_")}
+        self.log(logging.INFO, f"Inputs: {filtered_sysvars_inputs}")
+
+        rng = np.random.default_rng(self.state.inputs.seed)
 
         # Parse both prompts
         processor = TreeProcessor(self.state, rng, on_model_info_update=self.__on_model_info_update)
@@ -995,7 +1027,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         t2 = time.monotonic_ns()
         self.log(logging.INFO, f"Visit time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
 
-        final_results = []
+        final_results: list[tuple[str, str, dict[str, Any]]] = []
         for i, r in enumerate(results):
             if self.state.options.do_combinatorial:
                 self.log(logging.INFO, f"Combination {i + 1}:")
@@ -1009,15 +1041,16 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
-        self.log(logging.INFO, f"System variables: {self.state.variables.all_system}")
+        filtered_sysvars = {k: v for k, v in self.state.variables.all_system.items() if not k.startswith("_input_")}
+        self.log(logging.INFO, f"System variables: {filtered_sysvars}")
         self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
 
     def process_prompt(
         self,
         original_prompt: str,
         original_negative_prompt: str,
-        seed: int = 0,
-    ):
+        seed: int = -1,
+    ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Initializes the random number generator and processes the prompt and negative prompt.
 
@@ -1027,21 +1060,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             seed (int): The seed.
 
         Returns:
-            tuple: A tuple containing the processed prompt, negative prompt and all the prompt variables.
+            list[tuple[str, str, dict[str, Any]]]: A list of tuples containing the processed prompt, negative prompt and all the prompt variables.
         """
+        results: list[tuple[str, str, dict[str, Any]]]
         try:
             if seed == -1:
                 seed = np.random.randint(0, 2**32, dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
-            self.log(logging.INFO, f"Input seed: {seed}")
-            self.log(logging.INFO, f"Input prompt: {prompt}")
-            self.log(logging.INFO, f"Input negative_prompt: {negative_prompt}")
             t1 = time.monotonic_ns()
             if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
                 self.state.cyclical_state.reset()
                 self.state.cyclical_state.last_prompt_pair = (original_prompt, original_negative_prompt)
-            results = self.__processprompts(np.random.default_rng(seed & 0xFFFFFFFF), prompt, negative_prompt)
+            results = self.__processprompts(prompt, negative_prompt, seed)
             t2 = time.monotonic_ns()
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")
