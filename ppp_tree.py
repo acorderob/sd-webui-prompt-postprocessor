@@ -1240,9 +1240,9 @@ class TreeProcessor(lark.visitors.Interpreter):
         """
         t1 = time.monotonic_ns()
         start_result = self.__result
-        settable_sysvars = {"_modelfullname": "model_filename", "_modelclass": "model_class"}
+        settable_sysvars = {"_modelfullname": "model_filename"}
         if self.state.variables.name_is_system(variable_name):
-            if variable_name not in settable_sysvars and variable_name != "_modelinfo":
+            if variable_name not in settable_sysvars:
                 self.warn_or_stop(
                     f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
                 )
@@ -1252,18 +1252,9 @@ class TreeProcessor(lark.visitors.Interpreter):
                 self.warn_or_stop(f"Setting '{escape_single_quotes(variable_name)}' is only supported in ComfyUI.")
                 return
             evaluated = self.__visit(content, restore_state=False, discard_content=True)
-            if variable_name == "_modelinfo":
-                # Format: <class>@<filename>
-                at_pos = evaluated.find("@")
-                if at_pos < 0:
-                    self.warn_or_stop(
-                        f"Invalid value for '_modelinfo': expected '<class>@<filename>', got '{escape_single_quotes(evaluated)}'."
-                    )
-                    return
-                self.state.env_info["model_class"] = evaluated[:at_pos]
-                self.state.env_info["model_filename"] = evaluated[at_pos + 1 :]
-            else:
-                self.state.env_info[settable_sysvars[variable_name]] = evaluated
+            self.state.env_info[settable_sysvars[variable_name]] = evaluated
+            if variable_name == "_modelfullname":
+                self.state.env_info["model_class"] = ""  # reset model class so it will be re-evaluated
             if self.__on_model_info_update is not None:
                 self.__on_model_info_update()
             info = variable_name + " = " + f"'{escape_single_quotes(evaluated)}'"

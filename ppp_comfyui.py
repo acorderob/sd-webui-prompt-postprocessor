@@ -87,6 +87,9 @@ class PromptPostProcessorComfyUINode:
 
     @classmethod
     def INPUT_TYPES(cls):
+        models_list = ["(none)"] + sorted(
+            set(folder_paths.get_filename_list("checkpoints") + folder_paths.get_filename_list("diffusion_models"))
+        )
         return {
             "required": {
                 "pos_prompt": (
@@ -114,16 +117,16 @@ class PromptPostProcessorComfyUINode:
                     {
                         "default": "",
                         "placeholder": "internal model class name",
-                        "tooltip": "Model or model class name. Needed to know model kind.",
+                        "tooltip": "Model or model class name. Optional if you set modelname.",
                     },
                 ),
                 "modelname": (
-                    "STRING",
+                    "COMBO",
                     {
-                        "default": "",
-                        "placeholder": "full path of the model",
-                        "dynamicPrompts": False,
-                        "tooltip": "Full path of the model. Needed to detect variants.",
+                        "options": models_list,
+                        "default": "(none)",
+                        "placeholder": "relative path of the model",
+                        "tooltip": "Relative path of the model. Needed to detect variants.",
                     },
                 ),
                 "seed": (
@@ -308,6 +311,8 @@ class PromptPostProcessorComfyUINode:
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
         ) or ""
+        if modelname == "(none)":
+            modelname = ""
         if modelclass == "":
             modelclass = get_model_class_from_filename(modelname)
             if modelclass:
@@ -874,7 +879,7 @@ class PromptPostProcessorSelectVariableComfyUINode:
                 return (variables[name],)
             if if_not_found == ONWARNING_CHOICES.stop.value:
                 raise ValueError(f"Variable '{name}' not found in the input variables")
-            self.logger.warning(f"Variable '{name}' not found in the input variables")
+            self.logger.warning(f"Variable '{name}' not found in the input variables, using default value '{escape_single_quotes(default)}'")
             return (default,)
         raise ValueError("No variables provided to select from")
 

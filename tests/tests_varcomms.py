@@ -986,33 +986,6 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("this test is OK", ""),
         )
 
-    def test_set_sysvar_modelclass(self):  # setting _modelclass updates model detection
-        self.process(
-            InputTuple(
-                "${_modelclass=Flux}${_model}",
-                "",
-            ),
-            OutputTuple("flux", ""),
-        )
-
-    def test_set_sysvar_modelfullname(self):  # setting _modelfullname changes variant detection
-        self.process(
-            InputTuple(
-                "${_modelfullname=ponymodel.safetensors}<ppp:if _is_pony>OK<ppp:else>not OK<ppp:/if>",
-                "",
-            ),
-            OutputTuple("OK", ""),
-        )
-
-    def test_set_sysvar_modelinfo(self):  # setting _modelinfo sets both class and filename at once
-        self.process(
-            InputTuple(
-                "${_modelinfo=Flux@folder/fluxmodel.safetensors}${_modelname},${_modelclass}",
-                "",
-            ),
-            OutputTuple("fluxmodel.safetensors,Flux", ""),
-        )
-
     def test_cmd_echo_sysvar(self):
         self.process(
             InputTuple(

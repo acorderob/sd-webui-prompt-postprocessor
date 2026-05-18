@@ -4,7 +4,7 @@ Main PPP node that processes prompts.
 
 ## Inputs
 
-* **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
+* **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables. Optional if you set modelname.
 * **modelname**: Filename of the model (with relative path). Needed for the detection of model variants.
 * **seed**: Set or connect here the seed used. By default it is -1 (random). The actual value used can be extracted from the output variables (`_input_seed`).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
@@ -32,7 +32,7 @@ The model and modelname are also optional, but if you don't set them you will no
 
 Setting only the modelname will try to detect its class from the file contents. If you don't want to set the path twice (and you don't use a loader node that outputs the name), you can set it here and then extract it from the output variables (`_modelfullname`) to send to the loader node.
 
-You can instead set them from the prompt and load the model afterwards.
+You can instead set it from the prompt (with variable `_modelfullname`) and load the model afterwards.
 
 ## Outputs
 

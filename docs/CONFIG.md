@@ -52,7 +52,7 @@ The model and modelname are also optional, but if you don't set them you will no
 
 Setting only the modelname will try to detect its class from the file contents. If you don't want to set the path twice (and you don't use a loader node that outputs the name), you can set it here and then extract it from the output variables (`_modelfullname`) to send to the loader node.
 
-You can instead set them from the prompt and load the model afterwards.
+You can also set them from the prompt and load the model afterwards.
 
 Outputs:
 

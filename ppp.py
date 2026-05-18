@@ -402,7 +402,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """Called when _modelfullname or _modelclass are set via a prompt command."""
         self.__run_model_detection(self.state.env_info)
         self.__init_sysvars()
-        self.log(logging.INFO, f"Updated system variables: {self.state.variables.all_system}")
+        self.log(logging.DEBUG, f"Updated system variables: {self.state.variables.all_system}")
 
     def update(
         self,
@@ -632,7 +632,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         model_filename = self.state.env_info.get("model_filename", "")
         vs.set_system("_sdfullname", model_filename)  # deprecated
         vs.set_system("_modelfullname", model_filename)
-        vs.set_system("_modelinfo", f"{self.state.env_info.get('model_class', '')}@{model_filename}")
         vs.set_system("_sdname", Path(model_filename).name)  # deprecated
         vs.set_system("_modelname", Path(model_filename).name)
         vs.set_system("_modelclass", self.state.env_info.get("model_class", ""))
@@ -1042,7 +1041,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
         filtered_sysvars = {k: v for k, v in self.state.variables.all_system.items() if not k.startswith("_input_")}
-        self.log(logging.INFO, f"System variables: {filtered_sysvars}")
+        self.log(logging.DEBUG, f"System variables: {filtered_sysvars}")
         self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
 
     def process_prompt(

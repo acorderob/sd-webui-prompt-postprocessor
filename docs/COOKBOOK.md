@@ -85,7 +85,9 @@ Then use `__colors_warm__` or `__colors_cold__`, or `__colors'warm'__` or `__col
 
 ## Prompt building
 
-You can create a complex set of wildcards that build a full prompt, by using the wildcards along with variables with default values. The variables allow you to choose what parts of the prompt you want to change for specific content, or just leave the defaults. Then, inside the UI, you can use styles (with an appropiate styles node if using *ComfyUI*) to choose which variables to set. This makes it easy to quickly select what do you want to prompt for.
+You can create a complex set of wildcards that build a full prompt, by using the wildcards along with variables with default values. The variables allow you to choose what parts of the prompt you want to change for specific content, or just leave the defaults. Then, inside the UI, you can use styles (with an appropiate A1111 styles node if using *ComfyUI*) to choose which variables to set. This makes it easy to quickly select what do you want to prompt for.
+
+If you use *ComfyUI* and don't have a styles node, you can put them in individual wildcards and use the included `Wildcards Concat` node.
 
 Wildcards:
 
@@ -480,11 +482,19 @@ You can also use `evaluate ifundefined` (`?=!`) to resolve the wildcard immediat
 ${quality?=!__qualities__}
 ```
 
-## Choosing the model from the prompt
+## Informing the model to the node in *ComfyUI*
 
-In *ComfyUI*, you can leave the model and modelname inputs disconnected and set the `_modelinfo` system variable (or `_modelfullname` and `_modelclass`) at the start of the prompt (maybe through a wildcard or a choice construct). Then extract the `_modelfullname` output variable using the `Select Variable` node and use its value to actually load that model.
+In older versions, to correctly set the `_is_*` variables it was needed to set the `model` input (to get the class and kind of model) and the `modelname` input (to calculate variants). Now, the class and kind can be inferred from the file, so only the `modelname` is needed.
 
-You can also set and extract user variables for other ksampler inputs, like sampler, scheduler, steps, cfg and latent size. The numeric ones will need to be transformed from string to int/float using some other node.
+You can still load the model before the PPP node, and you connect it to the `model` input, but you will still need to fill the `modelname` input to detect variants (and if you don't have a loader node that also outputs the filename it is a repetition).
+
+But a better way is loading the model after the PPP node, setting the filename in `modelname` (which is now a combo) and then extracting `_modelfullname` from the output variables and connecting that to the model loader node filename input. This also let's you use the next tip.
+
+## Choosing the model from the prompt in *ComfyUI*
+
+You can leave the model and modelname inputs disconnected/empty and set the `_modelfullname` variable at the start of the prompt (maybe through a wildcard or a choice construct). Then extract it from the output variables using the `Select Variable` node and use its value to actually load that model.
+
+You can also set and extract user variables for other ksampler inputs, like sampler, scheduler, steps, cfg and latent size.
 
 ## Debugging tips
 
