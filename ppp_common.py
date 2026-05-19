@@ -1,10 +1,13 @@
 import ast
+import csv
+from functools import reduce
 import logging
 from pathlib import Path
 import re
 import textwrap
 import time
 import lark
+import yaml
 
 from ppp_logging import log
 from ppp_classes import ONWARNING_CHOICES, PPPInterrupt, PPPState
@@ -237,3 +240,67 @@ def get_model_class_from_filename(filename: str) -> str:
         return config.__class__.__name__ if config else ""
     except Exception:  # pylint: disable=broad-except
         return ""
+
+
+def sanitize_wc_name(name: str) -> str:
+    # Remove invalid characters
+    return re.sub(r"[^a-zA-Z0-9-_]+", "", re.sub(r"_{2,}", "_", name.replace(" ", "_")))
+
+
+def convert_a1111_styles_to_wildcard(inp: Path, out: Path):
+    """
+    Converts styles from A1111 format to wildcard format in a YAML file.
+    Args:
+        inp (Path): The input CSV file path.
+        out (Path): The output YAML file path.
+    """
+    wildcards = {}
+    with open(inp, "r", encoding="utf-8-sig") as f:
+        for reg in csv.reader(f):
+            name = reg[0].strip()
+            if name.lower() == "name":
+                continue
+            positive = reg[1].strip()
+            negative = reg[2].strip()
+            if negative:
+                positive = f"{positive}<ppp:stn>{negative}<ppp:/stn>"
+            name = sanitize_wc_name(name)
+            wildcards[name] = positive
+    if not wildcards:
+        raise RuntimeError(f"No styles found in {inp} to convert to wildcards.")
+    with open(out, "w", encoding="utf-8-sig") as f:
+        f.write(f"# Original names may contain characters that are replaced in the output.\n# Converted from {inp}\n")
+        yaml.dump(wildcards, f, allow_unicode=True)
+
+
+def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
+    """
+    Converts styles from SD.Next format to wildcard format in a YAML file.
+    Args:
+        inp (Path): The input folder path containing style json files or a single json file.
+        out (Path): The output YAML file path.
+    """
+    wildcards = {}
+    files = inp.glob("*.json") if inp.is_dir() else [inp]
+    for file in files:
+        with open(file, "r", encoding="utf-8-sig") as f:
+            data = yaml.safe_load(f)
+            if not isinstance(data, list):
+                continue
+            wildcards[file] = {}
+            for style in data:
+                name = style.get("name", "").strip()
+                positive = style.get("prompt", "").strip()
+                negative = style.get("negative", "").strip()
+                # extra = style.get("extra", "").strip()
+                if negative:
+                    positive = f"{positive}<ppp:stn>{negative}<ppp:/stn>"
+                name = sanitize_wc_name(name)
+                wildcards[file][name] = positive
+    if not reduce(lambda acc, d: acc or bool(d), wildcards.values(), False):
+        raise RuntimeError(f"No styles found in {inp} to convert to wildcards.")
+    with open(out, "w", encoding="utf-8-sig") as f:
+        f.write("# Original names may contain characters that are replaced in the output.\n")
+        for name, wcs in wildcards.items():
+            f.write(f"# Converted from {name}\n")
+            yaml.dump(wcs, f, allow_unicode=True)

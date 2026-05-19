@@ -197,19 +197,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
         Returns:
             None
         """
-        app = (
-            SUPPORTED_APPS.forge
-            if hasattr(p.sd_model, "model_config")
-            else (
-                SUPPORTED_APPS.reforge
-                if hasattr(p.sd_model, "forge_objects")
-                else (
-                    SUPPORTED_APPS.sdnext
-                    if hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd")
-                    else SUPPORTED_APPS.a1111
-                )
-            )
-        )
+        app = SUPPORTED_APPS.a1111
+        if hasattr(p.sd_model, "model_config"):
+            app = SUPPORTED_APPS.forge
+            if not hasattr(p.sd_model, "is_sd2"):
+                app = SUPPORTED_APPS.forgeneo
+        elif hasattr(p.sd_model, "forge_objects"):
+            app = SUPPORTED_APPS.reforge
+        elif hasattr(p.sd_model, "is_sdxl") and not hasattr(p.sd_model, "is_ssd"):
+            app = SUPPORTED_APPS.sdnext
+
         num_seeds = len(getattr(p, "all_seeds", []))
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(getattr(opts, "ppp_gen_debug_level", PromptPostProcessor.DEFAULT_DEBUG_LEVEL)),
@@ -303,11 +300,13 @@ class PromptPostProcessorA1111Script(scripts.Script):
             "app": app.value,
             "models_path": models_path,
             "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
-            "model_class": p.sd_model.__class__.__name__,
+            "model_class": (
+                p.sd_model.model_config.__class__.__name__
+                if app in (SUPPORTED_APPS.forge, SUPPORTED_APPS.forgeneo)
+                else p.sd_model.__class__.__name__
+            ),
             "property_base": p.sd_model,
         }
-        if app == SUPPORTED_APPS.forge:
-            env_info["model_class"] = p.sd_model.model_config.__class__.__name__
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)

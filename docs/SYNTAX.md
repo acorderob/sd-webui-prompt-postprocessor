@@ -88,7 +88,7 @@ The parameters, the filter, and the setting of a variable are optional. The para
 ### Identifier
 
 * Allowed characters are letters, numbers, underscore (`_`), dash (`-`), dot (`.`), and the path separators (`/` and `\`). It cannot start with an underscore because it would be ambiguous whether it's part of the name or just precedes the wildcard.
-* Can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing).
+* Can have a relative path and contain globbing formatting, to read multiple wildcards and merge their choices. Note that if there are no parameters specified, the globbing will use the ones from the first wildcard that matches and have parameters (sorted by keys), so if you don't want that you might want to specify them. Also note that, unlike with *Dynamic Prompts*, the wildcard name has to be specified with its full path (unless you use globbing). Globbing cannot be at the start (you can't do, for example, `*/colors`).
 * You can use variables, with the `${name}`, `${name:default}`, `<ppp:echo name/>` or `<ppp:echo name>default<ppp:/>echo>` formats, to build a dynamic identifier.
 
 ### Filter
@@ -196,7 +196,7 @@ The format is:
 | `<ppp:setwcdeffilter 'identifier' 'filter'/>` | Sets a filter      |
 | `<ppp:setwcdeffilter 'identifier'/>`          | Removes the filter |
 
-The wildcard identifier supports globbing. The filter does not allow the `^` or `#` flags.
+The wildcard identifier supports globbing (but not at the start). The filter does not allow the `^` or `#` flags.
 
 ## Variables
 

@@ -50,6 +50,12 @@ hosts:
         alternation: ok
         and: ok
         break: ok
+    forgeneo:
+        attention: ok
+        scheduling: ok
+        alternation: ok
+        and: ok
+        break: ok
     reforge:
         attention: ok
         scheduling: ok
@@ -74,10 +80,11 @@ hosts:
 # Supported base models, variants, and options
 # Check supported models for each host in:
 #   A1111:
-#   Forge: repositories\huggingface_guess\huggingface_guess\model_list.py
-#   reForge:
-#   SD.Next:
-#   ComfyUI:
+#   Forge Classic: repositories\huggingface_guess\huggingface_guess\model_list.py
+#   Forge Neo: modules_forge\packages\huggingface_guess\model_list.py
+#   reForge: ldm_patched\modules\supported_models.py
+#   SD.Next: modules\shared_items.py
+#   ComfyUI: ComfyUI\comfy\supported_models.py
 models:
     # We define supported models and how we detect them in each host application (by class or by a known boolean property, or null for not supported).
     # We can also define here variants and some options.
@@ -86,6 +93,7 @@ models:
         detect:
             a1111: { property: "is_sd1" }
             forge: { property: "is_sd1" }
+            forgeneo: { property: "is_sd1" }
             reforge: { property: "is_sd1" }
             sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend; cannot differentiate SD1 and SD2, we set both to True
             comfyui: { class: ["SD15", "SD15_instructpix2pix"] }
@@ -93,6 +101,7 @@ models:
         detect:
             a1111: { property: "is_sd2" }
             forge: { property: "is_sd2" }
+            forgeneo: null
             reforge: { property: "is_sd2" }
             sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # cannot differentiate SD1 and SD2, we set both to True; LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
             comfyui: { class: ["SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"] }
@@ -100,6 +109,7 @@ models:
         detect:
             a1111: { property: "is_ssd" }
             forge: null
+            forgeneo: null
             reforge: { property: "is_ssd" }
             sdnext: null
             comfyui: { class: ["SSD1B"]}
@@ -107,6 +117,7 @@ models:
         detect:
             a1111: { property: "is_sdxl" }
             forge: { property: "is_sdxl" }
+            forgeneo: { property: "is_sdxl" }
             reforge: { property: "is_sdxl" }
             sdnext: { class: ["StableDiffusionXLPipeline"] }
             comfyui: { class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
@@ -118,10 +129,12 @@ models:
             #                     If specified as a list, it should be a list of dicts or strings
             pony: { find_in_filename: "(?:pony|pny|pdxl)" }
             illustrious: { find_in_filename: { regex: "(?:illustrious|illust|ilxl)", flags: ["IGNORECASE"] } }
+            noobai: { find_in_filename: "(?:noob|nai)" }
     sd3: # Stable Diffusion 3
         detect:
             a1111: { property: "is_sd3" }
             forge: { property: "is_sd3", class: ["SD3"] }
+            forgeneo: null
             reforge: { property: "is_sd3" }
             sdnext: { class: ["StableDiffusion3Pipeline"] }
             comfyui: { class: ["SD3"] }
@@ -129,13 +142,15 @@ models:
         detect:
             a1111: null
             forge: { class: ["Flux", "FluxSchnell"] }
+            forgeneo: { class: ["Flux", "FluxSchnell"] }
             reforge: { class: ["Flux", "FluxInpaint", "FluxSchnell"] }
             sdnext: { class: ["FluxPipeline"] }
             comfyui: { class: ["Flux", "FluxInpaint", "FluxSchnell"] }
     auraflow: # AuraFlow
         detect:
             a1111: null
-            forge: null
+            forge: { class: ["AuraFlow"] }
+            forgeneo: null
             reforge: { class: ["AuraFlow"] }
             sdnext: { class: ["AuraFlowPipeline"] }
             comfyui: { class: ["AuraFlow"] }
@@ -143,20 +158,31 @@ models:
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["PixArtAlpha", "PixArtSigma"] }
-            sdnext: { class: ["PixArtAlphaPipeline"] }
+            sdnext: { class: ["PixArtAlphaPipeline", "PixArtSigmaPipeline"] }
             comfyui: { class: ["PixArtAlpha", "PixArtSigma"] }
-    lumina2: # Lumina2 & ZImage
+    lumina2: # Lumina2
         detect:
             a1111: null
             forge: null
-            reforge: { class: ["Lumina2", "ZImage"] }
-            sdnext: null
-            comfyui: { class: ["Lumina2", "ZImage"] }
+            forgeneo: { class: ["Lumina2"] }
+            reforge: { class: ["Lumina2"] }
+            sdnext: { class: ["Lumina2Pipeline"] }
+            comfyui: { class: ["Lumina2"] }
+    zimage: # ZImage
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: { class: ["ZImage"] }
+            reforge: { class: ["ZImage"] }
+            sdnext: { class: ["ZImagePipeline"] }
+            comfyui: { class: ["ZImage"] }
     ltxv: # LTXV
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: null
             sdnext: null
             comfyui: { class: ["LTXV", "LTXAV"] }
@@ -164,13 +190,15 @@ models:
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["CosmosT2V", "CosmosI2V"] }
-            sdnext: null
+            sdnext: { class: ["Cosmos2TextToImagePipeline"] }
             comfyui: { class: ["CosmosT2V", "CosmosI2V"] }
     cosmospredict2: # CosmosPredict2
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["CosmosT2IPredict2", "CosmosI2VPredict2"] }
             sdnext: null
             comfyui: { class: ["CosmosT2IPredict2", "CosmosI2VPredict2"] }
@@ -178,20 +206,23 @@ models:
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["GenmoMochi"] }
             sdnext: null
             comfyui: { class: ["GenmoMochi"] }
     hunyuan: # Hunyuan
         detect:
             a1111: null
-            forge: null
+            forge: { class: ["HunyuanDiT", "HunyuanDiT1"] }
+            forgeneo: null
             reforge: { class: ["HunyuanDiT", "HunyuanDiT1"] }
-            sdnext: null
+            sdnext: { class: ["HunyuanDiTPipeline", "HunyuanImagePipeline"] }
             comfyui: { class: ["HunyuanDiT", "HunyuanDiT1"] }
     hunyuanvideo: # HunyuanVideo
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V", "HunyuanImage21", "HunyuanImage21Refiner", "HunyuanVideo15", "HunyuanVideo15_SR_Distilled"] }
             sdnext: null
             comfyui: { class: ["HunyuanVideo", "HunyuanVideoI2V", "HunyuanVideoSkyreelsI2V", "HunyuanImage21", "HunyuanImage21Refiner", "HunyuanVideo15", "HunyuanVideo15_SR_Distilled"] }
@@ -199,6 +230,7 @@ models:
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"] }
             sdnext: null
             comfyui: { class: ["Hunyuan3Dv2", "Hunyuan3Dv2_1", "Hunyuan3Dv2mini"] }
@@ -206,55 +238,95 @@ models:
         detect:
             a1111: null
             forge: { class: ["WAN21_T2V", "WAN21_I2V"] }
+            forgeneo: { class: ["WAN21_T2V", "WAN21_I2V"] }
             reforge: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
-            sdnext: null
-            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
+            sdnext: { class: ["WanPipeline"] }
+            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V", "WAN21_FlowRVS", "WAN21_SCAIL", "WAN22_WanDancer"] }
     hidream: # HiDream
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["HiDream"] }
-            sdnext: null
-            comfyui: { class: ["HiDream"] }
+            sdnext: { class: ["HiDreamImagePipeline"] }
+            comfyui: { class: ["HiDream", "HiDreamO1"] }
     qwenimage: # QwenImage & QwenImageEdit
         detect:
             a1111: null
-            forge: { class: ["QwenImage"] }
+            forge: null
+            forgeneo: { class: ["QwenImage"] }
             reforge: null
-            sdnext: null
+            sdnext: { class: ["QwenImagePipeline"] }
             comfyui: { class: ["QwenImage"] }
     chroma: # Chroma
         detect:
             a1111: null
-            forge: { class: ["Chroma"] }
+            forge: null
+            forgeneo: { class: ["Chroma"] }
             reforge: { class: ["Chroma", "ChromaRadiance"] }
-            sdnext: null
+            sdnext: { class: ["ChromaPipeline"] }
             comfyui: { class: ["Chroma", "ChromaRadiance"] }
     omnigen2: # Omnigen 2
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: { class: ["Omnigen2"] }
-            sdnext: null
+            sdnext: { class: ["OmniGen2Pipeline"] }
             comfyui: { class: ["Omnigen2"] }
     flux2: # Flux 2
         detect:
             a1111: null
             forge: null
+            forgeneo: { class: ["Flux2K4B", "Flux2K9B"] }
             reforge: null
-            sdnext: null
-            comfyui: { class: ["Flux2"] }
+            sdnext: { class: ["Flux2Pipeline", "Flux2KleinPipeline"] }
+            comfyui: { class: ["Flux2", "Flux2K4B", "Flux2K9B"] }
     kandinsky5: # Kandinsky 5
         detect:
             a1111: null
             forge: null
+            forgeneo: null
             reforge: null
-            sdnext: null
+            sdnext: { class: ["Kandinsky5T2IPipeline"] }
             comfyui: { class: ["Kandinsky5", "Kandinsky5Image"] }
     anima: # Anima
         detect:
             a1111: null
             forge: null
+            forgeneo: { class: ["Anima"] }
+            reforge: null
+            sdnext: { class: ["AnimaText2ImagePipeline"] }
+            comfyui: { class: ["Anima"] }
+    longcatimage: # LongCatImage
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: { class: ["LongCatImagePipeline"] }
+            comfyui: { class: ["LongCatImage"] }
+    ernieimage: # ErnieImage
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: { class: ["ErnieImage"] }
+            reforge: null
+            sdnext: { class: ["ErnieImagePipeline"] }
+            comfyui: { class: ["ErnieImage"] }
+    mugen: # Mugen
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: { class: ["Mugen"] }
             reforge: null
             sdnext: null
-            comfyui: { class: ["Anima"] }
+            comfyui: { class: ["Mugen"] }
+    cogvideox: # CogVideoX
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["CogVideoX_T2V", "CogVideoX_I2V", "CogVideoX_Inpaint"] }

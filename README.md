@@ -82,6 +82,10 @@ See the [syntax documentation](docs/SYNTAX.md).
 
 See the [cookbook](docs/COOKBOOK.md) for interesting usages.
 
+## Tools
+
+A tool `tools/convert_styles.py` exists to convert A1111 or SD.Next styles into a wildcards file.
+
 ## Contributing
 
 To develop, I suggest doing so with the extension isolated from the UI (you can use a symlink to test it in the UI), and with its own virtual environment (venv or .venv), so the tests work and can be debugged properly.

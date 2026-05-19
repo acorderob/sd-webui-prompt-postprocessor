@@ -328,6 +328,23 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             else:
                 user_cfg = None
         if user_cfg is not None:
+            if not isinstance(user_config_file, dict):
+                default_hosts = set((self.config.hosts or {}).keys())
+                user_hosts = set((user_cfg.hosts or {}).keys())
+                missing_hosts = default_hosts - user_hosts
+                if missing_hosts:
+                    self.log(
+                        logging.WARNING,
+                        f"User configuration is missing host(s) from the default: {', '.join(sorted(missing_hosts))}. Consider updating your configuration file.",
+                    )
+                default_models = set((self.config.models or {}).keys())
+                user_models = set((user_cfg.models or {}).keys())
+                missing_models = default_models - user_models
+                if missing_models:
+                    self.log(
+                        logging.WARNING,
+                        f"User configuration is missing model(s) from the default: {', '.join(sorted(missing_models))}. Consider updating your configuration file.",
+                    )
             self.__merge_configuration(user_cfg)
 
         self.models_config: dict[str, ModelConfig | None] = self.config.models or {}
