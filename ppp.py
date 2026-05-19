@@ -304,13 +304,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 raise PPPInterrupt(errmsg)
             self.log(logging.WARNING, errmsg)
 
+        app = env_info.get("app", "")
         user_config_file = env_info.get("ppp_config", "")
         if isinstance(user_config_file, dict):
             user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
         else:
             user_raw: dict[str, Any] = {}
             if user_config_file == "":
-                if env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
+                if app == SUPPORTED_APPS.comfyui.value:
                     try:
                         import folder_paths  # type: ignore
 
@@ -351,7 +352,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.known_models: list[str] = list(self.models_config.keys())
 
         # Patch for tests (copy comfyui)
-        if env_info.get("app", "") == "tests":
+        if app == "tests":
             if self.config.hosts is None:
                 self.config.hosts = {}
             self.config.hosts.setdefault("tests", HostConfig())
@@ -362,10 +363,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         model.detect = {}
                     model.detect.setdefault("tests", model.detect.get("comfyui", None))
 
-        host_config: HostConfig | None = (self.config.hosts or {}).get(env_info.get("app", ""))
+        host_config: HostConfig | None = (self.config.hosts or {}).get(app)
         if host_config is None:
             raise PPPInterrupt(
-                f"No host configuration found for app '{escape_single_quotes(env_info.get('app', ''))}'. Please check your configuration."
+                f"No host configuration found for app '{escape_single_quotes(app)}'. Please check your configuration."
             )
 
         # Update env_info with model detection
@@ -381,7 +382,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         logging.WARNING,
                         f"Variant name '{escape_single_quotes(v)}' in model '{escape_single_quotes(m)}' conflicts with a known model name. Discarding variant.",
                     )
-        self.log(logging.DEBUG, f"Host configuration: {host_config}", min_level=DEBUG_LEVEL.minimal)
+        self.log(logging.DEBUG, f"Host configuration ({escape_single_quotes(app)}): {host_config}", min_level=DEBUG_LEVEL.minimal)
 
         return host_config
 
@@ -390,7 +391,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         prop_base = env_info.get("property_base", None)
         model_class = env_info.get("model_class", "")
         model_name = env_info.get("model_filename", "")
-        if not model_class and model_name and env_info.get("app", "") == SUPPORTED_APPS.comfyui.value:
+        app = env_info.get("app", "")
+        if not model_class and model_name and app == SUPPORTED_APPS.comfyui.value:
             model_class = get_model_class_from_filename(model_name)
             if model_class:
                 env_info["model_class"] = model_class
@@ -399,7 +401,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     f"Detected model class '{model_class}' from filename '{model_name}'",
                     min_level=DEBUG_LEVEL.minimal,
                 )
-        app = env_info.get("app", "")
         for m in self.known_models:
             env_info["is_" + m] = False
             model_obj = self.models_config.get(m)

@@ -79,12 +79,12 @@ hosts:
 
 # Supported base models, variants, and options
 # Check supported models for each host in:
-#   A1111:
-#   Forge Classic: repositories\huggingface_guess\huggingface_guess\model_list.py
-#   Forge Neo: modules_forge\packages\huggingface_guess\model_list.py
-#   reForge: ldm_patched\modules\supported_models.py
-#   SD.Next: modules\shared_items.py
-#   ComfyUI: ComfyUI\comfy\supported_models.py
+#   a1111:
+#   forge: repositories\huggingface_guess\huggingface_guess\model_list.py
+#   forgeneo: modules_forge\packages\huggingface_guess\model_list.py
+#   reforge: ldm_patched\modules\supported_models.py
+#   sdnext: modules\shared_items.py
+#   comfyui: ComfyUI\comfy\supported_models.py
 models:
     # We define supported models and how we detect them in each host application (by class or by a known boolean property, or null for not supported).
     # We can also define here variants and some options.
@@ -92,23 +92,23 @@ models:
     sd1: # Stable Diffusion 1
         detect:
             a1111: { property: "is_sd1" }
-            forge: { property: "is_sd1" }
-            forgeneo: { property: "is_sd1" }
+            forge: { property: "is_sd1", class: ["SD15", "SD15_instructpix2pix"] }
+            forgeneo: { property: "is_sd1", class: ["SD15"] }
             reforge: { property: "is_sd1" }
-            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend; cannot differentiate SD1 and SD2, we set both to True
+            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline", "StableDiffusionInpaintPipeline", "StableDiffusionInstructPix2PixPipeline", "StableDiffusionUpscalePipeline"] } # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend; cannot differentiate SD1 and SD2, we set both to True
             comfyui: { class: ["SD15", "SD15_instructpix2pix"] }
     sd2: # Stable Diffusion 2
         detect:
             a1111: { property: "is_sd2" }
-            forge: { property: "is_sd2" }
+            forge: { property: "is_sd2", class: ["SD20", "SD21UnclipL", "SD21UnclipH"] }
             forgeneo: null
             reforge: { property: "is_sd2" }
-            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline"] } # cannot differentiate SD1 and SD2, we set both to True; LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
+            sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline", "StableDiffusionInpaintPipeline", "StableDiffusionInstructPix2PixPipeline", "StableDiffusionUpscalePipeline"] } # cannot differentiate SD1 and SD2, we set both to True; LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
             comfyui: { class: ["SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"] }
     ssd: # Segmind Stable Diffusion 1B
         detect:
             a1111: { property: "is_ssd" }
-            forge: null
+            forge: { class: ["SSD1B"] }
             forgeneo: null
             reforge: { property: "is_ssd" }
             sdnext: null
@@ -116,10 +116,10 @@ models:
     sdxl: # Stable Diffusion XL
         detect:
             a1111: { property: "is_sdxl" }
-            forge: { property: "is_sdxl" }
-            forgeneo: { property: "is_sdxl" }
+            forge: { property: "is_sdxl", class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
+            forgeneo: { property: "is_sdxl", class: ["SDXL", "SDXLRefiner"] }
             reforge: { property: "is_sdxl" }
-            sdnext: { class: ["StableDiffusionXLPipeline"] }
+            sdnext: { class: ["StableDiffusionXLPipeline", "StableDiffusionXLImg2ImgPipeline", "StableDiffusionXLInpaintPipeline", "StableDiffusionXLInstructPix2PixPipeline"] }
             comfyui: { class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
         variants:
             # At this level goes the name of the defined variants
