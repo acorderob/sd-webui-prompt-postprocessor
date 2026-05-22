@@ -364,8 +364,15 @@ class TestWildcards(TestPromptPostProcessorBase):
 
     def test_wc_wildcard_globbing(self):  # wildcard with globbing
         self.process(
-            InputTuple("the choices are: __yaml/wildcard[12]__, __yaml/wildcard?__", ""),
+            InputTuple("the choices are: __yaml/*card[12]__, __yaml/wildcard?__", ""),
             OutputTuple("the choices are: choice3-choice2, <lora:test2:1>- choice2 -choice3", ""),
+            ppp="nocup",
+        )
+
+    def test_wc_wildcard_globbing2(self):  # wildcard with globbing
+        self.process(
+            InputTuple("the choices are: __*/wildcard1__", ""),
+            OutputTuple("the choices are: choice2", ""),
             ppp="nocup",
         )
 
