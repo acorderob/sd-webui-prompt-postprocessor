@@ -66,6 +66,9 @@ class HostConfig(BaseModel):
     alternation: AlternationOption = "ok"
     and_: AndOption = Field("ok", alias="and")
     break_: BreakOption = Field("ok", alias="break")
+    seed_bits: int = Field(
+        64, validator=lambda v: v if v in (8, 16, 32, 64) else ValueError("seed_bits must be one of 8, 16, 32, or 64")
+    )
 
 
 # ------------------- Model detection -------------------

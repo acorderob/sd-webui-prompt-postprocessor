@@ -10,7 +10,8 @@ class VariableEntry:
     """Holds all state for a single user variable."""
 
     value: Any = field(default=None)  # raw unevaluated value or evaluated on set
-    last_echoed_value: ScalarValue | None = field(default=None)
+    last_echoed_value: Any = field(default=None)  # raw unevaluated value at last echo
+    last_echoed_evaluated_value: ScalarValue | None = field(default=None)  # evaluated value at last echo
 
 
 class VariableRepository:
@@ -106,21 +107,24 @@ class VariableRepository:
         """Return the set of all user-variable keys (those with any non-None field)."""
         return set(self._vars)
 
-    def set_echoed_value(self, name: str, value: ScalarValue) -> None:
+    def set_echoed_value(self, name: str, value: Any, evaluated_value: ScalarValue) -> None:
         """Record that *name* was echoed into the prompt with *value*."""
-        self._entry(name).last_echoed_value = value
+        if not self.name_is_system(name):
+            entry = self._entry(name)
+            entry.last_echoed_value = value
+            entry.last_echoed_evaluated_value = evaluated_value
 
     def get_echoed_value(self, name: str, default: ScalarValue | None = None) -> ScalarValue | None:
         """Return the last echoed value for *name*, or *default* if it has not been echoed."""
         entry = self._vars.get(name)
         if entry is None:
             return default
-        return entry.last_echoed_value if entry.last_echoed_value is not None else default
+        return entry.last_echoed_evaluated_value if entry.last_echoed_evaluated_value is not None else default
 
     def backup_user(self) -> dict[str, VariableEntry]:
         """Return a per-entry shallow-copy snapshot of all user variables for rollback."""
         return {
-            name: VariableEntry(entry.value, entry.last_echoed_value)
+            name: VariableEntry(entry.value, entry.last_echoed_value, entry.last_echoed_evaluated_value)
             for name, entry in self._vars.items()
         }
 
@@ -129,7 +133,7 @@ class VariableRepository:
         self._vars.clear()
         self._vars.update(
             {
-                name: VariableEntry(entry.value, entry.last_echoed_value)
+                name: VariableEntry(entry.value, entry.last_echoed_value, entry.last_echoed_evaluated_value)
                 for name, entry in backup.items()
             }
         )

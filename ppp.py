@@ -382,7 +382,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         logging.WARNING,
                         f"Variant name '{escape_single_quotes(v)}' in model '{escape_single_quotes(m)}' conflicts with a known model name. Discarding variant.",
                     )
-        self.log(logging.DEBUG, f"Host configuration ({escape_single_quotes(app)}): {host_config}", min_level=DEBUG_LEVEL.minimal)
+        self.log(
+            logging.DEBUG,
+            f"Host configuration ({escape_single_quotes(app)}): {host_config}",
+            min_level=DEBUG_LEVEL.minimal,
+        )
 
         return host_config
 
@@ -684,7 +688,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         vs.update_system(input_vars)
 
-
     def init_wildcards_options(self):
         """Initializes the wildcard options."""
         _tree = TreeProcessor(self.state, np.random.default_rng())
@@ -874,6 +877,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         result: tuple[str, list[tuple[str, bool]], dict[str, VariableEntry]],
     ) -> tuple[str, str, dict[str, str | None]]:
         all_variables = self.state.variables.all_system
+        unechoed_variables: list[str] = []
         unified_prompt, rem_wildcards, variables_snapshot = result
 
         # Split the unified prompt back into prompt and negative prompt
@@ -892,13 +896,21 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             var_keys = sorted(variables_snapshot.keys())
             for k in var_keys:
                 entry = variables_snapshot[k]
-                ev = entry.last_echoed_value if entry.last_echoed_value is not None else entry.value
+                if entry.last_echoed_evaluated_value is None and entry.value is not None:
+                    unechoed_variables.append(k)
+                ev = entry.last_echoed_evaluated_value if entry.last_echoed_evaluated_value is not None else entry.value
                 if ev is not None:
                     if isinstance(ev, str) and self.state.options.cup_cleanup_variables:
                         ev = self.__cleanup(ev, 0)
                     all_variables[k] = ev
 
             self.log(logging.INFO, f"Result variables: {all_variables}")
+            if unechoed_variables:
+                unechoed_values = {k: v for k, v in all_variables.items() if k in unechoed_variables}
+                self.log(
+                    logging.INFO,
+                    f"Variables that were never echoed: {unechoed_values}",
+                )
 
             # Result checks
             warnings = []
@@ -995,7 +1007,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.variables.clear_user()
 
         # We update the input state
-        self.state.inputs.seed = int(seed & 0xFFFFFFFF)
+        self.state.inputs.seed = int(seed & ((1 << self.state.host_config.seed_bits) - 1))
         self.state.inputs.pos_prompt = prompt
         self.state.inputs.neg_prompt = negative_prompt
 
@@ -1008,7 +1020,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             elif isinstance(input_value, Enum):
                 self.state.variables.set_system(var_name, str(input_value).split(".", 1)[-1])
             else:
-                self.log(logging.WARNING, f"Input '{input_name}' has unsupported type {type(input_value).__name__} for system variable and will be skipped.")
+                self.log(
+                    logging.WARNING,
+                    f"Input '{input_name}' has an unsupported type {type(input_value).__name__} for a system variable and will be skipped.",
+                )
 
         filtered_sysvars_inputs = {k: v for k, v in self.state.variables.all_system.items() if k.startswith("_input_")}
         self.log(logging.INFO, f"Inputs: {filtered_sysvars_inputs}")
@@ -1082,7 +1097,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         results: list[tuple[str, str, dict[str, Any]]]
         try:
             if seed == -1:
-                seed = np.random.randint(0, 2**32, dtype=np.int64)
+                seed = np.random.randint(0, 2**self.state.host_config.seed_bits, dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
             t1 = time.monotonic_ns()

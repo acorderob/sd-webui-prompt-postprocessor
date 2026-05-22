@@ -37,6 +37,7 @@ hosts:
     #     - comma: replace with comma
     #     - remove: remove the operator
     #     - error: raise an error
+    #   seed_bits: number of bits to use for the seed; if not specified, it defaults to 64 bits
     # Options in the user file override all these options by host (individual options are not inherited and if missing will use defaults in code).
     a1111:
         attention: ok
@@ -44,30 +45,35 @@ hosts:
         alternation: ok
         and: ok
         break: ok
+        seed_bits: 32
     forge:
         attention: ok
         scheduling: ok
         alternation: ok
         and: ok
         break: ok
+        seed_bits: 32
     forgeneo:
         attention: ok
         scheduling: ok
         alternation: ok
         and: ok
         break: ok
+        seed_bits: 32
     reforge:
         attention: ok
         scheduling: ok
         alternation: ok
         and: ok
         break: ok
+        seed_bits: 32
     sdnext:
         attention: ok
         scheduling: ok
         alternation: ok
         and: ok
         break: ok
+        seed_bits: 32
     comfyui:
         # ComfyUI only supports parentheses-based attention
         attention: parentheses
@@ -76,6 +82,7 @@ hosts:
         alternation: error
         and: comma
         break: comma
+        seed_bits: 64
 
 # Supported base models, variants, and options
 # Check supported models for each host in:

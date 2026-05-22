@@ -284,6 +284,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         evaluate=True,
         add_to_content=False,
         restore_state=True,
+        include_echoed=False,
     ) -> str | int | float | bool | list | None:
         """
         Get the value of a variable.
@@ -294,7 +295,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             evaluate (bool): Whether to evaluate the variable.
             add_to_content (bool): Whether to add the content after visiting.
             restore_state (bool): Whether to restore the state after visiting.
-
+            include_echoed (bool): Whether to include echoed values.
         Returns:
             str|int|float|bool|list|None: The value of the variable, with strings coerced to their most specific type.
         """
@@ -317,6 +318,8 @@ class TreeProcessor(lark.visitors.Interpreter):
 
         v = self.state.variables.get(name)
         if v is None:
+            if include_echoed:
+                return self.state.variables.get_echoed_value(name)
             return None
         is_array = name[-2:] == "[]"
         if is_array:
@@ -483,9 +486,9 @@ class TreeProcessor(lark.visitors.Interpreter):
             return False
         if c.lower() == "true":
             return True
-        # Bare identifier - resolve as variable reference
+        # Bare identifier - resolve as variable reference (we consider echoed values if no value exists)
         varname, varspecifier = self.__separate_arrayref(c)
-        val = self.__get_variable_value(varname, varspecifier, True, False)
+        val = self.__get_variable_value(varname, varspecifier, True, False, True, True)
         if val is None:
             val = ""
             vartype = "system" if self.state.variables.name_is_system(c) else "user"
@@ -1457,22 +1460,23 @@ class TreeProcessor(lark.visitors.Interpreter):
         default_value = None
         is_array = variable_name[-2:] == "[]"
         vname = f"{variable_name[0:-2]}[{variable_specifier}]" if variable_specifier is not None else variable_name
-        # value = self.__get_variable_value(variable_name, variable_specifier, True, True)
-        value = self.get_final_scalar_variable(variable_name, variable_specifier)
-        if value is None:
+        value = self.__get_variable_value(variable_name, variable_specifier, False, False, False)
+        evaluated_value = self.get_final_scalar_variable(variable_name, variable_specifier)
+        if evaluated_value is None:
             if default is not None:
                 self.log(logging.DEBUG, f"Variable '{escape_single_quotes(vname)}' not found, using default value")
-                value = self.__visit(default, False, True)
-                self.__result += value
-                default_value = value
+                value = default
+                evaluated_value = self.__visit(default, False, True)
+                self.__result += evaluated_value
+                default_value = evaluated_value
             else:
                 self.warn_or_stop(f"Unknown variable {escape_single_quotes(vname)}")
+                value = None
+                evaluated_value = ""
                 default_value = ""
-                value = ""
         else:
-            self.__result += self.__value_to_str(value)
-        if not self.state.variables.name_is_system(variable_name):
-            self.state.variables.set_echoed_value(vname, value)
+            self.__result += self.__value_to_str(evaluated_value)
+        self.state.variables.set_echoed_value(vname, value, evaluated_value)
         t2 = time.monotonic_ns()
         info = variable_name
         if is_array and variable_specifier is not None:
