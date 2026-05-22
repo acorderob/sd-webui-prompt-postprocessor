@@ -338,7 +338,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                             incorrect_vars[var_name] = output_variables[var_name]
                             expected_values[var_name] = var_value
                     if missing_vars or incorrect_vars:
-                        errors.append("Result correct, but variables do not match")
+                        errors.append("Variables do not match")
                         if missing_vars:
                             errors.append("Missing variables:")
                             errors.append(str(missing_vars))
