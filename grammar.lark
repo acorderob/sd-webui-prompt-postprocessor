@@ -1,4 +1,4 @@
-%import common (LETTER, DIGIT, INT, CNAME, SIGNED_NUMBER, NUMBER)
+%import common (CNAME, INT, SIGNED_NUMBER, NUMBER)
 
 _WHITESPACE:         /\s+/
 STRING:              /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i // string with single or double quotes
@@ -6,7 +6,6 @@ BOOLEAN:             /true|false/i
 WC_NAME_PLAIN_START: /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/])+/u // starting characters, excluding end and other inside constructs
 WC_NAME_PLAIN:       /(?:(?!__|\$\$|\$\{|<ppp:|[('"])[a-zA-Z0-9\-.\\\/_#\*\?\[!\]])+/u // continuing characters, including globbing characters and anonymous wildcard mark, excluding end and other inside constructs
 INDEX:               INT
-FILTER:              INDEX | IDENTIFIER
 IDENTIFIER:          CNAME
 SIMPLEVALUE:         STRING | SIGNED_NUMBER | BOOLEAN
 VARNAME:             /(?!__)[a-zA-Z_][a-zA-Z0-9_]*/
@@ -70,6 +69,7 @@ promptcomppart: content
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext )+
         ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif )+
     //#else
+        // same as all enabled
         ?new_content.3: ( variableset | variableuse | commandstn | commandstni | commandset | commandecho | commandif | commandext | commandsetwcdeffilter | wildcard | choices )+
         ?new_content_negtag.3: ( variableset | variableuse | commandset | commandecho | commandif | commandext | commandsetwcdeffilter | wildcard | choices )+
         ?new_content_en.3: ( variableset | variableuse | commandset | commandecho | commandif | choices )+
@@ -101,36 +101,36 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     vardescriptor_set.9: VARNAME [ /\[/ [ SIGNED_NUMBER | IDENTIFIER ] /\]/ ]
 
     // conditions
-    ?condition: grouped_condition | ungrouped_condition
-    ?ungrouped_condition: operation | basic_condition
+    ?condition:    operation_or
+    ?operation_or:  operation_and | operation_or _WHITESPACE "or"  _WHITESPACE operation_and
+    ?operation_and: atom_cond    | operation_and _WHITESPACE "and" _WHITESPACE atom_cond
+    ?atom_cond:    operation_not | grouped_condition | basic_condition
+    operation_not: "not" ( ( _WHITESPACE atom_cond ) | ( _WHITESPACE? grouped_condition ) )
     ?grouped_condition.8: "(" _WHITESPACE? condition _WHITESPACE? ")"
     ?basic_condition: comparison | truthy_operand
-    ?operation: operation_not | operation_and | operation_or
-    operation_and: condition _WHITESPACE "and" _WHITESPACE condition
-    operation_or: condition _WHITESPACE "or" _WHITESPACE condition
-    operation_not: "not" ( ( _WHITESPACE ungrouped_condition ) | ( _WHITESPACE? grouped_condition ) )
     ?complexvalue: vardescriptor_get | SIMPLEVALUE
     truthy_operand: vardescriptor_get
     comparison: ( complexvalue | listvalue ) _WHITESPACE ( /not/ _WHITESPACE )? /eq|ne|lt|gt|le|ge|contains|in|any_in|contains_any/ _WHITESPACE ( complexvalue | listvalue )
     listvalue.9: "(" ( _WHITESPACE? complexvalue ( _WHITESPACE? "," _WHITESPACE? complexvalue )* )? _WHITESPACE? ")"
+    varvalue: content_var
 //#endif
 
 //#if ALLOW_COMMVARS
     // command: stn (send to negative)
     commandstn: "<ppp:stn" [ _WHITESPACE /s|e|p\d/ ] _WHITESPACE? ">" content_negtag "<ppp:/stn>"
-    commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ( "/>" | ">" )
+    commandstni: "<ppp:stn" _WHITESPACE /i\d/ _WHITESPACE? ( "/>" | ">" ) // ">" ending for backward compatibility
 
     // command: if
-    commandif.2: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
+    commandif: commandif_if commandif_elif* commandif_else? "<ppp:/if>"
     commandif_if: "<ppp:if" _WHITESPACE condition _WHITESPACE? ">" ifvalue
     commandif_elif: "<ppp:elif" _WHITESPACE condition _WHITESPACE? ">" ifvalue
     commandif_else: "<ppp:else" _WHITESPACE? ">" ifvalue
-    ifvalue.3: content
+    ifvalue: content
 
     // command: set
     commandset: "<ppp:set" _WHITESPACE vardescriptor_set [ commandsetmodifiers ] _WHITESPACE? ">" ( starredvalue | commandsetcontent ) "<ppp:/set>"
     commandsetmodifiers: (_WHITESPACE /evaluate|ifundefined|add/ )+
-    ?commandsetcontent.3: content
+    ?commandsetcontent: content
 
     // variable set
     //#if ALLOW_WILDCARDS
@@ -138,25 +138,24 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     //#else
     starredvalue.9: "*" ( vardescriptor_get | listvalue )
     //#endif
-    variableset.2: "${" _WHITESPACE? vardescriptor_set [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] ( starredvalue | varvalue ) "}"
+    variableset: "${" _WHITESPACE? vardescriptor_set [ variablesetmodifiers ] _WHITESPACE? "=" [ /!/ ] ( starredvalue | varvalue ) "}"
     variablesetmodifiers: /[+?!]+/
 
     // command: echo
     commandecho: "<ppp:echo" _WHITESPACE vardescriptor_get _WHITESPACE? ( ">" [ commandechodefault "<ppp:/echo>" ] | "/>" )
-    ?commandechodefault.3: content
+    ?commandechodefault: content
 
     // variable use
-    variableuse.2: "${" _WHITESPACE? vardescriptor_get _WHITESPACE? [ ":" varvalue ] "}"
+    variableuse: "${" _WHITESPACE? vardescriptor_get _WHITESPACE? [ ":" varvalue ] "}"
 
     // command: ext
     commandext: "<ppp:ext" _WHITESPACE commandexttype _WHITESPACE commandextid [ _WHITESPACE? commandextparams ] [ _WHITESPACE? commandextif ] _WHITESPACE? ( ">" [ commandexttriggers "<ppp:/ext>" ] | "/>" )
     commandexttype: [/\$/] IDENTIFIER
     ?commandextid.2: STRING | CNAME
-    ?commandextparams.2: STRING | SIGNED_NUMBER
+    ?commandextparams: STRING | SIGNED_NUMBER
     ?commandextif: "if" _WHITESPACE condition
     ?commandexttriggers.3: content
 //#endif
-varvalue: content_var
 
 //#if ALLOW_CHOICES or ALLOW_WILDCARDS
     // choices parameters (for choices and wildcards)
@@ -169,7 +168,8 @@ varvalue: content_var
     // choice options
     choice: [ [ _WHITESPACE? choiceiscmd ] [ _WHITESPACE? choicelabels ] [ _WHITESPACE? choiceweight ] [ _WHITESPACE? choiceif ] _WHITESPACE? "::" ] choicevalue
     choiceiscmd: /%/ // the option text is a special command
-    choicelabels: /["']/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /["']/
+    choicelabels: ( /"/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /"/ )
+                | ( /'/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /'/ )
     choiceweight: NUMBER
     choiceif: "if" _WHITESPACE condition
     choicevalue: content_choice
@@ -177,7 +177,7 @@ varvalue: content_var
 
 //#if ALLOW_CHOICES
     // choices construct
-    choices.2: "{" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] choice ( "|" choice )* "}"
+    choices: "{" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] choice ( "|" choice )* "}"
 //#endif
 
 //#if ALLOW_WILDCARDS
@@ -186,7 +186,7 @@ varvalue: content_var
     wcdescription: STRING
 
     // wildcards construct
-    wildcard.2: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
+    wildcard: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
     wc_filter_nums: IDENTIFIER | INDEX | (INDEX /-/ INDEX)
     //#if ALLOW_COMMVARS
         wildcard_name.2: ( WC_NAME_PLAIN_START | variableuse | commandecho ) ( WC_NAME_PLAIN | variableuse | commandecho )*
@@ -195,15 +195,18 @@ varvalue: content_var
         wildcard_name.2: ( WC_NAME_PLAIN_START) WC_NAME_PLAIN*
         wc_filter_simple: wc_filter_nums
     //#endif
-    wc_filter: /["']/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /["']/
+    wc_filter: ( /"/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /"/ )
+             | ( /'/ ( [ /#/ ] wc_filter_or | ( /#?\^/ wildcard_name ) ) /'/ )
     wc_filter_or: wc_filter_and ( _WHITESPACE? "," _WHITESPACE? wc_filter_and )*
     wc_filter_and: wc_filter_simple ( _WHITESPACE? "+" _WHITESPACE? wc_filter_simple )*
-    wildcardvar.7: "(" _WHITESPACE? vardescriptor_get _WHITESPACE? "=" varvalue ")"
+    wildcardvar: "(" _WHITESPACE? vardescriptor_get _WHITESPACE? "=" varvalue ")"
 
     //#if ALLOW_COMMVARS
         // command: setwcdeffilter
         commandsetwcdeffilter: "<ppp:setwcdeffilter" _WHITESPACE wc_name_str [_WHITESPACE wc_filter_limited ] _WHITESPACE? "/>"
-        wc_name_str: /["']/ wildcard_name /["']/
-        wc_filter_limited: /["']/ wc_filter_or /["']/
+        wc_name_str: ( /"/ wildcard_name /"/ )
+                   | ( /'/ wildcard_name /'/ )
+        wc_filter_limited: ( /"/ wc_filter_or /"/ )
+                         | ( /'/ wc_filter_or /'/ )
     //#endif
 //#endif
