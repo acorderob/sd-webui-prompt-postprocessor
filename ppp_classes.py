@@ -212,6 +212,7 @@ class PPPStateOptions:
     do_combinatorial: bool = False
     combinatorial_shuffle: bool = False
     combinatorial_limit: int = 100  # 0 = no limit
+    results_file: str = ""  # empty = disabled; supports %datetime%, %date%, %time%, %host% tokens
 
     def __post_init__(self):
         if not self.cup_do_cleanup:
@@ -237,6 +238,7 @@ class PPPStateInputs:
     seed: int = -1
     pos_prompt: str = ""
     neg_prompt: str = ""
+    jobinfo: Any = None
 
 
 class CyclicalSamplerState:

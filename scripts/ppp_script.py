@@ -255,6 +255,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             do_combinatorial=input_combinatorial,
             combinatorial_shuffle=input_combinatorial_shuffle,
             combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
+            results_file=getattr(opts, "ppp_gen_resultsfile", PromptPostProcessor.DEFAULT_RESULTS_FILE),
         )
         if self.ppp_logger is None:
             lf = PromptPostProcessorLogFactory()
@@ -401,7 +402,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
             hiresfix_changes = False
             if regular_exists:
                 log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "processing prompts combinatorially (regular)")
-                comb_results = ppp.process_prompt(rpr[0], rnr[0], seed_for_comb)
+                comb_results = ppp.process_prompt(
+                    rpr[0],
+                    rnr[0],
+                    seed_for_comb,
+                    jobinfo={
+                        "job_timestamp": shared.state.job_timestamp,
+                        "job": shared.state.job,
+                        "detail": "regular prompt combination",
+                    },
+                )
                 num_comb = len(comb_results)
                 for i in range(len(rpr)):  # pylint: disable=consider-using-enumerate
                     posp, negp, _ = comb_results[i % num_comb]
@@ -425,7 +435,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
                         logging.INFO,
                         "processing prompts combinatorially (hiresfix)",
                     )
-                    comb_results_hr = ppp.process_prompt(rph[0], rnh[0], seed_for_comb)
+                    comb_results_hr = ppp.process_prompt(
+                        rph[0],
+                        rnh[0],
+                        seed_for_comb,
+                        jobinfo={
+                            "job_timestamp": shared.state.job_timestamp,
+                            "job": shared.state.job,
+                            "detail": "hiresfix prompt combination",
+                        },
+                    )
                     num_comb_hr = len(comb_results_hr)
                     for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
                         posp, negp, _ = comb_results_hr[i % num_comb_hr]
@@ -448,7 +467,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 cached = self.lru_cache.get(key)
                 if cached is None:
                     hsh, seed, prompt, negative_prompt = key
-                    results = ppp.process_prompt(prompt, negative_prompt, seed)
+                    results = ppp.process_prompt(
+                        prompt,
+                        negative_prompt,
+                        seed,
+                        jobinfo={
+                            "job_timestamp": shared.state.job_timestamp,
+                            "job": shared.state.job,
+                            "detail": f"{prompttype} prompt",
+                        },
+                    )
                     posp, negp, _ = results[0]
                     cached = (posp, negp)
                     self.lru_cache.put(key, cached)
@@ -458,16 +486,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
                 prompts_list[(prompttype, typeindex)] = cached
         ppp.process_prompts_group_end()
-
-        # with open(Path(__file__).parent.parent / "logs" / f"last_prompts_{app.value}.txt", "w", encoding="utf-8") as f:
-        #     for (prompttype, typeindex), (posp, negp) in prompts_list.items():
-        #         f.write(f"Key: {prompttype}[{typeindex}]\n")
-        #         f.write(f"Seed: {calculated_seeds[typeindex]}\n")
-        #         f.write(f"In Positive: {rpr[typeindex] if prompttype == regular_type else rph[typeindex]}\n")
-        #         f.write(f"In Negative: {rnr[typeindex] if prompttype == regular_type else rnh[typeindex]}\n")
-        #         f.write(f"Out Positive: {posp}\n")
-        #         f.write(f"Out Negative: {negp}\n")
-        #         f.write("\n")
 
         # updates the prompts
         regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
@@ -612,6 +630,15 @@ def on_ui_settings():
         info=shared.OptionInfo(
             True,
             label="Add original prompts to metadata (if they change)",
+            section=section,
+        ),
+    )
+    shared.opts.add_option(
+        key="ppp_gen_resultsfile",
+        info=shared.OptionInfo(
+            PromptPostProcessor.DEFAULT_RESULTS_FILE,
+            label="Results file",
+            comment_after=r'<span class="info">(filename to save processing results; supports %datetime%, %date%, %time%, %host% tokens; extension determines format: .yaml, .jsonl, .csv, .txt; empty = disabled)</span>',
             section=section,
         ),
     )

@@ -1,8 +1,12 @@
+import csv
 import dataclasses
+from datetime import datetime
 from enum import Enum
+import json
 import logging
 from pathlib import Path
 import re
+import textwrap
 import time
 from typing import Any, Callable, Optional
 import lark
@@ -88,6 +92,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_DO_COMBINATORIAL = defopt["do_combinatorial"]
     DEFAULT_COMBINATORIAL_SHUFFLE = defopt["combinatorial_shuffle"]
     DEFAULT_COMBINATORIAL_LIMIT = defopt["combinatorial_limit"]
+    DEFAULT_RESULTS_FILE = defopt["results_file"]
+
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
     UNPROCESSED_STOP = "UNPROCESSED CONSTRUCTS!\nBREAK "
@@ -992,6 +998,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         prompt: str,
         negative_prompt: str,
         seed: int,
+        jobinfo: Any = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Process the prompt and negative prompt.
@@ -1010,6 +1017,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.inputs.seed = int(seed & ((1 << self.state.host_config.seed_bits) - 1))
         self.state.inputs.pos_prompt = prompt
         self.state.inputs.neg_prompt = negative_prompt
+        self.state.inputs.jobinfo = jobinfo
 
         # Input related system variables
         for input_name in self.state.inputs.__dict__.keys():
@@ -1017,8 +1025,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             var_name = "_input_" + input_name
             if isinstance(input_value, (bool, str, int, float)):
                 self.state.variables.set_system(var_name, input_value)
+            elif isinstance(input_value, (dict, list)):
+                self.state.variables.set_system(var_name, str(input_value))
             elif isinstance(input_value, Enum):
                 self.state.variables.set_system(var_name, str(input_value).split(".", 1)[-1])
+            elif input_value is None:
+                self.state.variables.set_system(var_name, None)
             else:
                 self.log(
                     logging.WARNING,
@@ -1077,11 +1089,110 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.log(logging.DEBUG, f"System variables: {filtered_sysvars}")
         self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
 
+    def _expand_filename(self) -> Path:
+        """Expand %...% tokens in a filename template and resolve relative paths against the extension logs folder."""
+        now = datetime.now()
+        substitutions = {
+            r"%datetime%": now.strftime(r"%Y-%m-%d_%H-%M-%S"),
+            r"%date%": now.strftime(r"%Y-%m-%d"),
+            r"%time%": now.strftime(r"%H-%M-%S"),
+            r"%host%": str(self.state.env_info.get("app", "")),
+        }
+        result = str(self.state.options.results_file)
+        for token, value in substitutions.items():
+            result = result.replace(token, value)
+        path = Path(result)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parent / "logs" / path
+        return path
+
+    def __save_results(self, results: list[tuple[str, str, dict[str, Any]]]) -> None:
+        """Append processing results to the configured results file."""
+        if not self.state.options.results_file:
+            return
+        try:
+            filepath = self._expand_filename()
+            self.log(logging.INFO, f"Saving results to file: {filepath}")
+            ext = filepath.suffix.lower()
+            records = []
+            for result_prompt, result_neg_prompt, all_variables in results:
+                records.append(
+                    {
+                        "options": {
+                            k.removeprefix("_opt_"): v for k, v in all_variables.items() if k.startswith("_opt_")
+                        },
+                        "system_variables": {
+                            k: v
+                            for k, v in all_variables.items()
+                            if k.startswith("_") and not k.startswith("_opt_") and not k.startswith("_input_")
+                        },
+                        "inputs": {
+                            k.removeprefix("_input_"): v for k, v in all_variables.items() if k.startswith("_input_")
+                        },
+                        "prompt_results": {"prompt": result_prompt, "negative_prompt": result_neg_prompt},
+                        "user_variables": {k: v for k, v in all_variables.items() if not k.startswith("_")},
+                    }
+                )
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            file_exists = filepath.exists()
+            if ext in (".yaml", ".yml"):
+                with open(filepath, "a", encoding="utf-8-sig") as f:
+                    if not file_exists:
+                        f.write("records:\n")
+                    for record in records:
+                        y = yaml.dump(record, allow_unicode=True, default_flow_style=False)
+                        f.write(f"  - {textwrap.indent(y, ' ' * 4).strip()}\n")
+            elif ext == ".jsonl":
+                with open(filepath, "a", encoding="utf-8-sig") as f:
+                    for record in records:
+                        f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            elif ext == ".csv":
+                # Build ordered column list from the current batch - header written only on new file.
+                # Columns from later calls that weren't in the original header will be silently dropped.
+                # The 'variables' section is serialized as a single JSON string column.
+                all_columns: list[str] = []
+                for record in records:
+                    for section, data in record.items():
+                        if section == "user_variables":
+                            if "user_variables" not in all_columns:
+                                all_columns.append("user_variables")
+                        else:
+                            for k in data:
+                                col = f"{section}.{k}"
+                                if col not in all_columns:
+                                    all_columns.append(col)
+                with open(filepath, "a", newline="", encoding="utf-8-sig") as f:
+                    writer = csv.DictWriter(f, fieldnames=all_columns, delimiter=";", restval="", extrasaction="ignore")
+                    if not file_exists:
+                        writer.writeheader()
+                    for record in records:
+                        row: dict[str, Any] = {}
+                        for section, data in record.items():
+                            if section == "user_variables":
+                                row["user_variables"] = json.dumps(data, ensure_ascii=False, default=str)
+                            else:
+                                for k, v in data.items():
+                                    row[f"{section}.{k}"] = (
+                                        v if isinstance(v, (str, int, float, bool)) or v is None else str(v)
+                                    )
+                        writer.writerow(row)
+            else:  # plain text
+                with open(filepath, "a", encoding="utf-8-sig") as f:
+                    for record in records:
+                        for section, data in record.items():
+                            f.write(f"[{section}]\n")
+                            for k, v in data.items():
+                                f.write(f"{k}: {v}\n")
+                        f.write(f"#{'-'*70}\n")
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.log(logging.WARNING, "Failed to save results to file", exc_info=True)
+
     def process_prompt(
         self,
         original_prompt: str,
         original_negative_prompt: str,
         seed: int = -1,
+        jobinfo: Any = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Initializes the random number generator and processes the prompt and negative prompt.
@@ -1090,6 +1201,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             original_prompt (str): The original prompt.
             original_negative_prompt (str): The original negative prompt.
             seed (int): The seed.
+            jobinfo (Any): Optional job information, available as `_input_jobinfo`.
 
         Returns:
             list[tuple[str, str, dict[str, Any]]]: A list of tuples containing the processed prompt, negative prompt and all the prompt variables.
@@ -1104,10 +1216,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
                 self.state.cyclical_state.reset()
                 self.state.cyclical_state.last_prompt_pair = (original_prompt, original_negative_prompt)
-            results = self.__processprompts(prompt, negative_prompt, seed)
+            results = self.__processprompts(prompt, negative_prompt, seed, jobinfo)
             t2 = time.monotonic_ns()
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")
+            self.__save_results(results)
             return results
         except PPPInterrupt as e:
             self.log(logging.ERROR, e.message)

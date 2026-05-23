@@ -75,8 +75,9 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             cup_merge_attention=True,
             cup_remove_extranetwork_tags=False,
             do_combinatorial=False,
-            combinatorial_limit=0,
             combinatorial_shuffle=False,
+            combinatorial_limit=0,
+            results_file=(Path(__file__).parent / "logs" / "output_%date%.txt") if enable_file_logging else "",
         )
         self.def_env_info = {
             "app": "tests",

@@ -1,6 +1,7 @@
 if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
 
+from datetime import datetime
 import logging
 import os
 from pathlib import Path
@@ -242,6 +243,14 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "ExtraNetworks mapping options",
                     },
                 ),
+                "results_file": (
+                    "STRING",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_RESULTS_FILE,
+                        "tooltip": r"Filename to save processing results. Supports %datetime%, %date%, %time%, %host% tokens. Empty = disabled.",
+                        "dynamicPrompts": False,
+                    },
+                ),
             },
         }
 
@@ -307,6 +316,7 @@ class PromptPostProcessorComfyUINode:
         cup_options=None,
         en_options=None,
         strict_operators=None,
+        results_file=None,
     ):
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
@@ -408,6 +418,7 @@ class PromptPostProcessorComfyUINode:
             do_combinatorial=do_combinatorial,
             combinatorial_shuffle=combinatorial_shuffle,
             combinatorial_limit=combinatorial_limit,
+            results_file=results_file or "",
         )
         self.wildcards_obj.refresh_wildcards(
             options.debug_level,
@@ -437,20 +448,13 @@ class PromptPostProcessorComfyUINode:
                 self.extranetwork_mappings_obj,
             )
         self.ppp.process_prompts_group_start()
-        results = self.ppp.process_prompt(pos_prompt, neg_prompt, seed if seed is not None else -1)
+        results = self.ppp.process_prompt(
+            pos_prompt,
+            neg_prompt,
+            seed if seed is not None else -1,
+            jobinfo={"job_timestamp": datetime.now().isoformat()},
+        )
         self.ppp.process_prompts_group_end()
-
-        # with open(Path(__file__).parent / "logs" / "last_prompts_comfyui.txt", "w", encoding="utf-8") as f:
-        #     f.write(f"Seed: {seed if seed is not None else -1}\n")
-        #     f.write(f"In Positive: {pos_prompt}\n")
-        #     f.write(f"In Negative: {neg_prompt}\n")
-        #     f.write("\n")
-        #     for i, (posp, negp, var) in enumerate(results):
-        #         f.write(f"Index: {i}\n")
-        #         f.write(f"Out Positive: {posp}\n")
-        #         f.write(f"Out Negative: {negp}\n")
-        #         f.write(f"Out Variables: {var}\n")
-        #         f.write("\n")
 
         return tuple(zip(*results))  # unzip the list of tuples into tuple of lists
 
@@ -879,7 +883,9 @@ class PromptPostProcessorSelectVariableComfyUINode:
                 return (variables[name],)
             if if_not_found == ONWARNING_CHOICES.stop.value:
                 raise ValueError(f"Variable '{name}' not found in the input variables")
-            self.logger.warning(f"Variable '{name}' not found in the input variables, using default value '{escape_single_quotes(default)}'")
+            self.logger.warning(
+                f"Variable '{name}' not found in the input variables, using default value '{escape_single_quotes(default)}'"
+            )
             return (default,)
         raise ValueError("No variables provided to select from")
 

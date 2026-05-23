@@ -22,9 +22,7 @@ Main PPP node that processes prompts.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.
 * **en_options**: Connection to a ExtraNetworkMapping options node.
-
-> [!NOTE]
-> The node uses 32-bit seeds, to be compatible with all the UIs. This means that 64-bit input values will be cut at 32-bits. If you connect an external seed that is also connected directly to the ksampler, the values may differ. This doesn't really matter in practice, but if you want the same value use the output `_input_seed` variable to send to the ksampler.
+* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 

@@ -24,7 +24,7 @@ The main node that processes the prompt.
 
 Inputs:
 
-* **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables.
+* **model**: Connect here the MODEL or a string with the model class name used by *ComfyUI*. Needed for the model kind system variables. Optional if you set modelname.
 * **modelname**: Filename of the model (with relative path). Needed for the detection of model variants.
 * **seed**: Set or connect here the seed used. By default it is -1 (random). The actual value used can be extracted from the output variables (`_input_seed`).
 * **pos_prompt**: Connect here the prompt text, or fill it as a widget.
@@ -42,6 +42,7 @@ Inputs:
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.
 * **en_options**: Connection to a ExtraNetworkMapping options node.
+* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 
@@ -49,13 +50,13 @@ The model and modelname are also optional, but if you don't set them you will no
 
 Setting only the modelname will try to detect its class from the file contents. If you don't want to set the path twice (and you don't use a loader node that outputs the name), you can set it here and then extract it from the output variables (`_modelfullname`) to send to the loader node.
 
-You can also set them from the prompt and load the model afterwards.
+You can instead set it from the prompt (with variable `_modelfullname`) and load the model afterwards.
 
 Outputs:
 
-* **pos_prompt**: the resulting positive prompt
-* **neg_prompt**: the resulting negative prompt
-* **variables**: the dictionary of variables set or echoed.
+* **pos_prompt**: Resulting positive prompt.
+* **neg_prompt**: Resulting negative prompt.
+* **variables**: Resulting output variables.
 
 The outputs are lists, and in combinatorial mode there will be multiple elements that *ComfyUI* will process sequentially.
 
@@ -159,6 +160,7 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Use strict operators**: Sets strict operations in comparisons.
 * **Apply in img2img**: Check if you want to do the processing in img2img processes.
 * **Add original prompts to metadata**: Adds original prompts to the metadata if they have changed.
+* **Results file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
 * **Extranetwork Mappings folders**: You can enter multiple folders separated by commas.
 
 ### Wildcard settings

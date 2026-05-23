@@ -534,3 +534,38 @@ This confirms the order and content of choices before relying on label filters.
 - A `%` choice in a YAML array must be quoted, otherwise YAML treats `%` as invalid syntax.
 - Variables set with `${var=value}` are lazy - they are not evaluated until echoed. Use `${var=!__wildcard__}` (with `!`) for immediate evaluation if the value should only be resolved once (as in, you want the same value to be echoed later multiple times).
 - Wildcards cannot be used inside extranetwork tags (because some LoRA names contain double underscores). Put the entire `<lora:...>` tag inside a wildcard choice instead, or use the `ext` command.
+
+## Recording results to a file
+
+When using wildcards and choices the actual prompt sent to the model can look very different from what you typed. Configuring a results file lets you capture every resolved prompt, along with its metadata, so you always know exactly what was generated.
+
+Common use cases:
+
+- **Reproducibility** - if an image turns out great but you didn't keep the inputs, you can look up the exact resolved prompt and all the inputs from the log.
+- **Dataset building** - when running large batches with combinatorial mode or random wildcards, the file gives you a record of every prompt variant that was generated.
+- **Prompt analysis** - review the log to spot patterns, see which wildcard choices come up most often, or evaluate the output of a new wildcard set before committing to a full run.
+- **Debugging wildcard expansion** - compare the resolved prompts against what you expected to confirm that variables, conditions, and filters are all behaving correctly.
+
+### Setup
+
+Set the `results_file` option (in the extension settings for *A1111*, or the `results_file` input on the main node for *ComfyUI*) to a filename. The extension determines the output format from the file extension:
+
+| Extension        | Format                                             |
+|------------------|----------------------------------------------------|
+| `.yaml` / `.yml` | YAML list of records                               |
+| `.jsonl`         | JSON Lines, one JSON object per line               |
+| `.csv`           | CSV with a header row (semicolon-delimited)        |
+| anything else    | Plain text with labelled sections                  |
+
+Each record contains five sections: `options` (the PPP settings that were active), `inputs` (seed, prompts), `system` (system variables like `_modelclass`), `results` (the final positive and negative prompts), and `variables` (any user variables that were set).
+
+Use `%datetime%`, `%date%`, `%time%`, or `%host%` tokens in the filename to create a new file for each session or application:
+
+```text
+results_%date%.yaml
+```
+
+Relative paths are resolved against the `logs` folder inside the extension directory.
+
+> [!TIP]
+> The `.jsonl` format is the most convenient for programmatic processing. The `.yaml` format is the easiest to read manually.
