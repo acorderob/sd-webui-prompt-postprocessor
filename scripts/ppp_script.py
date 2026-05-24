@@ -67,11 +67,26 @@ class PromptPostProcessorA1111Script(scripts.Script):
         self.instance_index = self.increment_instance_count()
         self.name = PromptPostProcessor.NAME
         self.grammar_content = load_grammar()
-        self.ppp_logger = None
+        lf = PromptPostProcessorLogFactory()
+        self.ppp_logger = lf.log
         self.ppp_debug_level = DEBUG_LEVEL.none.value
         self.lru_cache = None
         self.wildcards_obj = None
         self.extranetwork_mappings_obj = None
+        self.ppp_init = False
+        # log(self.ppp_logger, DEBUG_LEVEL.minimal, logging.INFO, f"Initializing {self.name} instance {self.instance_index}")
+
+        try:
+            # Support for SD.Next
+            import installer  # type: ignore
+            if hasattr(installer, "control_extensions"):
+                if self.title() not in installer.control_extensions:
+                    installer.control_extensions.append(self.title())  # We add the extension to the whitelist.
+        except ImportError:
+            # log(self.ppp_logger, DEBUG_LEVEL.minimal, logging.WARNING, "Could not import control_extensions from installer, SD.Next support will not work.")
+            pass
+        except Exception as e:  # pylint: disable=broad-except
+            log(self.ppp_logger, DEBUG_LEVEL.minimal, logging.ERROR, f"Error while adding to the SD.Next extension whitelist: {e}")
 
     def title(self):
         """
@@ -257,9 +272,8 @@ class PromptPostProcessorA1111Script(scripts.Script):
             combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
             results_file=getattr(opts, "ppp_gen_resultsfile", PromptPostProcessor.DEFAULT_RESULTS_FILE),
         )
-        if self.ppp_logger is None:
-            lf = PromptPostProcessorLogFactory()
-            self.ppp_logger = lf.log
+        if not self.ppp_init:
+            self.ppp_init = True
             self.ppp_debug_level = options.debug_level
             self.lru_cache = PPPLRUCache(1000, logger=self.ppp_logger, debug_level=self.ppp_debug_level)
             self.wildcards_obj = PPPWildcards(self.ppp_logger)
