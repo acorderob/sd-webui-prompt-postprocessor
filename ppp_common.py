@@ -162,13 +162,15 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
             if not skip_current_block:
                 log(logger, debug_level, logging.WARNING, "Unmatched //#elif directive found in grammar content.")
             elif all_blocks_skipped[-1]:
-                # Extract condition from the #elif directive
+                # No earlier branch in this if/elif chain was taken, so evaluate this one.
+                # all_blocks_skipped[-1] tracks whether any branch has matched yet;
+                # skip_current_block[-1] tracks whether the current branch should be emitted.
                 conditions = stripped_line[7:].strip()
-                # Evaluate the conditions
                 skip_current_block[-1] = not eval_bool_expr(conditions, options)
                 if not skip_current_block[-1]:
-                    all_blocks_skipped[-1] = False
+                    all_blocks_skipped[-1] = False  # mark that a branch was taken
             else:
+                # A previous branch already matched - skip all remaining elif/else branches.
                 skip_current_block[-1] = True
         elif stripped_line.startswith("//#else"):
             if not skip_current_block:
@@ -225,13 +227,15 @@ def get_model_class_from_filename(filename: str) -> str:
             return ""
         header = json.loads(header_bytes)
 
-        # Build a mock state dict - detection only needs key names and shapes
+        # model_config_from_unet only inspects tensor shapes, not actual data.
+        # A lightweight proxy that exposes .shape and index access lets us avoid
+        # loading the full model into memory.
         class _ShapeProxy:
             def __init__(self, shape):
                 self.shape = shape
 
             def __getitem__(self, i):
-                return self.shape[i]  # shape[i] access
+                return self.shape[i]
 
         mock_sd = {k: _ShapeProxy(v["shape"]) for k, v in header.items() if k != "__metadata__" and "shape" in v}
 

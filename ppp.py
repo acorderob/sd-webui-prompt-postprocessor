@@ -483,6 +483,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     self.config.models[model_key] = user_model
                 else:
                     # Merge detect per-host
+                    # model_fields_set contains only fields the user explicitly supplied,
+                    # so checking it prevents a missing "detect" key from erasing default detection rules.
                     if "detect" in user_model.model_fields_set and user_model.detect is not None:
                         if cfg_model.detect is None:
                             cfg_model.detect = {}
@@ -653,6 +655,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         # Model related variables
         sdchecks = {x: self.state.env_info.get("is_" + x, False) for x in self.known_models}
+        # Adding "" as a sentinel that is always True lets next() return "" when no model matches,
+        # giving a well-defined empty-string fallback without a separate None check.
         sdchecks.update({"": True})
         model_name_val = next((k for k, v in sdchecks.items() if v), "")
         vs.set_system("_model", model_name_val)
@@ -665,6 +669,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         vs.set_system("_modelclass", self.state.env_info.get("model_class", ""))
         is_models = {}
         for model_name, model_type_and_substrings in self.variants_definitions.items():
+            # A variant is only active when its parent model type is currently loaded
+            # (or when the variant has no parent restriction, indicated by an empty string).
+            # If the parent is not active, short-circuit to False before testing filename patterns.
             if not (model_type_and_substrings[0] == "" or sdchecks.get(model_type_and_substrings[0], False)):
                 is_models[model_name] = False
             else:
@@ -682,6 +689,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         for x in sdchecks.keys():
             if x != "":
                 vs.set_system("_is_" + x, sdchecks[x])
+                # _is_pure_X: model X is active but no named variant matched the filename
+                # _is_variant_X: model X is active AND at least one named variant matched
                 vs.set_system("_is_pure_" + x, sdchecks[x] and not any(is_models.values()))
                 vs.set_system("_is_variant_" + x, sdchecks[x] and any(is_models.values()))
         # special cases
@@ -762,6 +771,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             text = re.sub(r"(\s*\bAND)+\Z", "", text)
 
         escapedSeparator = re.escape(self.state.options.stn_separator)
+        # When EOL inclusion is on, use \s* so newlines are treated as whitespace around separators.
+        # Otherwise, restrict to horizontal whitespace only to preserve intentional line breaks.
         optwhitespace = r"\s*" if self.state.options.cup_extra_separators_include_eol else r"[ \t\v\f]*"
         optwhitespace_separator = optwhitespace + escapedSeparator + optwhitespace
         optwhitespace_comma = optwhitespace + "," + optwhitespace
@@ -1014,6 +1025,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.variables.clear_user()
 
         # We update the input state
+        # Truncate the seed to the host's configured bit width so the value stays
+        # within the range the host expects (e.g., 32-bit for SD-WebUI, 64-bit for ComfyUI).
         self.state.inputs.seed = int(seed & ((1 << self.state.host_config.seed_bits) - 1))
         self.state.inputs.pos_prompt = prompt
         self.state.inputs.neg_prompt = negative_prompt

@@ -152,7 +152,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             trace = _run(forced_path)
             # For each decision that was reached but not forced, spawn branches for all
             # options beyond the default (index 0).
-            # Iterate in reverse so later decisions vary fastest, producing lexicographic order.
+            # Iterating in reverse means later (deeper) decision points vary fastest,
+            # so the output order is depth-first rather than breadth-first.
             for i in range(len(trace) - 1, len(forced_path) - 1, -1):
                 if 0 < limit <= len(results):
                     limit_reached = True
@@ -222,7 +223,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             elif isinstance(node, lark.Token):
                 self.__result += node
         len_backup = len(backup_result)
-        # if self.result[:len_backup] == backup_result:  # this is only necessary if we call parse_prompt with a parser from "start", because it resets the result
+        # Slice from len_backup to get only what was appended during this call,
+        # rather than comparing the full string which could be expensive.
         added_result = self.__result[len_backup:]
         # else:
         #     added_result = self.result
@@ -266,7 +268,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             return None, None, None
         if specifier == "#":  # special value to indicate length of the array variable
             return None, None, True
-        if specifier.startswith("&"):  # special value to indicate a separator
+        if specifier.startswith("&"):  # format is &'<separator>' - extract the separator string
             return None, specifier[2:-1], False
         if not specifier.isdecimal():
             # bare identifier: resolve as variable
@@ -1322,12 +1324,15 @@ class TreeProcessor(lark.visitors.Interpreter):
                             if old.__class__ == evaluated_added.__class__:
                                 return old + evaluated_added
                             return str(old) + str(evaluated_added)
+                        # The old value is already a scalar but the new one is an unevaluated tree,
+                        # so wrap both inside a varvalue node for deferred evaluation.
                         return lark.Tree(
                             lark.Token("RULE", "varvalue"),
                             [lark.Token("plain", self.__value_to_str(old)), added],
                             # Meta should be {"content": str(old) + added.meta.content},
                         )
                     else:  # lark.Tree
+                        # Both sides are unevaluated trees - combine them under one varvalue node.
                         return lark.Tree(
                             lark.Token("RULE", "varvalue"),
                             [old, added],
@@ -1620,6 +1625,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                                 ]
                         else:
                             found = else_mapping
+                        # Only cache when at most one mapping matched: with multiple matches,
+                        # combinatorial mode or RNG would pick a different variant each call.
                         if num_mappings < 2:
                             self.state.extranetwork_mappings_obj.cached_mappings[extnet_id] = found
                     if found:

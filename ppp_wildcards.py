@@ -504,7 +504,9 @@ class PPPWildcards:
             )
             with open(full_path, "r", encoding="windows-1252") as file:
                 text_content = map(lambda x: x.strip("\n\r"), file.readlines())
+        # First pass: drop blank lines and full-line comments.
         text_content = list(filter(lambda x: x.strip() != "" and not x.strip().startswith("#"), text_content))
+        # Second pass: strip inline comments from lines that passed the first filter.
         text_content = [x.split("#")[0].rstrip() if len(x.split("#")) > 1 else x for x in text_content]
         self.__add_wildcard(text_content, full_path, external_key_parts)
 
