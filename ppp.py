@@ -28,7 +28,7 @@ from ppp_classes import (
     PPPStateOptions,
     PPPStateInputs,
 )
-from ppp_variables import VariableRepository, VariableEntry
+from ppp_variables import VariableRepository, VariableEntry, VariableValue
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes
@@ -1036,14 +1036,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         for input_name in self.state.inputs.__dict__.keys():
             input_value = getattr(self.state.inputs, input_name)
             var_name = "_input_" + input_name
-            if isinstance(input_value, (bool, str, int, float)):
+            if input_value is None:
+                self.state.variables.set_system(var_name, None)
+            elif isinstance(input_value, VariableValue):
                 self.state.variables.set_system(var_name, input_value)
-            elif isinstance(input_value, (dict, list)):
-                self.state.variables.set_system(var_name, str(input_value))
+            elif isinstance(input_value, dict):
+                for k, v in input_value.items():
+                    self.state.variables.set_system(f"{var_name}_{k}", str(v))
             elif isinstance(input_value, Enum):
                 self.state.variables.set_system(var_name, str(input_value).split(".", 1)[-1])
-            elif input_value is None:
-                self.state.variables.set_system(var_name, None)
             else:
                 self.log(
                     logging.WARNING,
