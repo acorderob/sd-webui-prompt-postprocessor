@@ -1,4 +1,26 @@
+import logging
+from pathlib import Path
 from typing import Any
+
+
+def get_version_from_pyproject() -> str:
+    """
+    Reads the version from the pyproject.toml file.
+
+    Returns:
+        str: The version string.
+    """
+    version_str = "0.0.0"
+    try:
+        pyproject_path = Path(__file__).resolve().parent / "pyproject.toml"
+        with open(pyproject_path, "r", encoding="utf-8") as file:
+            for line in file:
+                if line.startswith("version = "):
+                    version_str = line.split("=")[1].strip().strip('"')
+                    break
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logging.getLogger().exception(e)
+    return version_str
 
 
 def deep_freeze(obj):

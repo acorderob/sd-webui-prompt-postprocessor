@@ -105,7 +105,7 @@ def log(
     message: str,
     min_level: DEBUG_LEVEL | None = None,
     formatted: bool = True,
-    exc_info: bool = False,
+    exc_info=None,
 ):
     if logger:
         if min_level is None:

@@ -31,7 +31,7 @@ from ppp_classes import (
 from ppp_variables import VariableRepository, VariableEntry, VariableValue
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
-from ppp_utils import escape_single_quotes
+from ppp_utils import escape_single_quotes, get_version_from_pyproject
 from ppp_common import get_model_class_from_filename, load_grammar, parse_prompt, preprocess_grammar, warn_or_stop
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
@@ -41,26 +41,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     """
     The PromptPostProcessor class is responsible for processing and manipulating prompt strings.
     """
-
-    @staticmethod
-    def get_version_from_pyproject() -> str:
-        """
-        Reads the version from the pyproject.toml file.
-
-        Returns:
-            str: The version string.
-        """
-        version_str = "0.0.0"
-        try:
-            pyproject_path = Path(__file__).resolve().parent / "pyproject.toml"
-            with open(pyproject_path, "r", encoding="utf-8") as file:
-                for line in file:
-                    if line.startswith("version = "):
-                        version_str = line.split("=")[1].strip().strip('"')
-                        break
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logging.getLogger().exception(e)
-        return version_str
 
     NAME = "Prompt Post-Processor"
     VERSION = get_version_from_pyproject()
@@ -288,7 +268,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
         self.__init_sysvars()
 
-    def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info: bool = False):
+    def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info=None):
         log(self.logger, self.debug_level, kind, message, min_level, exc_info=exc_info)
 
     def __load_config_and_detect(self, env_info: dict[str, Any]) -> HostConfig:
@@ -1025,9 +1005,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.variables.clear_user()
 
         # We update the input state
-        # Truncate the seed to the host's configured bit width so the value stays
-        # within the range the host expects (e.g., 32-bit for SD-WebUI, 64-bit for ComfyUI).
-        self.state.inputs.seed = int(seed & ((1 << self.state.host_config.seed_bits) - 1))
+        # Truncate the seed to the host's configured bit width (-1 because we only want
+        # positive numbers) so the value stays within the range the host expects
+        # (e.g., 32-bit for SD-WebUI, 64-bit for ComfyUI).
+        self.state.inputs.seed = int(seed & ((1 << (self.state.host_config.seed_bits - 1)) - 1))
         self.state.inputs.pos_prompt = prompt
         self.state.inputs.neg_prompt = negative_prompt
         self.state.inputs.jobinfo = jobinfo
@@ -1198,8 +1179,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                             for k, v in data.items():
                                 f.write(f"{k}: {v}\n")
                         f.write(f"#{'-'*70}\n")
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.log(logging.WARNING, "Failed to save results to file", exc_info=True)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.log(logging.WARNING, "Failed to save results to file", exc_info=e)
 
     def process_prompt(
         self,
@@ -1223,7 +1204,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         results: list[tuple[str, str, dict[str, Any]]]
         try:
             if seed == -1:
-                seed = np.random.randint(0, 2**self.state.host_config.seed_bits, dtype=np.int64)
+                seed = np.random.randint(0, 2 ** (self.state.host_config.seed_bits - 1), dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
             t1 = time.monotonic_ns()
@@ -1245,8 +1226,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             self.log(logging.ERROR, "Interrupting!")
             self.interrupt()
             return [(prompt, negative_prompt, {})]
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.log(logging.ERROR, "Unexpected error", exc_info=True)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.log(logging.ERROR, "Unexpected error", exc_info=e)
             return [(original_prompt, original_negative_prompt, {})]
 
     def process_prompts_group_end(self):

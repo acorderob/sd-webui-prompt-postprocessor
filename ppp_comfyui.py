@@ -337,14 +337,14 @@ class PromptPostProcessorComfyUINode:
                 self.logger,
                 DEBUG_LEVEL.minimal,
                 logging.WARNING,
-                "Model class is not provided. System model variables will not be properly set.",
+                "Model class was not provided. System model variables will not be properly set.",
             )
         if modelname == "":
             log(
                 self.logger,
                 DEBUG_LEVEL.minimal,
                 logging.WARNING,
-                "Modelname is not provided. System model and variant variables will not be properly set.",
+                "Modelname was not provided. System model and variant variables will not be properly set.",
             )
         # model class values in ComfyUI\comfy\supported_models.py
         env_info = {
