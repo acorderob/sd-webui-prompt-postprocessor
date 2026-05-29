@@ -941,8 +941,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if warnings:
                 self.log(
                     logging.WARNING,
-                    "Found some weird things in the result. Something might be wrong!\n"
-                    + "\n".join(f"  - {w}" for w in warnings),
+                    "Found some weird things in the result. Something might be wrong!: " + ", ".join(warnings),
                 )
 
             # Check for wildcards not processed

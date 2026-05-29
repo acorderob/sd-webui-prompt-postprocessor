@@ -1,4 +1,5 @@
 from collections import namedtuple
+from enum import Enum
 from functools import reduce
 from itertools import combinations, combinations_with_replacement, permutations, product
 import logging
@@ -37,6 +38,18 @@ class TreeProcessor(lark.visitors.Interpreter):
     NEGATIVE_SEP = "\x1d"
     AccumulatedShell = namedtuple("AccumulatedShell", ["type", "data"])
     NegTag = namedtuple("NegTag", ["start", "end", "content", "parameters", "shell"])
+    ShellTypeAttention = namedtuple("ShellTypeAttention", ["weight_kind", "weight_str"])
+    ShellTypeScheduler = namedtuple("ShellTypeScheduler", ["position"])
+    # ShellTypeAlternation = namedtuple("ShellTypeAlternation", ["count"])
+    ShellTypeAlternationOption = namedtuple("ShellTypeAlternationOption", ["index", "count"])
+
+    class ShellType(Enum):
+        Attention = "at"
+        # Scheduler = "sc"
+        SchedulerBefore = "scb"
+        SchedulerAfter = "sca"
+        # Alternation = "al"
+        AlternationOption = "alo"
 
     def __init__(
         self,
@@ -891,15 +904,25 @@ class TreeProcessor(lark.visitors.Interpreter):
         elif scheduling_processing == "error":
             self.warn_or_stop("Scheduling constructs are not allowed!")
         else:  # scheduling_processing == "ok"
-            # self.__shell.append(TreeProcessor.AccumulatedShell("sc", pos))
+            # self.__shell.append(TreeProcessor.AccumulatedShell(TreeProcessor.ShellType.Scheduler, TreeProcessor.ShellTypeScheduler(position=pos)))
             self.__result += "["
             if before is not None:
                 self.log(logging.DEBUG, f"Shell scheduled before with position {pos}")
-                self.__shell.append(TreeProcessor.AccumulatedShell("scb", pos))
+                self.__shell.append(
+                    TreeProcessor.AccumulatedShell(
+                        TreeProcessor.ShellType.SchedulerBefore,
+                        TreeProcessor.ShellTypeScheduler(position=pos),
+                    )
+                )
                 self.__visit(before)
                 self.__shell.pop()
             self.log(logging.DEBUG, f"Shell scheduled after with position {pos}")
-            self.__shell.append(TreeProcessor.AccumulatedShell("sca", pos))
+            self.__shell.append(
+                TreeProcessor.AccumulatedShell(
+                    TreeProcessor.ShellType.SchedulerAfter,
+                    TreeProcessor.ShellTypeScheduler(position=pos),
+                )
+            )
             self.__result += ":"
             self.__visit(after)
             self.__shell.pop()
@@ -928,11 +951,16 @@ class TreeProcessor(lark.visitors.Interpreter):
         elif alternation_processing == "error":
             self.warn_or_stop("Alternation constructs are not allowed!")
         else:  # alternation_processing == "ok"
-            # self.__shell.append(TreeProcessor.AccumulatedShell("al", len(tree.children)))
+            # self.__shell.append(TreeProcessor.AccumulatedShell(TreeProcessor.ShellType.Alternation, TreeProcessor.ShellTypeAlternation(count=len(tree.children))))
             self.__result += "["
             for i, opt in enumerate(tree.children):
                 self.log(logging.DEBUG, f"Shell alternate option {i+1}")
-                self.__shell.append(TreeProcessor.AccumulatedShell("alo", {"pos": i + 1, "len": len(tree.children)}))
+                self.__shell.append(
+                    TreeProcessor.AccumulatedShell(
+                        TreeProcessor.ShellType.AlternationOption,
+                        TreeProcessor.ShellTypeAlternationOption(index=i + 1, count=len(tree.children)),
+                    )
+                )
                 if i > 0:
                     self.__result += "|"
                 self.__visit(opt)
@@ -1035,6 +1063,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         if len(tree.children) == 2:
             weight_str = tree.children[-1]
             if weight_str is not None:
+                weight_str = str(weight_str)
                 weight_kind = 3  # specific weight
                 weight = float(weight_str)
             else:
@@ -1095,7 +1124,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             # we just visit the content without adding any attention
             self.__visit(current_tree)
         else:
-            self.__shell.append(TreeProcessor.AccumulatedShell("at", (weight_kind, weight_str)))
+            self.__shell.append(
+                TreeProcessor.AccumulatedShell(
+                    TreeProcessor.ShellType.Attention,
+                    TreeProcessor.ShellTypeAttention(weight_kind=weight_kind, weight_str=weight_str),
+                )
+            )
             if weight_kind == 1:
                 starttag = "["
                 self.__result += starttag
@@ -1193,7 +1227,12 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if attention_processing == "parentheses" and weight_kind == 1:
                     weight_kind = 3
                     weight_str = "0.9"
-                self.__shell.append(TreeProcessor.AccumulatedShell("at", (weight_kind, weight_str)))
+                self.__shell.append(
+                    TreeProcessor.AccumulatedShell(
+                        TreeProcessor.ShellType.Attention,
+                        TreeProcessor.ShellTypeAttention(weight_kind=weight_kind, weight_str=weight_str),
+                    )
+                )
                 content = self.__visit(inner_tree, False, True)
                 peeled = True
             else:
@@ -2411,7 +2450,10 @@ class TreeProcessor(lark.visitors.Interpreter):
             if self.state.options.cup_merge_attention:
                 # join consecutive attention elements
                 for i in range(len(negtag.shell) - 1, 0, -1):
-                    if negtag.shell[i].type == "at" and negtag.shell[i - 1].type == "at":
+                    if (
+                        negtag.shell[i].type == TreeProcessor.ShellType.Attention
+                        and negtag.shell[i - 1].type == TreeProcessor.ShellType.Attention
+                    ):
                         new_weight = (  # we limit the new weight to two decimals
                             math.floor(100 * float(negtag.shell[i - 1].data[1]) * float(negtag.shell[i].data[1])) / 100
                         )
@@ -2423,35 +2465,39 @@ class TreeProcessor(lark.visitors.Interpreter):
                         else:
                             new_kind = 3
                         negtag.shell[i - 1] = TreeProcessor.AccumulatedShell(
-                            "at",
-                            (new_kind, new_weight_str),
+                            TreeProcessor.ShellType.Attention,
+                            TreeProcessor.ShellTypeAttention(weight_kind=new_kind, weight_str=new_weight_str),
                         )
                         negtag.shell.pop(i)
             start = ""
             end = ""
             for s in negtag.shell:
                 match s.type:
-                    case "at":
-                        if s.data[0] == 1:
+                    case TreeProcessor.ShellType.Attention:
+                        d = TreeProcessor.ShellTypeAttention(*s.data)
+                        if d.weight_kind == 1:
                             start += "["
                             end = "]" + end
-                        elif s.data[0] == 2:
+                        elif d.weight_kind == 2:
                             start += "("
                             end = ")" + end
                         else:  # 3
                             start += "("
-                            end = f":{s.data[1]})" + end
-                    # case "sc":
-                    case "scb":
+                            end = f":{d.weight_str})" + end
+                    # case TreeProcessor.ShellType.Scheduler:
+                    case TreeProcessor.ShellType.SchedulerBefore:
+                        d = TreeProcessor.ShellTypeScheduler(*s.data)
                         start += "["
-                        end = f"::{s.data}]" + end
-                    case "sca":
+                        end = f"::{d.position}]" + end
+                    case TreeProcessor.ShellType.SchedulerAfter:
+                        d = TreeProcessor.ShellTypeScheduler(*s.data)
                         start += "["
-                        end = f":{s.data}]" + end
-                    # case "al":
-                    case "alo":
-                        start += "[" + ("|" * int(s.data["pos"] - 1))
-                        end = ("|" * int(s.data["len"] - s.data["pos"])) + "]" + end
+                        end = f":{d.position}]" + end
+                    # case TreeProcessor.ShellType.Alternation:
+                    case TreeProcessor.ShellType.AlternationOption:
+                        d = TreeProcessor.ShellTypeAlternationOption(*s.data)
+                        start += "[" + ("|" * int(d.index - 1))
+                        end = ("|" * int(d.count - d.index)) + "]" + end
             content = start + negtag.content + end
             position = negtag.parameters or "s"
             if position.startswith("i"):
