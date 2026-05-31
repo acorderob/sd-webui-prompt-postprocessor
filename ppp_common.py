@@ -7,7 +7,7 @@ import re
 import textwrap
 import time
 import lark
-import yaml
+from ruamel.yaml import YAML as _YAML
 
 from ppp_logging import log
 from ppp_classes import ONWARNING_CHOICES, PPPInterrupt, PPPState
@@ -274,7 +274,7 @@ def convert_a1111_styles_to_wildcard(inp: Path, out: Path):
         raise RuntimeError(f"No styles found in {inp} to convert to wildcards.")
     with open(out, "w", encoding="utf-8-sig") as f:
         f.write(f"# Original names may contain characters that are replaced in the output.\n# Converted from {inp}\n")
-        yaml.dump(wildcards, f, allow_unicode=True)
+        _YAML().dump(wildcards, f)
 
 
 def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
@@ -288,7 +288,7 @@ def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
     files = inp.glob("*.json") if inp.is_dir() else [inp]
     for file in files:
         with open(file, "r", encoding="utf-8-sig") as f:
-            data = yaml.safe_load(f)
+            data = _YAML(typ='safe').load(f)
             if not isinstance(data, list):
                 continue
             wildcards[file] = {}
@@ -307,4 +307,5 @@ def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
         f.write("# Original names may contain characters that are replaced in the output.\n")
         for name, wcs in wildcards.items():
             f.write(f"# Converted from {name}\n")
-            yaml.dump(wcs, f, allow_unicode=True)
+            yaml_writer = _YAML()
+            yaml_writer.dump(wcs, f)

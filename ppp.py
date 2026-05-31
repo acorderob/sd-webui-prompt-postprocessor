@@ -2,6 +2,7 @@ import csv
 import dataclasses
 from datetime import datetime
 from enum import Enum
+from io import StringIO
 import json
 import logging
 from pathlib import Path
@@ -11,7 +12,7 @@ import time
 from typing import Any, Callable, Optional
 import lark
 import numpy as np
-import yaml
+from ruamel.yaml import YAML as _YAML
 
 from pydantic import ValidationError
 from ppp_classes import (
@@ -275,9 +276,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """Loads config files, performs model detection, and returns the resolved host config."""
         main_folder = Path(__file__).resolve().parent
         default_config_file = str(main_folder / "ppp_config.yaml.defaults")
+        _yaml_rt = _YAML()
         try:
             with open(default_config_file, "r", encoding="utf-8") as f:
-                default_raw: dict[str, Any] = yaml.safe_load(f)
+                default_raw: dict[str, Any] = _yaml_rt.load(f)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self.config = {}
             raise PPPInterrupt(
@@ -295,7 +297,6 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         if isinstance(user_config_file, dict):
             user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
         else:
-            user_raw: dict[str, Any] = {}
             if user_config_file == "":
                 if app == SUPPORTED_APPS.comfyui.value:
                     try:
@@ -309,29 +310,52 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 if not user_config_file or not Path(user_config_file).exists():
                     user_config_file = str(main_folder / "ppp_config.yaml")
             if user_config_file and Path(user_config_file).exists():
+                user_raw: dict[str, Any] = {}
                 with open(user_config_file, "r", encoding="utf-8") as f:
-                    user_raw = yaml.safe_load(f)
+                    user_raw = _yaml_rt.load(f)
                 user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
-            else:
-                user_cfg = None
-        if user_cfg is not None:
-            if not isinstance(user_config_file, dict):
                 default_hosts = set((self.config.hosts or {}).keys())
                 user_hosts = set((user_cfg.hosts or {}).keys())
                 missing_hosts = default_hosts - user_hosts
-                if missing_hosts:
-                    self.log(
-                        logging.WARNING,
-                        f"User configuration is missing host(s) from the default: {', '.join(sorted(missing_hosts))}. Consider updating your configuration file.",
-                    )
                 default_models = set((self.config.models or {}).keys())
                 user_models = set((user_cfg.models or {}).keys())
                 missing_models = default_models - user_models
-                if missing_models:
-                    self.log(
-                        logging.WARNING,
-                        f"User configuration is missing model(s) from the default: {', '.join(sorted(missing_models))}. Consider updating your configuration file.",
-                    )
+                if user_raw is not None and (missing_hosts or missing_models):
+                    raw_default_hosts = (default_raw or {}).get("hosts") or {}
+                    raw_default_models = (default_raw or {}).get("models") or {}
+                    if missing_hosts:
+                        self.log(
+                            logging.INFO,
+                            f"Adding missing host(s) from default to user configuration: {', '.join(sorted(missing_hosts))}",
+                        )
+                        if not user_raw.get("hosts"):
+                            user_raw["hosts"] = {}
+                        for host in sorted(missing_hosts):
+                            if host in raw_default_hosts:
+                                user_raw["hosts"][host] = raw_default_hosts[host]
+                    if missing_models:
+                        self.log(
+                            logging.INFO,
+                            f"Adding missing model(s) from default to user configuration: {', '.join(sorted(missing_models))}",
+                        )
+                        if not user_raw.get("models"):
+                            user_raw["models"] = {}
+                        for model in sorted(missing_models):
+                            if model in raw_default_models:
+                                user_raw["models"][model] = raw_default_models[model]
+                    try:
+                        with open(user_config_file, "w", encoding="utf-8") as f:
+                            _yaml_rt.dump(user_raw, f)
+                        user_cfg, _ = self.__parse_configuration(user_raw, "user configuration")
+                        self.log(
+                            logging.INFO,
+                            f"Saved updated user configuration to '{escape_single_quotes(user_config_file)}'.",
+                        )
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        self.log(logging.WARNING, f"Failed to save updated user configuration: {exc}")
+            else:
+                user_cfg = None
+        if user_cfg is not None:
             self.__merge_configuration(user_cfg)
 
         self.models_config: dict[str, ModelConfig | None] = self.config.models or {}
@@ -455,9 +479,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             for model_key, user_model in user_config.models.items():
                 cfg_model = self.config.models.get(model_key)
                 if user_model is None:
-                    # User wants to disable this model: remove it
-                    if cfg_model is not None:
-                        self.config.models.pop(model_key, None)
+                    # User wants to disable this model: keep the key as None so _is_* variables
+                    # are still set to False (rather than being undefined)
+                    self.config.models[model_key] = None
                 elif cfg_model is None:
                     # New model from user config: add with whatever was specified
                     self.config.models[model_key] = user_model
@@ -520,6 +544,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         parsed_models: dict[str, ModelConfig | None] = {}
         raw_models: dict[str, dict | None] = cfg.get("models") or {}
         for model_key, model_value in raw_models.items():
+            if model_value is None:
+                parsed_models[model_key] = None
+                continue
             if not isinstance(model_value, dict) or not any(k in model_value for k in ("detect", "variants")):
                 self.logger.warning(
                     f"{where.capitalize()}: Invalid format for model '{escape_single_quotes(model_key)}'. Discarding model."
@@ -674,12 +701,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 vs.set_system("_is_pure_" + x, sdchecks[x] and not any(is_models.values()))
                 vs.set_system("_is_variant_" + x, sdchecks[x] and any(is_models.values()))
         # special cases
-        vs.set_system("_is_sd", sdchecks["sd1"] or sdchecks["sd2"] or sdchecks["sdxl"] or sdchecks["sd3"])
+        vs.set_system("_is_sd", sdchecks.get("sd1", False) or sdchecks.get("sd2", False) or sdchecks.get("sdxl", False) or sdchecks.get("sd3", False))
         is_ssd = self.state.env_info.get("is_ssd", False)
         vs.set_system("_is_ssd", is_ssd)
-        vs.set_system("_is_sdxl_no_ssd", sdchecks["sdxl"] and not is_ssd)
+        vs.set_system("_is_sdxl_no_ssd", sdchecks.get("sdxl", False) and not is_ssd)
         # backcompatibility (but the modern one to use would be _is_pure_sdxl)
-        vs.set_system("_is_sdxl_no_pony", sdchecks["sdxl"] and not vs.get_system("_is_pony", False))
+        vs.set_system("_is_sdxl_no_pony", sdchecks.get("sdxl", False) and not vs.get_system("_is_pony", False))
 
         vs.update_system(input_vars)
 
@@ -1133,8 +1160,12 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 with open(filepath, "a", encoding="utf-8-sig") as f:
                     if not file_exists:
                         f.write("records:\n")
+                    _yaml_dump = _YAML()
+                    _yaml_dump.default_flow_style = False
                     for record in records:
-                        y = yaml.dump(record, allow_unicode=True, default_flow_style=False)
+                        _sio = StringIO()
+                        _yaml_dump.dump(record, _sio)
+                        y = _sio.getvalue()
                         f.write(f"  - {textwrap.indent(y, ' ' * 4).strip()}\n")
             elif ext == ".jsonl":
                 with open(filepath, "a", encoding="utf-8-sig") as f:

@@ -1,4 +1,4 @@
 lark
 numpy
-pyyaml
+ruamel.yaml
 pydantic

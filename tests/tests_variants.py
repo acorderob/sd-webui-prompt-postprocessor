@@ -73,3 +73,33 @@ class TestModelVariants(TestPromptPostProcessorBase):
                 self.extranetwork_maps_obj,
             ),
         )
+
+    def test_variants_null_model(self):
+        """null model in config disables detection and its variants"""
+        self.process(
+            InputTuple(
+                "<ppp:if _is_sdxl>SDXL<ppp:else>not SDXL<ppp:/if>, <ppp:if _is_pony>PONY<ppp:else>not PONY<ppp:/if>",
+                "",
+            ),
+            OutputTuple("not SDXL, not PONY", ""),
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                {
+                    **self.def_env_info,
+                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
+                    "ppp_config": {
+                        "models": {
+                            "sdxl": None,
+                        }
+                    },
+                },
+                replace(
+                    self.defopts,
+                    on_warning=ONWARNING_CHOICES.warn,
+                ),
+                self.grammar_content,
+                self.interrupt,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )

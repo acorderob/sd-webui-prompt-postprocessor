@@ -2,7 +2,8 @@ import fnmatch
 from pathlib import Path
 from typing import Any, Optional
 import logging
-import yaml
+from ruamel.yaml import YAML as _YAML
+from ruamel.yaml.error import YAMLError as _YAMLError
 
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import deep_freeze, escape_single_quotes
@@ -217,8 +218,8 @@ class PPPWildcards:
             wildcards_input = wildcards_input.strip()
             if wildcards_input != "":
                 try:
-                    content = yaml.safe_load(wildcards_input)
-                except yaml.YAMLError as e:
+                    content = _YAML(typ='safe').load(wildcards_input)
+                except _YAMLError as e:
                     log(self.__logger, self.__debug_level, logging.WARNING, f"Invalid format for input wildcards: {e}")
                     return
                 if content is not None:
@@ -471,7 +472,7 @@ class PPPWildcards:
         external_key_parts = list(full_path.with_suffix("").relative_to(base).parts)
         try:
             with open(full_path, "r", encoding="utf-8") as file:
-                content = yaml.safe_load(file)
+                content = _YAML(typ='safe').load(file)
         except:  # pylint: disable=bare-except
             log(
                 self.__logger,
@@ -480,7 +481,7 @@ class PPPWildcards:
                 f"Could not read file '{escape_single_quotes(str(full_path))}' with utf-8 encoding, trying windows-1252...",
             )
             with open(full_path, "r", encoding="windows-1252") as file:
-                content = yaml.safe_load(file)
+                content = _YAML(typ='safe').load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
 
     def __get_wildcards_in_text_file(self, full_path: Path, base: Path):
