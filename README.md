@@ -3,6 +3,9 @@
 The Prompt PostProcessor (or PPP, formerly known as "sd-webui-sendtonegative"), is an extension designed to process the prompt in several ways. This extension is compatible with:
 
 * [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
+* [Forge Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)
+* [SD.Next](https://github.com/vladmandic/sdnext)
+* [Forge Classic](https://github.com/Haoming02/sd-webui-forge-classic/tree/classic)
 * [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)
 * [reForge](https://github.com/Panchovix/stable-diffusion-webui-reForge)
 * [AUTOMATIC1111 Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
@@ -45,9 +48,7 @@ Notes:
     I also recommend a node to add LoRAs from the prompt, like:
         [LoRA Tag Loader for ComfyUI](https://github.com/badjeff/comfyui_lora_tag_loader)
 
-    > [!WARNING]
-    > In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
-
+    In *SD.Next* that means only the *A1111* or *Full* parsers. It will warn you if you use the *Compel* parser.
     Does not recognize tokenizer separators like `TE2:` and `TE3:`, so sending to negative prompt from those sections of the prompt will not add them in the corresponding section of the negative prompt.
 
 2. It recognizes wildcards in the `__wildcard__` and {choice|choice} formats (and almost everything that [Dynamic Prompts](https://github.com/adieyal/sd-dynamic-prompts) supports).
