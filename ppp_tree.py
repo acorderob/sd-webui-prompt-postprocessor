@@ -1224,9 +1224,6 @@ class TreeProcessor(lark.visitors.Interpreter):
                     weight_kind = 2
                 else:
                     weight_kind = 3
-                if attention_processing == "parentheses" and weight_kind == 1:
-                    weight_kind = 3
-                    weight_str = "0.9"
                 self.__shell.append(
                     TreeProcessor.AccumulatedShell(
                         TreeProcessor.ShellType.Attention,
