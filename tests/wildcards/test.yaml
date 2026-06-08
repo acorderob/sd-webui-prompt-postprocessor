@@ -111,6 +111,14 @@ yaml:
     - if _sd in ("test1", "test2")::4
     - if (false or false)::5
 
+  empty_default_wildcard:
+    - if false::1
+    - if false::2
+    - if false::3
+    - if _sd in ("test1", "test2")::4
+    - if (false or false)::5
+    - else::6
+
   circular1:
     - 5::__yaml/circular2__
     - choice1

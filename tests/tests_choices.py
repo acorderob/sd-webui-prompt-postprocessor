@@ -103,6 +103,13 @@ class TestChoices(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
+    def test_ch_choices_if_default(self):  # choices with if and a default
+        self.process(
+            InputTuple("the choice is: {if false::choice1|if _is_sd1::choice2|else::choice3}", ""),
+            OutputTuple("the choice is: choice3", ""),
+            ppp="nocup",
+        )
+
     def test_ch_choices_set_if_multiple(self):  # choices with if user variable and multiple selection
         self.process(
             InputTuple("${var=test}the choices are: {2$$, $$3::choice1|2 if not var eq 'test'::choice2|choice3}", ""),

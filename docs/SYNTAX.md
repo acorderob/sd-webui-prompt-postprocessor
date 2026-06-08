@@ -53,6 +53,7 @@ The choice options are as follows:
 * `'identifiers'`: comma separated labels for the choice (optional, quotes can be single or double). Only makes sense inside a wildcard definition. Can be used when specifying the wildcard to select this specific choice. It's case insensitive.
 * `n`: weight of the choice (optional, default 1).
 * `if condition`: filters out the choice if the condition is false (optional; this is an extension to the *Dynamic Prompts* syntax). Same conditions as in the `if` command.
+* `else`: flag to indicate this is the choice to use if no other choice is available after conditions. It won't be considered if other choices are available. Also optional.
 * `::`: end of choice options (not optional if any options)
 
 Whitespace is allowed between parameters/options.
@@ -142,6 +143,7 @@ The choices of the wildcard follow the same format as in the choices construct, 
 If using the object format for a choice you can use the following in addition to the standard `weight` and `text`/`content`:
 
 * `if`: the condition (a string)
+* `else`: flag (boolean) to indicate this is the choice to use if no other choice is available after conditions. It won't be considered if other choices are available.
 * `labels`: list of labels (an array of strings)
 * `command`: indicates the content is a command (a boolean)
 

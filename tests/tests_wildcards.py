@@ -337,6 +337,13 @@ class TestWildcards(TestPromptPostProcessorBase):
             ppp="nocup",
         )
 
+    def test_wc_wildcard_emptydefault(self):  # empty wildcard with default
+        self.process(
+            InputTuple("the choices are: __yaml/empty_default_wildcard__", ""),
+            OutputTuple("the choices are: 6", ""),
+            ppp="nocup",
+        )
+
     def test_wc_wildcard4_yaml(self):  # simple yaml wildcard with one option
         self.process(
             InputTuple("the choices are: __yaml/wildcard4__", ""),

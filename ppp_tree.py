@@ -1891,8 +1891,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         included_choices = 0
         excluded_choices = 0
         excluded_weights_sum = 0
+        else_choice = None
         for i, c in enumerate(expanded_choice_values):
             c["choice_index"] = i  # we index them to later sort the results
+            if c.get("else", False):
+                else_choice = c
+                continue
             weight = float(c.get("weight", 1.0))
             condition = c.get("if", None)
             if weight > 0 and (condition is None or self.__eval_condition(condition)):
@@ -1903,6 +1907,10 @@ class TreeProcessor(lark.visitors.Interpreter):
                 weights.append(-1)
                 excluded_choices += 1
                 excluded_weights_sum += weight
+        if not available_choices and else_choice is not None:
+            available_choices = [else_choice]
+            weights = [float(else_choice.get("weight", 1.0))]
+            included_choices = 1
         if excluded_choices > 0:  # we need to redistribute the excluded weights
             weights = [weight + excluded_weights_sum / included_choices for weight in weights if weight >= 0]
         weights = np.array(weights)
@@ -2114,7 +2122,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         c_label_obj = choice.children[1]
         choice_dict["labels"] = [str(x).lower() for x in c_label_obj.children[1:-1]] if c_label_obj is not None else []
         choice_dict["weight"] = float(choice.children[2].children[0]) if choice.children[2] is not None else 1.0
-        choice_dict["if"] = choice.children[3].children[0] if choice.children[3] is not None else None
+        ifelse = choice.children[3]
+        if ifelse is not None:
+            if len(ifelse.children) and ifelse.children[0] is not None:
+                choice_dict["if"] = ifelse.children[0]
+            else:
+                choice_dict["else"] = True
         choice_dict["content"] = choice.children[-1]
         return choice_dict
 
@@ -2242,7 +2255,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                         parse_prompt(
                             self.state,
                             "as wildcard options",
-                            wildcard.unprocessed_choices[0][:-2].strip(),
+                            wildcard.unprocessed_choices[0],
                             self.state.parsers["wcdefoptions"],
                             True,
                         ),

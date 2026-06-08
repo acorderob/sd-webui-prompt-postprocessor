@@ -165,27 +165,28 @@ extranetworktag: "<" /(?!ppp:)\w+:/ encontent ">"
     choicesoptions_sep: "$$" plain
 
     // choice options
-    choice: [ [ _WHITESPACE? choiceiscmd ] [ _WHITESPACE? choicelabels ] [ _WHITESPACE? choiceweight ] [ _WHITESPACE? choiceif ] _WHITESPACE? "::" ] choicevalue
+    choice: [ [ _WHITESPACE? choiceiscmd ] [ _WHITESPACE? choicelabels ] [ _WHITESPACE? choiceweight ] [ _WHITESPACE? ( choiceif | choiceelse ) ] _WHITESPACE? "::" ] choicevalue
     choiceiscmd: /%/ // the option text is a special command
     choicelabels: ( /"/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /"/ )
                 | ( /'/ IDENTIFIER ( _WHITESPACE? "," _WHITESPACE? IDENTIFIER )* /'/ )
     choiceweight: NUMBER
     choiceif: "if" _WHITESPACE condition
+    choiceelse: "else"
     choicevalue: content_choice
 //#endif
 
 //#if ALLOW_CHOICES
     // choices construct
-    choices: "{" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] choice ( "|" choice )* "}"
+    choices: "{" [ choicesoptions_sampler | ( choicesoptions "$$" ) ] choice ( "|" choice )* "}"
 //#endif
 
 //#if ALLOW_WILDCARDS
     // wildcard definition options
-    wcdefoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] [ _WHITESPACE? choicesoptions_range ] [ _WHITESPACE? wcdescription ] [ _WHITESPACE? choicesoptions_sep ]
+    wcdefoptions: [ choicesoptions_sampler ] [ _WHITESPACE? choicesoptions_flags ] [ _WHITESPACE? choicesoptions_range ] [ _WHITESPACE? wcdescription ] [ _WHITESPACE? choicesoptions_sep ] "$$"
     wcdescription: STRING
 
     // wildcards construct
-    wildcard: "__" [ choicesoptions_sampler | ( choicesoptions _WHITESPACE? "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
+    wildcard: "__" [ choicesoptions_sampler | ( choicesoptions "$$" ) ] wildcard_name [ wc_filter ] [ wildcardvar ] "__"
     wc_filter_nums: IDENTIFIER | INDEX | (INDEX /-/ INDEX)
     //#if ALLOW_COMMVARS
         wildcard_name.2: ( WC_NAME_PLAIN_START | variableuse | commandecho ) ( WC_NAME_PLAIN | variableuse | commandecho )*
