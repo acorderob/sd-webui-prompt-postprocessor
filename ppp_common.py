@@ -10,7 +10,7 @@ import lark
 from ruamel.yaml import YAML as _YAML
 
 from ppp_logging import log
-from ppp_classes import ONWARNING_CHOICES, PPPInterrupt, PPPState
+from ppp_classes import ONWARNING_CHOICES, PPPException, PPPInterrupt, PPPState
 from ppp_utils import escape_single_quotes, format_output
 
 
@@ -203,28 +203,42 @@ def preprocess_grammar(grammar_content: str, options: dict[str, bool], logger: l
     return "\n".join(result_lines)
 
 
-def get_model_class_from_filename(filename: str) -> str:
+def get_model_config_from_filename(filename: Path) -> object | None:
+    """
+    Attempts to detect the model class from the given filename by inspecting the file header.
+    Currently only supports ComfyUI models in .safetensors format.
+    The path must be relative to a model folder.
+    """
     try:
         import folder_paths  # type: ignore
         import comfy.utils  # type: ignore
         import comfy.model_detection as model_detection  # type: ignore
-    except ImportError:
-        return ""
+    except ImportError as e:
+        raise PPPException(f"Error detecting class from '{filename}': {e}") from e
     import json
 
     if not filename:
-        return ""
-    full_path = (
-        folder_paths.get_full_path("diffusion_models", filename)
-        or folder_paths.get_full_path("checkpoints", filename)
-        or folder_paths.get_full_path("unet", filename)
-    )
-    if not full_path or not full_path.lower().endswith((".safetensors", ".sft")):
-        return ""
+        return None
+
+    path_keys = ["diffusion_models", "checkpoints", "unet"]
+    full_path: Path | None = None
+    if filename.is_absolute():
+        full_path = filename
+    else:
+        base_folders = []
+        for key in path_keys:
+            base_folders.extend(folder_paths.get_folder_paths(key))
+        for base in base_folders:
+            fname: Path = base / filename
+            if fname.exists():
+                full_path = fname
+                break
+    if not full_path or not full_path.suffix.lower() in (".safetensors", ".sft"):
+        return None
     try:
         header_bytes = comfy.utils.safetensors_header(full_path)
         if header_bytes is None:
-            return ""
+            raise PPPException(f"Error detecting class from '{full_path}': no header")
         header = json.loads(header_bytes)
 
         # model_config_from_unet only inspects tensor shapes, not actual data.
@@ -240,10 +254,22 @@ def get_model_class_from_filename(filename: str) -> str:
         mock_sd = {k: _ShapeProxy(v["shape"]) for k, v in header.items() if k != "__metadata__" and "shape" in v}
 
         prefix = model_detection.unet_prefix_from_state_dict(mock_sd)
-        config = model_detection.model_config_from_unet(mock_sd, prefix)
-        return config.__class__.__name__ if config else ""
-    except Exception:  # pylint: disable=broad-except
+        config = model_detection.model_config_from_unet(mock_sd, prefix, True)
+        if not config:
+            raise PPPException(f"Error detecting class from '{full_path}': no config found")
+        return config
+    except Exception as e:  # pylint: disable=broad-except
+        raise PPPException(f"Error detecting class from file '{full_path}': {e}") from e
+
+
+def get_model_class_from_filename(filename: Path) -> str:
+    config = get_model_config_from_filename(filename)
+    if not config:
         return ""
+    c = config.__class__.__name__
+    if not c:
+        raise PPPException(f"Error detecting class from '{filename}': config has no class name {config}")
+    return c
 
 
 def sanitize_wc_name(name: str) -> str:
@@ -288,7 +314,7 @@ def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
     files = inp.glob("*.json") if inp.is_dir() else [inp]
     for file in files:
         with open(file, "r", encoding="utf-8-sig") as f:
-            data = _YAML(typ='safe').load(f)
+            data = _YAML(typ="safe").load(f)
             if not isinstance(data, list):
                 continue
             wildcards[file] = {}

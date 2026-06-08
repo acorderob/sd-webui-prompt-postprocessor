@@ -20,6 +20,7 @@ from ppp_classes import (
     HostConfig,
     ModelConfig,
     ModelDetectConfig,
+    PPPException,
     VariantConfig,
     PPPConfig,
     IFWILDCARDS_CHOICES,
@@ -407,7 +408,14 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         model_name = env_info.get("model_filename", "")
         app = env_info.get("app", "")
         if not model_class and model_name and app == SUPPORTED_APPS.comfyui.value:
-            model_class = get_model_class_from_filename(model_name)
+            try:
+                model_class = get_model_class_from_filename(Path(model_name))
+            except PPPException as e:
+                self.log(
+                    logging.WARNING,
+                    f"Could not detect model class from filename '{model_name}': {e}",
+                    min_level=DEBUG_LEVEL.minimal,
+                )
             if model_class:
                 env_info["model_class"] = model_class
                 self.log(
@@ -1107,7 +1115,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
         filtered_sysvars = {k: v for k, v in self.state.variables.all_system.items() if not k.startswith("_input_")}
-        self.log(logging.DEBUG, f"System variables: {filtered_sysvars}")
+        self.log(logging.DEBUG, f"System variables: {filtered_sysvars}", DEBUG_LEVEL.minimal)
         self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
 
     def _expand_filename(self) -> Path:

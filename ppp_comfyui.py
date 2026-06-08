@@ -11,7 +11,7 @@ import folder_paths  # type: ignore
 import nodes  # type: ignore
 
 from ppp import PromptPostProcessor
-from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPStateOptions
+from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPException, PPPStateOptions
 from ppp_common import get_model_class_from_filename, load_grammar
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
@@ -323,8 +323,16 @@ class PromptPostProcessorComfyUINode:
         ) or ""
         if modelname == "(none)":
             modelname = ""
-        if modelclass == "":
-            modelclass = get_model_class_from_filename(modelname)
+        if modelclass == "" and modelname != "":
+            try:
+                modelclass = get_model_class_from_filename(Path(modelname))
+            except PPPException as e:
+                log(
+                    self.logger,
+                    DEBUG_LEVEL.minimal,
+                    logging.WARNING,
+                    f"Could not detect model class from filename '{modelname}': {e}",
+                )
             if modelclass:
                 log(
                     self.logger,
@@ -337,7 +345,7 @@ class PromptPostProcessorComfyUINode:
                 self.logger,
                 DEBUG_LEVEL.minimal,
                 logging.WARNING,
-                "Model class was not provided. System model variables will not be properly set.",
+                "Model class was not provided nor detected. System model variables will not be properly set.",
             )
         if modelname == "":
             log(

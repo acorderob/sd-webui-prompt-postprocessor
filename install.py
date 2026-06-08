@@ -1,3 +1,6 @@
+"""
+Install dependencies for Prompt Post-Processor extension. For A1111 hosts.
+"""
 from pathlib import Path
 
 requirements_filename = str(Path(__file__).resolve().parent / "requirements.txt")
@@ -9,3 +12,5 @@ try:
 except ImportError:
     import launch
     launch.run_pip(f'install -r "{requirements_filename}"', "requirements for Prompt Post-Processor")
+except Exception as e:
+    pass

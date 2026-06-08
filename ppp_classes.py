@@ -288,7 +288,17 @@ class PPPState:
     cyclical_state: CyclicalSamplerState = field(default_factory=CyclicalSamplerState)
 
 
-class PPPInterrupt(Exception):
+class PPPException(Exception):
+    """
+    Custom exception to handle exceptions in the PromptPostProcessor.
+    """
+
+    def __init__(self, message: str = "An error occurred during prompt processing."):
+        super().__init__(message)
+        self.message = message
+
+
+class PPPInterrupt(PPPException):
     """
     Custom exception to handle interruptions in the PromptPostProcessor.
     This exception can be raised to stop the processing of prompts.
