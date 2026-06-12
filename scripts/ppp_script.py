@@ -520,6 +520,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         # initialize extra generation parameters
         if add_prompts:
+            if hiresfix_exists:
+                extra_params["PPP Hires prompt"] = rph
+                extra_params["PPP Hires negative prompt"] = rnh
             if regular_changes:
                 extra_params["PPP original prompts"] = regular_copy[0]
                 extra_params["PPP original negative prompts"] = regular_copy[1]
