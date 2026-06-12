@@ -569,3 +569,7 @@ Relative paths are resolved against the `logs` folder inside the extension direc
 
 > [!TIP]
 > The `.jsonl` format is the most convenient for programmatic processing. The `.yaml` format is the easiest to read manually.
+
+## Keeping references up to date
+
+After updating your loras (deleting old ones, updating to new versions) run the `tools\check_loras.py` script to check if there are broken references in your wildcards or extranetwork mappings.

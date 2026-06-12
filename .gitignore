@@ -8,3 +8,4 @@ logs
 tests/tests_local.py
 tests/local_wildcards
 tests/logs
+tools/*.bat
