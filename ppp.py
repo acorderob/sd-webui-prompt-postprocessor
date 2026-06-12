@@ -709,7 +709,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 vs.set_system("_is_pure_" + x, sdchecks[x] and not any(is_models.values()))
                 vs.set_system("_is_variant_" + x, sdchecks[x] and any(is_models.values()))
         # special cases
-        vs.set_system("_is_sd", sdchecks.get("sd1", False) or sdchecks.get("sd2", False) or sdchecks.get("sdxl", False) or sdchecks.get("sd3", False))
+        vs.set_system(
+            "_is_sd",
+            sdchecks.get("sd1", False)
+            or sdchecks.get("sd2", False)
+            or sdchecks.get("sdxl", False)
+            or sdchecks.get("sd3", False),
+        )
         is_ssd = self.state.env_info.get("is_ssd", False)
         vs.set_system("_is_ssd", is_ssd)
         vs.set_system("_is_sdxl_no_ssd", sdchecks.get("sdxl", False) and not is_ssd)
@@ -1024,6 +1030,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         negative_prompt: str,
         seed: int,
         jobinfo: Any = None,
+        input_vars: dict[str, Any] | None = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Process the prompt and negative prompt.
@@ -1032,6 +1039,8 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             prompt (str): The prompt.
             negative_prompt (str): The negative prompt.
             seed (int): The seed for the random number generator.
+            jobinfo (Any): Additional job information to be stored in the input state.
+            input_vars (dict[str, Any] | None): Additional input variables to be set as system variables with the "_input_" prefix.
 
         Returns:
             list[tuple[str, str, dict[str, Any]]]: A list of tuples, each containing the processed prompt, negative prompt, and all variables.
@@ -1048,6 +1057,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.inputs.jobinfo = jobinfo
 
         # Input related system variables
+        if input_vars:
+            for k, v in input_vars.items():
+                self.state.variables.set_system("_input_" + k, v)
         for input_name in self.state.inputs.__dict__.keys():
             input_value = getattr(self.state.inputs, input_name)
             var_name = "_input_" + input_name
@@ -1226,6 +1238,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         original_negative_prompt: str,
         seed: int = -1,
         jobinfo: Any = None,
+        input_vars: dict[str, Any] | None = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Initializes the random number generator and processes the prompt and negative prompt.
@@ -1235,6 +1248,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             original_negative_prompt (str): The original negative prompt.
             seed (int): The seed.
             jobinfo (Any): Optional job information, available as `_input_jobinfo`.
+            input_vars (dict[str, Any] | None): Optional dictionary of input variables to set before processing.
 
         Returns:
             list[tuple[str, str, dict[str, Any]]]: A list of tuples containing the processed prompt, negative prompt and all the prompt variables.
@@ -1249,7 +1263,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
                 self.state.cyclical_state.reset()
                 self.state.cyclical_state.last_prompt_pair = (original_prompt, original_negative_prompt)
-            results = self.__processprompts(prompt, negative_prompt, seed, jobinfo)
+            results = self.__processprompts(prompt, negative_prompt, seed, jobinfo, input_vars or {})
             t2 = time.monotonic_ns()
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")

@@ -204,6 +204,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         combinatorial_limit: int = 0,
         specific_wc_folders: Optional[list[Path]] = None,
         specific_em_folders: Optional[list[Path]] = None,
+        input_vars: Optional[dict[str, Any]] = None,
     ):
         """
         Process the prompt and compare the results with the expected prompts.
@@ -218,6 +219,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             combinatorial_limit (int, optional): The combinatorial limit. Defaults to 0.
             specific_wc_folders (Optional[list[Path]], optional): A list of specific wildcard folders to refresh. Defaults to None.
             specific_em_folders (Optional[list[Path]], optional): A list of specific extranetwork mapping folders to refresh. Defaults to None.
+            input_vars (Optional[dict[str, Any]], optional): A dictionary of input variables. Defaults to None.
 
         Returns:
             None
@@ -246,6 +248,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
+                jobinfo={"test_case": self.id()},
+                input_vars=input_vars,
             )
             the_obj.process_prompts_group_end()
             self.assertTrue(
@@ -311,6 +315,8 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 input_prompts.prompt,
                 input_prompts.negative_prompt,
                 seed,
+                jobinfo={"test_case": self.id()},
+                input_vars=input_vars,
             )
             self.assertTrue(
                 self.interrupted == interrupted,

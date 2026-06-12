@@ -766,6 +766,21 @@ class TestVarCommands(TestPromptPostProcessorBase):
             ),
         )
 
+    # Input variables
+
+    def test_input_variables(self):
+        self.process(
+            InputTuple(
+                "${_input_prev_positive_prompt}, high quality",
+                "",
+            ),
+            OutputTuple(
+                "this is a test, high quality",
+                "",
+            ),
+            input_vars={"prev_positive_prompt": "this is a test"},
+        )
+
     # Command tests
 
     def test_cmd_stn_complex_features(self):  # complex stn command with AND, BREAK and other features
