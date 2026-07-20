@@ -85,11 +85,18 @@ See the [cookbook](docs/COOKBOOK.md) for interesting usages.
 
 ## Tools
 
-A tool `tools/convert_styles.py` exists to convert A1111 or SD.Next styles into a wildcards file.
+### User tools
+
+* `tools/convert_styles.py`: converts A1111 or SD.Next styles into a wildcards file.
+* `tools/check_loras.py`: checks for valid loras inside wildcards.
+
+### Dev tools
+
+* `dev/compare_models.py`: checks for new supported models in hosts.
 
 ## Contributing
 
-To develop, I suggest doing so with the extension isolated from the UI (you can use a symlink to test it in the UI), and with its own virtual environment (venv or .venv), so the tests work and can be debugged properly.
+To develop, I suggest doing so with the extension isolated from the host UI (you can use a symlink to test it in the UI), and with its own virtual environment (venv or .venv), so the tests work and can be debugged properly.
 
 ## License
 

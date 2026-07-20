@@ -1,9 +1,8 @@
 import logging
 from dataclasses import replace
 
-from ppp import PromptPostProcessor  # type: ignore
+from ppp import PromptPostProcessor
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
-
 
 if __name__ == "__main__":
     raise SystemExit("This script must not be run directly")
@@ -191,7 +190,9 @@ class TestCleanup(TestPromptPostProcessorBase):
             "Expected an 'Unmatched' warning",
         )
 
-    def test_cl_warn_escaped_unmatched_no_false_warning(self):  # escaped unmatched paren/bracket does not trigger warning
+    def test_cl_warn_escaped_unmatched_no_false_warning(
+        self,
+    ):  # escaped unmatched paren/bracket does not trigger warning
         with self.assertNoLogs("PromptPostProcessor", level=logging.WARNING):
             self.process(
                 InputTuple(r"text with \(escaped unmatched\]", ""),

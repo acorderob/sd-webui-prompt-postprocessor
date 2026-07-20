@@ -1,5 +1,6 @@
 import fnmatch
 from pathlib import Path
+import re
 from typing import Any, Optional
 import logging
 from ruamel.yaml import YAML as _YAML
@@ -114,23 +115,33 @@ class PPPWildcards:
         keys = sorted(fnmatch.filter(self.wildcards.keys(), key))
         return [self.wildcards[k] for k in keys]
 
-    def __get_wc_in_dict(self, dictionary: dict, prefix="") -> list[tuple[str, Any]]:
+    def __get_wc_in_dict(self, dictionary: dict, prefix="", file_str: str = "") -> list[tuple[str, Any]]:
         """
         Get all wildcards in a dictionary, along their object.
 
         Args:
             dictionary (dict): The dictionary to check.
             prefix (str): The prefix for the current key.
+            file_str (str): The file string for logging purposes.
 
         Returns:
             list: A list of all leaf wildcards in the dictionary.
         """
         wc = []
         for key, obj in dictionary.items():
+            strkey = str(key)
+            if not self.__check_key_validity(strkey):
+                log(
+                    self.__logger,
+                    self.__debug_level,
+                    logging.WARNING,
+                    f"Invalid wildcard name part '{escape_single_quotes(prefix + strkey)}' in file '{escape_single_quotes(file_str)}'!",
+                )
+                continue
             if isinstance(obj, dict):
-                wc.extend(self.__get_wc_in_dict(obj, prefix + str(key) + "/"))
+                wc.extend(self.__get_wc_in_dict(obj, prefix + strkey + "/", file_str))
             else:
-                wc.append((prefix + str(key), obj))
+                wc.append((prefix + strkey, obj))
         return wc
 
     def __remove_wildcards_from_path(self, full_path: Path, debug=True):
@@ -218,7 +229,7 @@ class PPPWildcards:
             wildcards_input = wildcards_input.strip()
             if wildcards_input != "":
                 try:
-                    content = _YAML(typ='safe').load(wildcards_input)
+                    content = _YAML(typ="safe").load(wildcards_input)
                 except _YAMLError as e:
                     log(self.__logger, self.__debug_level, logging.WARNING, f"Invalid format for input wildcards: {e}")
                     return
@@ -374,6 +385,21 @@ class PPPWildcards:
             value = f"{options}::{value}"
         return value
 
+    def __check_key_validity(self, key: str) -> bool:
+        """
+        Check if a key is valid.
+
+        Args:
+            key (str): The key to check.
+
+        Returns:
+            bool: Whether the key is valid or not.
+        """
+        match = re.match(r"^[a-zA-Z0-9\-_#]+$", key)
+        if match is None:
+            return False
+        return True
+
     def __add_wildcard(self, content: object, full_path: Path | None, external_key_parts: list[str]):
         """
         Add a wildcard to the wildcards dictionary.
@@ -389,9 +415,20 @@ class PPPWildcards:
             return str(wc.file) if wc.file is not None else "input"
 
         key_parts = external_key_parts.copy()
+        if key_parts:
+            for part in key_parts:
+                strkey = str(part)
+                if strkey and not self.__check_key_validity(strkey):
+                    log(
+                        self.__logger,
+                        self.__debug_level,
+                        logging.WARNING,
+                        f"Invalid wildcard name start '{escape_single_quotes('/'.join(key_parts))}' in file '{escape_single_quotes(file_str)}'!",
+                    )
+                    return
         if isinstance(content, dict):
-            key_parts.pop()
-            keys = self.__get_wc_in_dict(content)
+            key_parts.pop()  # we don't want the name of the filename to be included, since the dict keys will be used instead
+            keys = self.__get_wc_in_dict(content, "", file_str)
             for key, obj in keys:
                 tmp_key_parts = key_parts.copy()
                 tmp_key_parts.extend(key.split("/"))
@@ -472,7 +509,7 @@ class PPPWildcards:
         external_key_parts = list(full_path.with_suffix("").relative_to(base).parts)
         try:
             with open(full_path, "r", encoding="utf-8") as file:
-                content = _YAML(typ='safe').load(file)
+                content = _YAML(typ="safe").load(file)
         except:  # pylint: disable=bare-except
             log(
                 self.__logger,
@@ -481,7 +518,7 @@ class PPPWildcards:
                 f"Could not read file '{escape_single_quotes(str(full_path))}' with utf-8 encoding, trying windows-1252...",
             )
             with open(full_path, "r", encoding="windows-1252") as file:
-                content = _YAML(typ='safe').load(file)
+                content = _YAML(typ="safe").load(file)
         self.__add_wildcard(content, full_path, external_key_parts)
 
     def __get_wildcards_in_text_file(self, full_path: Path, base: Path):

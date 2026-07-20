@@ -15,7 +15,7 @@ from ppp_classes import IFWILDCARDS_CHOICES, SUPPORTED_APPS, PPPState
 from ppp_enmappings import PPPENMappingVariant
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import escape_single_quotes, repr_value
-from ppp_common import parse_prompt, warn_or_stop
+from ppp_common import WARN_STOP_WHERE, parse_prompt, warn_or_stop
 from ppp_variables import ScalarValue, VariableEntry
 from ppp_wildcards import PPPWildcard
 
@@ -81,7 +81,12 @@ class TreeProcessor(lark.visitors.Interpreter):
         log(self.state.logger, self.state.options.debug_level, kind, message, min_level)
 
     def warn_or_stop(self, message: str, e: Exception = None):
-        warn_or_stop(self.state, self.__is_negative, message, e)
+        warn_or_stop(
+            self.state,
+            WARN_STOP_WHERE.negative if self.__is_negative else WARN_STOP_WHERE.positive,
+            message,
+            e,
+        )
 
     def __reset_run_state(self):
         """Reset all per-run mutable state for a fresh combinatorial pass."""

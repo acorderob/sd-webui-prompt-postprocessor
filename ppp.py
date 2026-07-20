@@ -34,7 +34,14 @@ from ppp_variables import VariableRepository, VariableEntry, VariableValue
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes, get_version_from_pyproject
-from ppp_common import get_model_class_from_filename, load_grammar, parse_prompt, preprocess_grammar, warn_or_stop
+from ppp_common import (
+    WARN_STOP_WHERE,
+    get_model_class_from_filename,
+    load_grammar,
+    parse_prompt,
+    preprocess_grammar,
+    warn_or_stop,
+)
 from ppp_wildcards import PPPWildcards
 from ppp_enmappings import PPPExtraNetworkMappings
 
@@ -775,7 +782,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 self.log(logging.DEBUG, f"BREAK construct {break_replacements[break_processing][0]}")
         elif break_processing == "error":
             if re.search(r"\bBREAK\b", text):
-                warn_or_stop(self.state, where == -1, "BREAK constructs are not allowed!")
+                warn_or_stop(
+                    self.state,
+                    WARN_STOP_WHERE.negative if where == -1 else WARN_STOP_WHERE.positive,
+                    "BREAK constructs are not allowed!",
+                )
 
         if self.state.options.cup_ands:
             # collapse ANDs with space after
@@ -955,7 +966,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
             # Check for special character sequences that should not be in the result
             compound_prompt = prompt + "\n" + negative_prompt
-            found_sequences = re.findall(r"::|\$\$|\$\{|[{}]", compound_prompt)
+            found_sequences = re.findall(r"::|\$\$|\$\{|[{}]|__", compound_prompt)
             if found_sequences:
                 s = ", ".join(map(lambda x: '"' + x + '"', set(found_sequences)))
                 warnings.append(f"Probably invalid character sequences: {s}.")

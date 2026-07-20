@@ -82,7 +82,7 @@ hosts:
         alternation: error
         and: comma
         break: comma
-        seed_bits: 64
+        seed_bits: 53 # and not 64, because of frontend JavaScript limits
 
 # Supported base models, variants, and options
 # Check supported models for each host in:
@@ -101,7 +101,7 @@ models:
             a1111: { property: "is_sd1" }
             forge: { property: "is_sd1", class: ["SD15", "SD15_instructpix2pix"] }
             forgeneo: { property: "is_sd1", class: ["SD15"] }
-            reforge: { property: "is_sd1" }
+            reforge: { property: "is_sd1", class: ["SD15", "SD15_instructpix2pix"] }
             sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline", "StableDiffusionInpaintPipeline", "StableDiffusionInstructPix2PixPipeline", "StableDiffusionUpscalePipeline"] } # LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend; cannot differentiate SD1 and SD2, we set both to True
             comfyui: { class: ["SD15", "SD15_instructpix2pix"] }
     sd2: # Stable Diffusion 2
@@ -109,7 +109,7 @@ models:
             a1111: { property: "is_sd2" }
             forge: { property: "is_sd2", class: ["SD20", "SD21UnclipL", "SD21UnclipH"] }
             forgeneo: null
-            reforge: { property: "is_sd2" }
+            reforge: { property: "is_sd2", class: ["SD20", "SD21UnclipL", "SD21UnclipH"] }
             sdnext: { class: ["LatentDiffusion", "StableDiffusionPipeline", "StableDiffusionInpaintPipeline", "StableDiffusionInstructPix2PixPipeline", "StableDiffusionUpscalePipeline"] } # cannot differentiate SD1 and SD2, we set both to True; LatentDiffusion is for the original backend, StableDiffusionPipeline is for the diffusers backend
             comfyui: { class: ["SD20", "SD21UnclipL", "SD21UnclipH", "LotusD"] }
     ssd: # Segmind Stable Diffusion 1B
@@ -117,7 +117,7 @@ models:
             a1111: { property: "is_ssd" }
             forge: { class: ["SSD1B"] }
             forgeneo: null
-            reforge: { property: "is_ssd" }
+            reforge: { property: "is_ssd", class: ["SSD1B"] }
             sdnext: null
             comfyui: { class: ["SSD1B"]}
     sdxl: # Stable Diffusion XL
@@ -125,7 +125,7 @@ models:
             a1111: { property: "is_sdxl" }
             forge: { property: "is_sdxl", class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
             forgeneo: { property: "is_sdxl", class: ["SDXL", "SDXLRefiner"] }
-            reforge: { property: "is_sdxl" }
+            reforge: { property: "is_sdxl", class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
             sdnext: { class: ["StableDiffusionXLPipeline", "StableDiffusionXLImg2ImgPipeline", "StableDiffusionXLInpaintPipeline", "StableDiffusionXLInstructPix2PixPipeline"] }
             comfyui: { class: ["SDXL", "SDXLRefiner", "SDXL_instructpix2pix", "Segmind_Vega", "KOALA_700M", "KOALA_1B"] }
         variants:
@@ -142,7 +142,7 @@ models:
             a1111: { property: "is_sd3" }
             forge: { property: "is_sd3", class: ["SD3"] }
             forgeneo: null
-            reforge: { property: "is_sd3" }
+            reforge: { property: "is_sd3", class: ["SD3"] }
             sdnext: { class: ["StableDiffusion3Pipeline"] }
             comfyui: { class: ["SD3"] }
     flux: # Flux 1
@@ -248,7 +248,7 @@ models:
             forgeneo: { class: ["WAN21_T2V", "WAN21_I2V"] }
             reforge: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
             sdnext: { class: ["WanPipeline"] }
-            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V", "WAN21_FlowRVS", "WAN21_SCAIL", "WAN22_WanDancer"] }
+            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V", "WAN21_FlowRVS", "WAN21_SCAIL", "WAN22_WanDancer", "WAN21_CausalAR_T2V", "WAN21_SCAIL2"] }
     hidream: # HiDream
         detect:
             a1111: null
@@ -337,3 +337,35 @@ models:
             reforge: null
             sdnext: null
             comfyui: { class: ["CogVideoX_T2V", "CogVideoX_I2V", "CogVideoX_Inpaint"] }
+    krea2: # Krea2
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Krea2"] }
+    Ideogram4: # Ideogram4
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Ideogram4"] }
+    Lens: # Lens
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Lens"] }
+    Boogu: # Boogu
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["Boogu"] }

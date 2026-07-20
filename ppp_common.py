@@ -1,5 +1,6 @@
 import ast
 import csv
+from enum import Enum
 from functools import reduce
 import logging
 from pathlib import Path
@@ -82,13 +83,19 @@ def parse_prompt(
     return parsed_prompt
 
 
-def warn_or_stop(state: PPPState, is_negative: bool, message: str, e: Exception = None):
+class WARN_STOP_WHERE(Enum):
+    none = 0
+    positive = 1
+    negative = 2
+
+
+def warn_or_stop(state: PPPState, where: WARN_STOP_WHERE, message: str, e: Exception = None):
     INVALID_CONTENT_STOP = "INVALID CONTENT! {0}\nBREAK "
     if state.options.on_warning == ONWARNING_CHOICES.stop:
         raise PPPInterrupt(
             message,
-            INVALID_CONTENT_STOP.format(message) if not is_negative else "",
-            INVALID_CONTENT_STOP.format(message) if is_negative else "",
+            INVALID_CONTENT_STOP.format(message) if where == WARN_STOP_WHERE.positive else "",
+            INVALID_CONTENT_STOP.format(message) if where == WARN_STOP_WHERE.negative else "",
         ) from e
     log(state.logger, state.options.debug_level, logging.WARNING, format_output(message))
 
@@ -256,8 +263,25 @@ def get_model_config_from_filename(filename: Path) -> object | None:
         prefix = model_detection.unet_prefix_from_state_dict(mock_sd)
         config = model_detection.model_config_from_unet(mock_sd, prefix, True)
         if not config:
-            raise PPPException(f"Error detecting class from '{full_path}': no config found")
+            mock_sd, metadata = comfy.utils.convert_old_quants(mock_sd, "", metadata=None)
+            #Allow loading unets from checkpoint files
+            diffusion_model_prefix = model_detection.unet_prefix_from_state_dict(mock_sd)
+            temp_sd = comfy.utils.state_dict_prefix_replace(mock_sd, {diffusion_model_prefix: ""}, filter_keys=True)
+            if len(temp_sd) > 0:
+                mock_sd, metadata = comfy.utils.convert_old_quants(temp_sd, "", metadata=metadata)
+            config = model_detection.model_config_from_unet(mock_sd, "", metadata=metadata)
+            if config is None:
+                mock_sd = model_detection.convert_diffusers_mmdit(mock_sd, "")
+                if mock_sd is not None: #diffusers mmdit
+                    config = model_detection.model_config_from_unet(mock_sd, "")
+                else: #diffusers unet
+                    config = model_detection.model_config_from_diffusers_unet(mock_sd)
+
+        if not config:
+            raise PPPException(f"Error detecting class from file '{full_path}': no config found")
         return config
+    except PPPException:
+        raise
     except Exception as e:  # pylint: disable=broad-except
         raise PPPException(f"Error detecting class from file '{full_path}': {e}") from e
 
