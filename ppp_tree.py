@@ -1876,7 +1876,8 @@ class TreeProcessor(lark.visitors.Interpreter):
         seen_wildcards_len = len(self.__seen_wildcards)
         if options is None:
             options = {}
-        sampler: str = options.get("sampler", "~")
+        specified_sampler = options.get("sampler")
+        sampler: str = specified_sampler if specified_sampler is not None else "~"
         repeating: bool = options.get("repeating", False)
         optional: bool = options.get("optional", False)
         if "count" in options:
@@ -1920,6 +1921,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             weights = [weight + excluded_weights_sum / included_choices for weight in weights if weight >= 0]
         weights = np.array(weights)
         weights /= weights.sum()  # normalize weights
+        comb_chosen_selection: Optional[list[dict]] = None
         if available_choices:
             if from_value < 0:
                 from_value = 1
@@ -1929,7 +1931,6 @@ class TreeProcessor(lark.visitors.Interpreter):
                 to_value = 1
             elif (to_value > len(available_choices) and not repeating) or from_value > to_value:
                 to_value = len(available_choices)
-            comb_chosen_selection: Optional[list[dict]] = None
             if self.state.options.do_combinatorial or sampler == "@":
                 # Enumerate every distinct selection of choices, accounting for count range and repetition.
                 all_selections: list[tuple] = []
@@ -1949,6 +1950,9 @@ class TreeProcessor(lark.visitors.Interpreter):
                             all_selections.extend(combinations(available_choices, k))
                         else:
                             all_selections.extend(permutations(available_choices, k))
+                if specified_sampler == "~":
+                    # It's a forced random sampler, so we randomly select one of the enumerated selections.
+                    all_selections = [all_selections[self.__rng.choice(len(all_selections))]]
                 num_selections = len(all_selections)
                 if self.state.options.do_combinatorial:
                     decision_idx = len(self.__comb_trace)
@@ -1972,12 +1976,17 @@ class TreeProcessor(lark.visitors.Interpreter):
                 num_choices = (
                     self.__rng.integers(from_value, to_value, endpoint=True) if from_value < to_value else from_value
                 )
+                if num_choices < 2:
+                    repeating = False
+                comb_chosen_selection = (
+                    list(self.__rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
+                    if available_choices
+                    else []
+                )
         else:
             num_choices = 0
             if not optional and from_value > 0:
                 self.warn_or_stop(f"Not enough choices found for {msg_where}!")
-        if num_choices < 2:
-            repeating = False
         self.log(
             logging.DEBUG,
             f"Selecting {'optional ' if optional else ''}{'repeating ' if repeating else ''}{num_choices} choice"
@@ -1985,14 +1994,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             + (f" and separating with '{escape_single_quotes(separator)}'" if num_choices > 1 else ""),
         )
         if num_choices > 0:
-            if comb_chosen_selection is not None:
-                selected_choices: list[dict] = comb_chosen_selection
-            else:
-                selected_choices: list[dict] = (
-                    list(self.__rng.choice(available_choices, size=num_choices, p=weights, replace=repeating))
-                    if available_choices
-                    else []
-                )
+            selected_choices: list[dict] = comb_chosen_selection
             if self.state.options.keep_choices_order:
                 selected_choices = sorted(selected_choices, key=lambda x: x["choice_index"])
             selected_choices_text = []

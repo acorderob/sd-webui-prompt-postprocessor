@@ -41,7 +41,7 @@ There is also a format where instead of `parameters$$` you just put the sampler,
 
 The construct parameters can be written with the following options (all are optional):
 
-* `~` (random) or `@` (cyclical): sampler (for compatibility with *Dynamic Prompts*). The cyclical sampler cycles through all combinations in order across consecutive `process_prompt` calls, resuming where the previous call left off (as long as the input prompt and negative prompt do not change).
+* `~` (random) or `@` (cyclical): sampler (for compatibility with *Dynamic Prompts*). The cyclical sampler cycles through all combinations in order across consecutive `process_prompt` calls, resuming where the previous call left off (as long as the input prompt and negative prompt do not change). In combinatorial mode you can use the random sampler to stop a specific choice/wildcard from being expanded into all its combinations.
 * `r`: means it allows repetition of the choices.
 * `o`: means it is optional, and no error will be raised if there are no choices to select from.
 * `n` or `n-m` or `n-` or `-m`: number or range of choices to select. Allows zero as the start of a range. Default is 1.

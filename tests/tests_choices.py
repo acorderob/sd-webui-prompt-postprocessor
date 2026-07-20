@@ -163,14 +163,14 @@ class TestChoices(TestPromptPostProcessorBase):
 
     def test_ch_combinatorial(self):
         self.process(
-            InputTuple("{choice1|choice2|choice3}, ${v:{option1|option2}}", ""),
+            InputTuple("{choice1|choice2|choice3}, ${v:{option1|option2}}, {~a|b}", ""),
             [
-                OutputTuple("choice1, option1", ""),
-                OutputTuple("choice1, option2", ""),
-                OutputTuple("choice2, option1", ""),
-                OutputTuple("choice2, option2", ""),
-                OutputTuple("choice3, option1", ""),
-                OutputTuple("choice3, option2", "", {"v": "option2"}),
+                OutputTuple("choice1, option1, a", ""),
+                OutputTuple("choice1, option2, b", ""),
+                OutputTuple("choice2, option1, b", ""),
+                OutputTuple("choice2, option2, b", ""),
+                OutputTuple("choice3, option1, a", ""),
+                OutputTuple("choice3, option2, a", "", {"v": "option2"}),
             ],
             combinatorial=True,
         )

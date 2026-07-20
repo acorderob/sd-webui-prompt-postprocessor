@@ -6,7 +6,7 @@ yaml:
     - choice3
 
   wildcard2:
-    - ~r2-3'Wildcard description'$$-$$
+    - r2-3'Wildcard description'$$-$$
     - "'label1,label2'4::choice1"
     - "3:: choice2 "
     - { labels: ["label1", "label3"], weight: 2, content: choice3 }
