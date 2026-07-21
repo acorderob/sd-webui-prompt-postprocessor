@@ -77,6 +77,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             do_combinatorial=False,
             combinatorial_shuffle=False,
             combinatorial_limit=0,
+            combinatorial_randomsampler_fixed=True,
             results_file=(Path(__file__).parent / "logs" / "output_%date%.txt") if enable_file_logging else "",
         )
         self.def_env_info = {

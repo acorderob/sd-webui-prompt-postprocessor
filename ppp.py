@@ -81,6 +81,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_DO_COMBINATORIAL = defopt["do_combinatorial"]
     DEFAULT_COMBINATORIAL_SHUFFLE = defopt["combinatorial_shuffle"]
     DEFAULT_COMBINATORIAL_LIMIT = defopt["combinatorial_limit"]
+    DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED = defopt["combinatorial_randomsampler_fixed"]
     DEFAULT_RESULTS_FILE = defopt["results_file"]
 
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '

@@ -215,6 +215,15 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "Limit for combinatorial mode",
                     },
                 ),
+                "combinatorial_randomsampler_fixed": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED,
+                        "tooltip": "Fix the value of any specified random samplers across all combinations in combinatorial mode",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
                 "wc_options": (
                     "PPP_OPTIONS_WC",
                     {
@@ -310,6 +319,7 @@ class PromptPostProcessorComfyUINode:
         do_combinatorial,
         combinatorial_shuffle,
         combinatorial_limit,
+        combinatorial_randomsampler_fixed,
         model=None,
         wc_options=None,
         stn_options=None,
@@ -426,6 +436,7 @@ class PromptPostProcessorComfyUINode:
             do_combinatorial=do_combinatorial,
             combinatorial_shuffle=combinatorial_shuffle,
             combinatorial_limit=combinatorial_limit,
+            combinatorial_randomsampler_fixed=combinatorial_randomsampler_fixed,
             results_file=results_file or "",
         )
         self.wildcards_obj.refresh_wildcards(

@@ -181,6 +181,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     min_width=120,
                     elem_id="ppp_combinatorial_limit",
                 )
+                combinatorial_randomsampler_fixed = gr.Checkbox(
+                    label="Fix random sampler across combinations",
+                    info="Fix the value of any specified random samplers across all combinations in combinatorial mode.",
+                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED,
+                    elem_id="ppp_combinatorial_randomsampler_fixed",
+                )
         return [
             force_equal_seeds,
             unlink_seed,
@@ -189,6 +195,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             combinatorial,
             combinatorial_shuffle,
             combinatorial_limit,
+            combinatorial_randomsampler_fixed,
         ]
 
     def process(
@@ -201,6 +208,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         input_combinatorial,
         input_combinatorial_shuffle,
         input_combinatorial_limit,
+        input_combinatorial_randomsampler_fixed,
     ):  # pylint: disable=arguments-differ
         """
         Processes the prompts and applies post-processing operations.
@@ -214,6 +222,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             input_combinatorial (bool): Flag indicating whether to use combinatorial mode.
             input_combinatorial_shuffle (bool): Flag indicating whether to shuffle the combinatorial results.
             input_combinatorial_limit (int): Maximum number of combinations (0 = no limit).
+            input_combinatorial_randomsampler_fixed (bool): Flag indicating whether to fix the random sampler across all combinations.
 
         Returns:
             None
@@ -276,6 +285,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             do_combinatorial=input_combinatorial,
             combinatorial_shuffle=input_combinatorial_shuffle,
             combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
+            combinatorial_randomsampler_fixed=input_combinatorial_randomsampler_fixed,
             results_file=getattr(opts, "ppp_gen_resultsfile", PromptPostProcessor.DEFAULT_RESULTS_FILE),
         )
         if not self.ppp_init:
@@ -308,6 +318,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 "PPP prompt seed": input_seed,
                 "PPP incremental seed": input_incremental_seed,
                 "PPP combinatorial": input_combinatorial,
+                "PPP combinatorial random sampler fixed": input_combinatorial_randomsampler_fixed,
             }
         )
 

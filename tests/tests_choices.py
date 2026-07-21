@@ -172,5 +172,30 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("choice3, option1, a", ""),
                 OutputTuple("choice3, option2, a", "", {"v": "option2"}),
             ],
-            combinatorial=True,
+            ppp=PromptPostProcessor(
+                self.ppp_logger,
+                self.def_env_info,
+                replace(
+                    self.defopts,
+                    do_combinatorial=True,
+                    combinatorial_randomsampler_fixed=False,  # allow different random choices across combinations
+                ),
+                self.grammar_content,
+                self.interrupt,
+                self.wildcards_obj,
+                self.extranetwork_maps_obj,
+            ),
+        )
+
+    def test_ch_combinatorial_random_consistent(self):  # ~ sampler picks one value shared across all combinations
+        ppp_instance = self.init_ppp("nocup", combinatorial=True)
+        ppp_instance.process_prompts_group_start()
+        result = ppp_instance.process_prompt("{~a|b|c} {x|y}", "", seed=1)
+        ppp_instance.process_prompts_group_end()
+        self.assertEqual(len(result), 2, "Expected exactly 2 combinations ({x|y} expands to 2)")
+        rnd_choices = {r_prompt.split()[0] for r_prompt, _, _ in result}
+        self.assertEqual(
+            len(rnd_choices),
+            1,
+            f"The ~ sampler must yield the same value across all combinations, got: {rnd_choices}",
         )
