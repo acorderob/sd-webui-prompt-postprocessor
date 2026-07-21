@@ -119,7 +119,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
         with gr.Accordion(PromptPostProcessor.NAME, open=False):
             force_equal_seeds = gr.Checkbox(
                 label="Force equal seeds",
-                info="Force all image seeds and variation seeds to be equal to the first one, disabling the default autoincrease.",
+                info="Force all image seeds and variation seeds to be equal to the first one, disabling the default autoincrement.",
                 value=False,
                 # show_label=True,
                 elem_id="ppp_force_equal_seeds",
