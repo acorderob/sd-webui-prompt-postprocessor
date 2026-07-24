@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from ppp import PromptPostProcessor
 from ppp_classes import IFWILDCARDS_CHOICES
+from ppp_logging import DEBUG_LEVEL
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -127,6 +128,22 @@ class TestWildcards(TestPromptPostProcessorBase):
             ppp="nocup",
             interrupted=True,
         )
+
+    def test_wc_load_invalid_wildcards(self):
+        self.wildcards_obj.refresh_wildcards(
+            DEBUG_LEVEL.full,
+            [],
+            """
+inv alid1:
+  - choice1
+  - choice2
+inv.alid2:
+  - choice1
+  - choice2
+""",
+        )
+        self.assertFalse(self.wildcards_obj.get_wildcards("inv alid1"), "invalid wildcard name should not be accepted")
+        self.assertFalse(self.wildcards_obj.get_wildcards("inv.alid2"), "invalid wildcard name should not be accepted")
 
     def test_wc_wildcard1a_text(self):  # simple text wildcard
         self.process(
