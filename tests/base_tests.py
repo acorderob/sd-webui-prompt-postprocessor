@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import replace, make_dataclass
 import difflib
 import logging
 from pathlib import Path
@@ -6,7 +6,15 @@ from typing import Any, NamedTuple, Optional
 import unittest
 import datetime
 
-from ppp_classes import DEFAULT_SAMPLER, IFWILDCARDS_CHOICES, ONWARNING_CHOICES, RUN_MODE, PPPStateOptions
+from ppp_classes import (
+    DEFAULT_SAMPLER,
+    IFWILDCARDS_CHOICES,
+    ONWARNING_CHOICES,
+    PPPEnvInfo,
+    RUN_MODE,
+    SUPPORTED_APPS,
+    PPPStateOptions,
+)
 from ppp_enmappings import PPPExtraNetworkMappings  # type: ignore
 from ppp_wildcards import PPPWildcards  # type: ignore
 from ppp import PromptPostProcessor  # type: ignore
@@ -81,14 +89,14 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             comb_random_fixed=True,
             default_sampler=DEFAULT_SAMPLER.random,
         )
-        self.def_env_info = {
-            "app": "tests",
-            "ppp_config": None,
-            "model_class": "SDXL",
-            "property_base": {"is_sdxl": True},
-            "models_path": "./webui/models",
-            "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
-        }
+        self.def_env_info = PPPEnvInfo(
+            app=SUPPORTED_APPS.tests,
+            ppp_config=None,
+            model_class="SDXL",
+            property_base=make_dataclass("PropertyBase", [("is_sdxl", bool)])(is_sdxl=True),
+            models_path="./webui/models",
+            model_filename="./webui/models/Stable-diffusion/testmodel.safetensors",
+        )
         self.interrupted = False
         self.wildcards_obj = PPPWildcards(self.lf.log)
         self.extranetwork_maps_obj = PPPExtraNetworkMappings(self.lf.log)

@@ -20,6 +20,7 @@ from ppp_classes import (
     HostConfig,
     ModelConfig,
     ModelDetectConfig,
+    PPPEnvInfo,
     PPPException,
     RUN_MODE,
     VariantConfig,
@@ -93,7 +94,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     def __init__(
         self,
         logger: logging.Logger,
-        env_info: dict[str, Any],
+        env_info: PPPEnvInfo,
         options: PPPStateOptions,
         grammar_content: Optional[str] = None,
         interrupt: Optional[Callable] = None,
@@ -106,7 +107,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Args:
             logger: The logger object.
             interrupt: The interrupt function.
-            env_info: A dictionary with information for the environment and loaded model.
+            env_info: Environment and model information.
             options: The options object for configuring PPP behavior.
             grammar_content: Optional. The grammar content to be used for parsing.
             wildcards_obj: Optional. The wildcards object to be used for processing wildcards.
@@ -283,7 +284,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     def log(self, kind, message: str, min_level: DEBUG_LEVEL | None = None, exc_info=None):
         log(self.logger, self.debug_level, kind, message, min_level, exc_info=exc_info)
 
-    def __load_config_and_detect(self, env_info: dict[str, Any]) -> HostConfig:
+    def __load_config_and_detect(self, env_info: PPPEnvInfo) -> HostConfig:
         """Loads config files, performs model detection, and returns the resolved host config."""
         main_folder = Path(__file__).resolve().parent
         default_config_file = str(main_folder / "ppp_config.yaml.defaults")
@@ -303,13 +304,13 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 raise PPPInterrupt(errmsg)
             self.log(logging.WARNING, errmsg)
 
-        app = env_info.get("app", "")
-        user_config_file = env_info.get("ppp_config", "")
+        app = env_info.app
+        user_config_file = env_info.ppp_config or ""
         if isinstance(user_config_file, dict):
             user_cfg, _ = self.__parse_configuration(user_config_file, "forced configuration")
         else:
             if user_config_file == "":
-                if app == SUPPORTED_APPS.comfyui.value:
+                if app == SUPPORTED_APPS.comfyui:
                     try:
                         import folder_paths  # type: ignore # pylint: disable=import-outside-toplevel,import-error
 
@@ -373,7 +374,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.known_models: list[str] = list(self.models_config.keys())
 
         # Patch for tests (copy comfyui)
-        if app == "tests":
+        if app == SUPPORTED_APPS.tests:
             if self.config.hosts is None:
                 self.config.hosts = {}
             self.config.hosts.setdefault("tests", HostConfig())
@@ -384,10 +385,10 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         model.detect = {}
                     model.detect.setdefault("tests", model.detect.get("comfyui", None))
 
-        host_config: HostConfig | None = (self.config.hosts or {}).get(app)
+        host_config: HostConfig | None = (self.config.hosts or {}).get(app.value)
         if host_config is None:
             raise PPPInterrupt(
-                f"No host configuration found for app '{escape_single_quotes(app)}'. Please check your configuration."
+                f"No host configuration found for app '{escape_single_quotes(app.value)}'. Please check your configuration."
             )
 
         # Update env_info with model detection
@@ -405,19 +406,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     )
         self.log(
             logging.DEBUG,
-            f"Host configuration ({escape_single_quotes(app)}): {host_config}",
+            f"Host configuration ({escape_single_quotes(app.value)}): {host_config}",
             min_level=DEBUG_LEVEL.minimal,
         )
 
         return host_config
 
-    def __run_model_detection(self, env_info: dict[str, Any]) -> None:
+    def __run_model_detection(self, env_info: PPPEnvInfo) -> None:
         """Updates the is_* model detection flags in env_info based on model_class."""
-        prop_base = env_info.get("property_base", None)
-        model_class = env_info.get("model_class", "")
-        model_name = env_info.get("model_filename", "")
-        app = env_info.get("app", "")
-        if not model_class and model_name and app == SUPPORTED_APPS.comfyui.value:
+        prop_base = env_info.property_base
+        model_class = env_info.model_class
+        model_name = env_info.model_filename
+        app = env_info.app
+        if not model_class and model_name and app == SUPPORTED_APPS.comfyui:
             try:
                 model_class = get_model_class_from_filename(Path(model_name))
             except PPPException as e:
@@ -427,26 +428,26 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                     min_level=DEBUG_LEVEL.minimal,
                 )
             if model_class:
-                env_info["model_class"] = model_class
+                env_info.model_class = model_class
                 self.log(
                     logging.DEBUG,
                     f"Detected model class '{model_class}' from filename '{model_name}'",
                     min_level=DEBUG_LEVEL.minimal,
                 )
         for m in self.known_models:
-            env_info["is_" + m] = False
+            env_info.is_flags[m] = False
             model_obj = self.models_config.get(m)
             model_detect = (model_obj.detect if model_obj else None) or {}
-            model_detect_for_app: ModelDetectConfig | None = model_detect.get(app)
+            model_detect_for_app: ModelDetectConfig | None = model_detect.get(app.value)
             if model_detect_for_app is not None:
                 cls_list = model_detect_for_app.class_ or []
                 if model_class and model_class in cls_list:
-                    env_info["is_" + m] = True
+                    env_info.is_flags[m] = True
                 elif model_detect_for_app.property is not None and prop_base is not None:
                     prop = model_detect_for_app.property
                     attr = getattr(prop_base, prop, None)
                     if isinstance(attr, bool) and attr:
-                        env_info["is_" + m] = True
+                        env_info.is_flags[m] = True
 
     def __on_model_info_update(self) -> None:
         """Called when _modelfullname or _modelclass are set via a prompt command."""
@@ -456,7 +457,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def update(
         self,
-        env_info: dict[str, Any],
+        env_info: PPPEnvInfo,
         options: PPPStateOptions,
         wildcards_obj: PPPWildcards,
         extranetwork_mappings_obj: PPPExtraNetworkMappings,
@@ -636,14 +637,21 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         )
 
     @property
-    def envinfo_hash(self) -> str:
-        """
-        Generates a hash string based on the environment information.
-
-        Returns:
-            str: A hash string representing the environment information.
-        """
-        return hash(tuple(sorted(self.state.env_info.items())))
+    def envinfo_hash(self) -> int:
+        """Returns a hash of the environment information for cache-invalidation purposes."""
+        ei = self.state.env_info
+        ppp_config_key = ei.ppp_config if isinstance(ei.ppp_config, (str, type(None))) else id(ei.ppp_config)
+        return hash(
+            (
+                ei.app,
+                ppp_config_key,
+                ei.model_class,
+                ei.model_filename,
+                ei.models_path,
+                id(ei.property_base),
+                tuple(sorted(ei.is_flags.items())),
+            )
+        )
 
     @property
     def options_hash(self) -> str:
@@ -679,19 +687,19 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                 vs.set_system(var_name, str(opt_value).split(".", 1)[-1])
 
         # Model related variables
-        sdchecks = {x: self.state.env_info.get("is_" + x, False) for x in self.known_models}
+        sdchecks = {x: self.state.env_info.is_flags.get(x, False) for x in self.known_models}
         # Adding "" as a sentinel that is always True lets next() return "" when no model matches,
         # giving a well-defined empty-string fallback without a separate None check.
         sdchecks.update({"": True})
         model_name_val = next((k for k, v in sdchecks.items() if v), "")
         vs.set_system("_model", model_name_val)
         vs.set_system("_sd", model_name_val)  # deprecated
-        model_filename = self.state.env_info.get("model_filename", "")
+        model_filename = self.state.env_info.model_filename
         vs.set_system("_sdfullname", model_filename)  # deprecated
         vs.set_system("_modelfullname", model_filename)
         vs.set_system("_sdname", Path(model_filename).name)  # deprecated
         vs.set_system("_modelname", Path(model_filename).name)
-        vs.set_system("_modelclass", self.state.env_info.get("model_class", ""))
+        vs.set_system("_modelclass", self.state.env_info.model_class)
         is_models = {}
         for model_name, model_type_and_substrings in self.variants_definitions.items():
             # A variant is only active when its parent model type is currently loaded
@@ -726,7 +734,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             or sdchecks.get("sdxl", False)
             or sdchecks.get("sd3", False),
         )
-        is_ssd = self.state.env_info.get("is_ssd", False)
+        is_ssd = self.state.env_info.is_flags.get("ssd", False)
         vs.set_system("_is_ssd", is_ssd)
         vs.set_system("_is_sdxl_no_ssd", sdchecks.get("sdxl", False) and not is_ssd)
         # backcompatibility (but the modern one to use would be _is_pure_sdxl)
@@ -1157,7 +1165,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             r"%datetime%": now.strftime(r"%Y-%m-%d_%H-%M-%S"),
             r"%date%": now.strftime(r"%Y-%m-%d"),
             r"%time%": now.strftime(r"%H-%M-%S"),
-            r"%host%": str(self.state.env_info.get("app", "")),
+            r"%host%": self.state.env_info.app.value,
         }
         result = str(self.state.options.results_file)
         for token, value in substitutions.items():

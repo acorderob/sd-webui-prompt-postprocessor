@@ -97,7 +97,7 @@ Do not use bare `assert` statements.
 
 ## Default Options & Environment
 
-Override `self.defopts` or `self.def_env_info` to pass non-default options — do not hardcode option dicts from scratch.
+Override `self.defopts` or `self.def_env_info` to pass non-default options.
 
 ```python
 
@@ -121,10 +121,10 @@ def test_cl_custom2(self):  # only environment changes
         OutputTuple("a | b", ""),
         ppp=PromptPostProcessor(
             self.ppp_logger,
-            {
-                **self.def_env_info,
-                "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
-            },
+            replace(
+                self.def_env_info,
+                model_filename="./webui/models/Stable-diffusion/testmodel.safetensors",
+            ),
             self.defopts,
             self.grammar_content,
             self.interrupt,

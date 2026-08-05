@@ -1,3 +1,4 @@
+from dataclasses import replace
 from ppp import PromptPostProcessor  # type: ignore
 from ppp_classes import ONWARNING_CHOICES  # type: ignore
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
@@ -770,10 +771,10 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("this is PONY", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
-                },
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ponymodel.safetensors",
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -1003,10 +1004,10 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("<lora:lorapony:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
-                },
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ponymodel.safetensors",
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -1024,10 +1025,10 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("<lora:lorapony:0.4>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
-                },
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ponymodel.safetensors",
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -1045,10 +1046,10 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("<lora:lorapony:0.6:0.8>inlinetrigger, triggerpony1, triggerpony2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
-                },
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ponymodel.safetensors",
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -1066,10 +1067,10 @@ class TestVarCommands(TestPromptPostProcessorBase):
             OutputTuple("<lora:loraillustrious:0.9:0.8>inlinetrigger, triggerillustrious1, triggerillustrious2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ilxlmodel.safetensors",
-                },
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ilxlmodel.safetensors",
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,

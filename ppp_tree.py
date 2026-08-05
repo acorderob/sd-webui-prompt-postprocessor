@@ -1322,14 +1322,14 @@ class TreeProcessor(lark.visitors.Interpreter):
                     f"Invalid variable name '{escape_single_quotes(variable_name)}' detected! System variables cannot be set."
                 )
                 return
-            app = self.state.env_info.get("app", "")
-            if app not in (SUPPORTED_APPS.comfyui.value, SUPPORTED_APPS.tests.value):
+            app = self.state.env_info.app
+            if app not in (SUPPORTED_APPS.comfyui, SUPPORTED_APPS.tests):
                 self.warn_or_stop(f"Setting '{escape_single_quotes(variable_name)}' is only supported in ComfyUI.")
                 return
             evaluated = self.__visit(content, restore_state=False, discard_content=True)
-            self.state.env_info[settable_sysvars[variable_name]] = evaluated
+            setattr(self.state.env_info, settable_sysvars[variable_name], evaluated)
             if variable_name == "_modelfullname":
-                self.state.env_info["model_class"] = ""  # reset model class so it will be re-evaluated
+                self.state.env_info.model_class = ""  # reset so it will be re-evaluated
             if self.__on_model_info_update is not None:
                 self.__on_model_info_update()
             info = variable_name + " = " + f"'{escape_single_quotes(evaluated)}'"

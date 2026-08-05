@@ -218,7 +218,7 @@ class PPPExtraNetworkMappings:
         enmappings_input = enmappings_input.strip()
         if enmappings_input != "":
             try:
-                content = _YAML(typ='safe').load(enmappings_input)
+                content = _YAML(typ="safe").load(enmappings_input)
             except _YAMLError as e:
                 log(
                     self.__logger,
@@ -298,7 +298,7 @@ class PPPExtraNetworkMappings:
         try:
             try:
                 with open(full_path, "r", encoding="utf-8") as file:
-                    content = _YAML(typ='safe').load(file)
+                    content = _YAML(typ="safe").load(file)
             except:  # pylint: disable=bare-except
                 log(
                     self.__logger,
@@ -307,7 +307,7 @@ class PPPExtraNetworkMappings:
                     f"Could not read file '{escape_single_quotes(str(full_path))}' with utf-8 encoding, trying windows-1252...",
                 )
                 with open(full_path, "r", encoding="windows-1252") as file:
-                    content = _YAML(typ='safe').load(file)
+                    content = _YAML(typ="safe").load(file)
             self.__add_extranetwork_mapping(content, full_path)
         except Exception as e:  # pylint: disable=broad-except
             log(

@@ -22,6 +22,7 @@ from ppp_classes import (
     DEFAULT_SAMPLER,
     IFWILDCARDS_CHOICES,
     ONWARNING_CHOICES,
+    PPPEnvInfo,
     SUPPORTED_APPS,
     SUPPORTED_APPS_NAMES,
     RUN_MODE,
@@ -309,7 +310,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
             results_limit=min(num_seeds, int(input_results_limit)),
             results_shuffle=input_results_shuffle,
             comb_random_fixed=input_comb_random_fixed,
-            default_sampler=DEFAULT_SAMPLER(input_default_sampler if input_default_sampler else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER)
+            default_sampler=DEFAULT_SAMPLER(
+                input_default_sampler if input_default_sampler else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER
+            ),
         )
         if not self.ppp_init:
             self.ppp_init = True
@@ -357,17 +360,17 @@ class PromptPostProcessorA1111Script(scripts.Script):
             logging.INFO,
             f"Post-processing prompts ({'i2i' if is_i2i else 't2i'})",
         )
-        env_info = {
-            "app": app.value,
-            "models_path": models_path,
-            "model_filename": getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
-            "model_class": (
+        env_info = PPPEnvInfo(
+            app=app,
+            models_path=models_path,
+            model_filename=getattr(p.sd_model.sd_checkpoint_info, "filename", ""),
+            model_class=(
                 p.sd_model.model_config.__class__.__name__
                 if app in (SUPPORTED_APPS.forge, SUPPORTED_APPS.forgeneo)
                 else p.sd_model.__class__.__name__
             ),
-            "property_base": p.sd_model,
-        }
+            property_base=p.sd_model,
+        )
         wc_wildcards_folders = getattr(opts, "ppp_wil_wildcardsfolders", "")
         if wc_wildcards_folders == "":
             wc_wildcards_folders = os.getenv("WILDCARD_DIR", PPPWildcards.DEFAULT_WILDCARDS_FOLDER)
@@ -408,7 +411,9 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 self.wildcards_obj,
                 self.extranetwork_mappings_obj,
             )
-        hash_fullenv = hash((self.ppp.envinfo_hash, self.ppp.options_hash, self.wildcards_obj, self.extranetwork_mappings_obj))
+        hash_fullenv = hash(
+            (self.ppp.envinfo_hash, self.ppp.options_hash, self.wildcards_obj, self.extranetwork_mappings_obj)
+        )
 
         if input_force_equal_seeds:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Forcing equal seeds")

@@ -285,12 +285,30 @@ class CyclicalSamplerState:
         self.last_prompt_pair = None
 
 
+@dataclass
+class PPPEnvInfo:
+    """Environment and model information passed to PPP at construction time."""
+
+    app: SUPPORTED_APPS = SUPPORTED_APPS.a1111
+    ppp_config: str | dict | None = None
+    model_class: str = ""
+    model_filename: str = ""
+    property_base: Any = None
+    models_path: str = ""
+    _is_flags: dict[str, bool] = field(default_factory=dict, init=False, repr=False)
+
+    @property
+    def is_flags(self) -> dict[str, bool]:
+        """Boolean model-detection flags keyed by model name (e.g. 'sdxl' -> True)."""
+        return self._is_flags
+
+
 @dataclass(frozen=True)
 class PPPState:
     """State object passed to various PPP components during prompt processing."""
 
     logger: Logger
-    env_info: dict[str, Any] = field(default_factory=dict)
+    env_info: PPPEnvInfo = field(default_factory=PPPEnvInfo)
     host_config: HostConfig = field(default_factory=HostConfig)
     options: PPPStateOptions = field(default_factory=PPPStateOptions)
     inputs: PPPStateInputs = field(default_factory=PPPStateInputs)

@@ -16,6 +16,7 @@ from ppp_classes import (
     DEFAULT_SAMPLER,
     IFWILDCARDS_CHOICES,
     ONWARNING_CHOICES,
+    PPPEnvInfo,
     SUPPORTED_APPS,
     PPPException,
     RUN_MODE,
@@ -353,13 +354,13 @@ class PromptPostProcessorComfyUINode:
                 "Modelname was not provided. System model and variant variables will not be properly set.",
             )
         # model class values in ComfyUI\comfy\supported_models.py
-        env_info = {
-            "app": SUPPORTED_APPS.comfyui.value,
-            "models_path": folder_paths.models_dir,
-            "model_filename": modelname or "",  # path is relative to checkpoints folder
-            "model_class": modelclass,
-            "property_base": None,
-        }
+        env_info = PPPEnvInfo(
+            app=SUPPORTED_APPS.comfyui,
+            models_path=folder_paths.models_dir,
+            model_filename=modelname or "",  # path is relative to checkpoints folder
+            model_class=modelclass,
+            property_base=None,
+        )
         wildcards_folders = _resolve_wildcards_folders(wc_options["wc_wildcards_folders"] if wc_options else "")
         enmappings_folders = _resolve_enmappings_folders(en_options["en_mappings_folders"] if en_options else "")
 
@@ -425,7 +426,9 @@ class PromptPostProcessorComfyUINode:
             ),
             run_mode=RUN_MODE(run_mode if run_mode else PromptPostProcessor.DEFAULT_RUN_MODE),
             results_file=results_file,
-            results_shuffle=rm_options["results_shuffle"] if rm_options else PromptPostProcessor.DEFAULT_RESULTS_SHUFFLE,
+            results_shuffle=(
+                rm_options["results_shuffle"] if rm_options else PromptPostProcessor.DEFAULT_RESULTS_SHUFFLE
+            ),
             results_limit=rm_options["results_limit"] if rm_options else PromptPostProcessor.DEFAULT_RESULTS_LIMIT,
             comb_random_fixed=(
                 rm_options["comb_random_fixed"] if rm_options else PromptPostProcessor.DEFAULT_COMB_RANDOM_FIXED

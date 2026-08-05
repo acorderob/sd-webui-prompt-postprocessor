@@ -265,7 +265,7 @@ def get_model_config_from_filename(filename: Path) -> object | None:
         config = model_detection.model_config_from_unet(mock_sd, prefix, True)
         if not config:
             mock_sd, metadata = comfy.utils.convert_old_quants(mock_sd, "", metadata=None)
-            #Allow loading unets from checkpoint files
+            # Allow loading unets from checkpoint files
             diffusion_model_prefix = model_detection.unet_prefix_from_state_dict(mock_sd)
             temp_sd = comfy.utils.state_dict_prefix_replace(mock_sd, {diffusion_model_prefix: ""}, filter_keys=True)
             if len(temp_sd) > 0:
@@ -273,9 +273,9 @@ def get_model_config_from_filename(filename: Path) -> object | None:
             config = model_detection.model_config_from_unet(mock_sd, "", metadata=metadata)
             if config is None:
                 mock_sd = model_detection.convert_diffusers_mmdit(mock_sd, "")
-                if mock_sd is not None: #diffusers mmdit
+                if mock_sd is not None:  # diffusers mmdit
                     config = model_detection.model_config_from_unet(mock_sd, "")
-                else: #diffusers unet
+                else:  # diffusers unet
                     config = model_detection.model_config_from_diffusers_unet(mock_sd)
 
         if not config:

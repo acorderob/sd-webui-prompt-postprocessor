@@ -24,10 +24,10 @@ class TestModelVariants(TestPromptPostProcessorBase):
             OutputTuple("test1test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
-                    "ppp_config": {
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/testmodel.safetensors",
+                    ppp_config={
                         "models": {
                             "sd1": {
                                 "detect": {"tests": {"class": ["SD15", "SD15_instructpix2pix"]}},
@@ -62,7 +62,7 @@ class TestModelVariants(TestPromptPostProcessorBase):
                             },
                         }
                     },
-                },
+                ),
                 replace(
                     self.defopts,
                     on_warning=ONWARNING_CHOICES.warn,
@@ -84,15 +84,15 @@ class TestModelVariants(TestPromptPostProcessorBase):
             OutputTuple("not SDXL, not PONY", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "model_filename": "./webui/models/Stable-diffusion/ponymodel.safetensors",
-                    "ppp_config": {
+                replace(
+                    self.def_env_info,
+                    model_filename="./webui/models/Stable-diffusion/ponymodel.safetensors",
+                    ppp_config={
                         "models": {
                             "sdxl": None,
                         }
                     },
-                },
+                ),
                 replace(
                     self.defopts,
                     on_warning=ONWARNING_CHOICES.warn,

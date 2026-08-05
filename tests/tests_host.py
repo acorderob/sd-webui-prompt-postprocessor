@@ -1,3 +1,4 @@
+from dataclasses import replace
 from ppp import PromptPostProcessor  # type: ignore
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
@@ -21,10 +22,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("(test1:0.9) (test2) (test3:1.5) (test4:0.99)", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"attention": "parentheses"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"attention": "parentheses"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -42,10 +43,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1 test2 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"attention": "disable"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"attention": "disable"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -63,10 +64,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"attention": "remove"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"attention": "remove"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -84,10 +85,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"attention": "error"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"attention": "error"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -106,10 +107,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"scheduling": "before"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"scheduling": "before"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -127,10 +128,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"scheduling": "after"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"scheduling": "after"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -148,10 +149,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1 test3", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"scheduling": "first"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"scheduling": "first"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -169,10 +170,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"scheduling": "remove"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"scheduling": "remove"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -190,10 +191,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"scheduling": "error"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"scheduling": "error"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -212,10 +213,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"alternation": "first"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"alternation": "first"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -233,10 +234,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"alternation": "remove"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"alternation": "remove"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -254,10 +255,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"alternation": "error"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"alternation": "error"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -276,10 +277,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"and": "eol"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"and": "eol"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -297,10 +298,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"and": "comma"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"and": "comma"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -318,10 +319,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"and": "remove"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"and": "remove"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -339,10 +340,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"and": "error"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"and": "error"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -361,10 +362,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1\ntest2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"break": "eol"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"break": "eol"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -382,10 +383,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1, test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"break": "comma"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"break": "comma"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -403,10 +404,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("test1 test2", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"break": "remove"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"break": "remove"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
@@ -424,10 +425,10 @@ class TestHosts(TestPromptPostProcessorBase):
             OutputTuple("", ""),
             ppp=PromptPostProcessor(
                 self.ppp_logger,
-                {
-                    **self.def_env_info,
-                    "ppp_config": {"hosts": {"tests": {"break": "error"}}},
-                },
+                replace(
+                    self.def_env_info,
+                    ppp_config={"hosts": {"tests": {"break": "error"}}},
+                ),
                 self.defopts,
                 self.grammar_content,
                 self.interrupt,
