@@ -1,7 +1,7 @@
 [project]
 name = "sd-webui-prompt-postprocessor"
 description = "Stable Diffusion WebUI & ComfyUI extension to post-process the prompt. Features include: wildcards, sending content from the prompt to the negative prompt, variables, model detection, extranetwork mapping, cleanup."
-version = "3.2.2"
+version = "3.3.0"
 license = { file = "LICENSE.txt" }
 dependencies = ["lark==1.*", "numpy==2.*", "ruamel.yaml==0.*", "pydantic==2.*"]
 requires-python = ">=3.10"
