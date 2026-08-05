@@ -12,7 +12,7 @@ The model variants now support regular expressions instead of a list of strings 
 
 ## Important
 
-**Beware of the combinatorial mode with no limits**. Even very few choice/wildcard constructs can cause a *combinatorial explosion*!
+**Beware of the combinatorial mode with no limits**. Even very few choice/wildcard constructs can cause a *combinatorial explosion*! In ComfyUI there is no other limit, but in the other hosts this is also limited by the batch count/size.
 
 The console log can help you determine the number of combinations that it is trying to generate. There will be an **"Estimated combinations"** message that shows an estimate. You can try first with a limit of 1, then check this message in the log. But note that it is a lower bound estimate, and there could be more combinations.
 
@@ -35,14 +35,13 @@ Inputs:
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
-* **do_combinatorial**: Activates combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
-* **combinatorial_shuffle**: It shuffles the combinatorial results.
-* **combinatorial_limit**: Limit for the number of generated combinations.
+* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
+* **run_mode**: Sets how the process works. `single` or `multiple` for regular one or more results, or `combinatorial` for combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.
 * **en_options**: Connection to a ExtraNetworkMapping options node.
-* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
+* **rm_options**: Connection to a Run Mode options node.
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 
@@ -58,7 +57,19 @@ Outputs:
 * **neg_prompt**: Resulting negative prompt.
 * **variables**: Resulting output variables.
 
-The outputs are lists, and in combinatorial mode there will be multiple elements that *ComfyUI* will process sequentially.
+The outputs are lists, and in combinatorial/multiple modes there will be multiple elements that *ComfyUI* will process sequentially.
+
+The run_mode can be explained like this:
+
+* single: only one result is returned.
+* multiple: multiple results are returned, the count is in results_limit.
+* combinatorial: all the combinations are returned, up to results_limit.
+
+In single and multiple modes the default choice sampler is the one set in default_sampler. In combinatorial mode the default sampling is equivalent to cyclical. In all modes specified samplers are respected. The value of random samplers in combinatorial mode depends on comb_random_fixed.
+
+Multiple mode with a default of cyclical sampler is very similar to combinatorial. The only difference is that comb_ramdom_fixed does not apply and random samplers are thus not cached.
+
+Single mode with a default of cyclical sampler can be used as similar to combinatorial but in separated *ComfyUI* runs instead of one.
 
 ### ACB PPP Select Variable node
 
@@ -93,6 +104,15 @@ Inputs:
 Output:
 
 * **prompt**: concatenated result.
+
+### ACB PPP Run Mode Options node
+
+Options for the run mode, in case you want to change them from the defaults.
+
+* **results_limit**: Limit for the number of generated results (except in `single` mode). Important for combinatorial mode.
+* **results_shuffle**: It shuffles the results.
+* **comb_random_fixed**: If True all specified random samplers will have a fixed value across the combinations.
+* **default_sampler**: The default choice sampler when not specified (in non combinatorial mode). Also applies to extranetwork mapping selection.
 
 ### ACB PPP Wildcard Options node
 
@@ -149,9 +169,11 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Unlink seed**: Uses the specified seed for the prompt generation instead of the one from the image. This seed is only used for wildcards and choices.
 * **Prompt seed**: The seed to use for the prompt generation. If -1 a random one will be used.
 * **Incremental seed**: When using a batch you can use this to set the rest of the prompt seeds with consecutive values.
-* **Combinatorial mode**: Generate all possible prompt combinations (from choices and wildcards) and cycle through them to fill the batch.
-* **Shuffle combinations**: It shuffles the combinatorial results.
-* **Combinations limit**: Maximum number of combinations to generate (0 = no limit). The actual maximum limit is the number of images (batch size * count).
+* **Run mode**: Sets how the process works. `single` or `multiple` for regular one or more results, or `combinatorial` for combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
+* **Results limit**: Maximum number of combinations to generate (0 = no limit). The actual maximum limit is the number of images (batch size * count).
+* **Shuffle results**: It shuffles the results.
+* **Fix random sampler across combinations**: If checked all specified random samplers will have a fixed value across the combinations.
+* **Default sampler**: The default choice sampler when not specified.
 
 ### General settings
 

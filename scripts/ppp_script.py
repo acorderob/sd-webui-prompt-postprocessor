@@ -1,6 +1,7 @@
 if __name__ == "__main__":
     raise SystemExit("This script must be run from a Stable Diffusion WebUI")
 
+# pylint: disable=wrong-import-position,wrong-import-order
 import logging
 import sys
 import os
@@ -10,14 +11,22 @@ import numpy as np
 
 sys.path.append(str(Path(__file__).parent))  # base path for the extension
 
-from modules import scripts, shared, script_callbacks  # type: ignore
-from modules.processing import StableDiffusionProcessing  # type: ignore
-from modules.shared import opts  # type: ignore
-from modules.paths import models_path  # type: ignore
-import gradio as gr  # type: ignore
+from modules import scripts, shared, script_callbacks  # type: ignore # pylint: disable=import-error
+from modules.processing import StableDiffusionProcessing  # type: ignore # pylint: disable=import-error
+from modules.shared import opts  # type: ignore # pylint: disable=import-error
+from modules.paths import models_path  # type: ignore # pylint: disable=import-error
+import gradio as gr  # type: ignore # pylint: disable=import-error
 
 from ppp import PromptPostProcessor
-from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, SUPPORTED_APPS_NAMES, PPPStateOptions
+from ppp_classes import (
+    DEFAULT_SAMPLER,
+    IFWILDCARDS_CHOICES,
+    ONWARNING_CHOICES,
+    SUPPORTED_APPS,
+    SUPPORTED_APPS_NAMES,
+    RUN_MODE,
+    PPPStateOptions,
+)
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_cache import PPPLRUCache
 from ppp_wildcards import PPPWildcards
@@ -74,11 +83,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
         self.wildcards_obj = None
         self.extranetwork_mappings_obj = None
         self.ppp_init = False
+        self.ppp = None
         # log(self.ppp_logger, DEBUG_LEVEL.minimal, logging.INFO, f"Initializing {self.name} instance {self.instance_index}")
 
         try:
             # Support for SD.Next
-            import installer  # type: ignore
+            import installer  # type: ignore # pylint: disable=import-outside-toplevel
 
             if hasattr(installer, "control_extensions"):
                 if self.title() not in installer.control_extensions:
@@ -161,41 +171,51 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     elem_id="ppp_incremental_seed",
                 )
             gr.HTML("<br>")
+            run_mode = gr.Radio(
+                label="Run mode",
+                choices=[rm.value for rm in RUN_MODE],
+                value=PromptPostProcessor.DEFAULT_RUN_MODE,
+                info="Select the run mode for prompt processing. 'Single' produces one result, 'Multiple' produces many results to fill the batch, and 'Combinatorial' generates all prompt combinations and cycles through them to fill the batch.",
+                elem_id="ppp_run_mode",
+            )
             with gr.Row(equal_height=True):
-                combinatorial = gr.Checkbox(
-                    label="Combinatorial mode",
-                    info="Generate all prompt combinations and cycle through them to fill the batch.",
-                    value=PromptPostProcessor.DEFAULT_DO_COMBINATORIAL,
-                    elem_id="ppp_combinatorial",
-                )
-                combinatorial_shuffle = gr.Checkbox(
-                    label="Shuffle combinations",
-                    info="Shuffle the combinatorial results.",
-                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_SHUFFLE,
-                    elem_id="ppp_combinatorial_shuffle",
-                )
-                combinatorial_limit = gr.Number(
-                    label="Combinations limit (0 = no limit)",
-                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_LIMIT,
+                results_limit = gr.Number(
+                    label="Results limit (0 = no limit)",
+                    value=PromptPostProcessor.DEFAULT_RESULTS_LIMIT,
                     precision=0,
                     min_width=120,
-                    elem_id="ppp_combinatorial_limit",
+                    elem_id="ppp_results_limit",
                 )
-                combinatorial_randomsampler_fixed = gr.Checkbox(
+                default_sampler = gr.Radio(
+                    label="Default sampler",
+                    choices=[ds.value for ds in DEFAULT_SAMPLER],
+                    value=PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER,
+                    info="Select the default sampler.",
+                    elem_id="ppp_default_sampler",
+                )
+            with gr.Row(equal_height=True):
+                results_shuffle = gr.Checkbox(
+                    label="Shuffle results",
+                    info="Shuffle the results.",
+                    value=PromptPostProcessor.DEFAULT_RESULTS_SHUFFLE,
+                    elem_id="ppp_results_shuffle",
+                )
+                comb_random_fixed = gr.Checkbox(
                     label="Fix random sampler across combinations",
                     info="Fix the value of any specified random samplers across all combinations in combinatorial mode.",
-                    value=PromptPostProcessor.DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED,
-                    elem_id="ppp_combinatorial_randomsampler_fixed",
+                    value=PromptPostProcessor.DEFAULT_COMB_RANDOM_FIXED,
+                    elem_id="ppp_comb_random_fixed",
                 )
         return [
             force_equal_seeds,
             unlink_seed,
             seed,
             incremental_seed,
-            combinatorial,
-            combinatorial_shuffle,
-            combinatorial_limit,
-            combinatorial_randomsampler_fixed,
+            run_mode,
+            results_limit,
+            results_shuffle,
+            comb_random_fixed,
+            default_sampler,
         ]
 
     def process(
@@ -205,10 +225,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
         input_unlink_seed,
         input_seed,
         input_incremental_seed,
-        input_combinatorial,
-        input_combinatorial_shuffle,
-        input_combinatorial_limit,
-        input_combinatorial_randomsampler_fixed,
+        input_run_mode,
+        input_results_limit,
+        input_results_shuffle,
+        input_comb_random_fixed,
+        input_default_sampler,
     ):  # pylint: disable=arguments-differ
         """
         Processes the prompts and applies post-processing operations.
@@ -219,10 +240,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
             input_unlink_seed (bool): Flag indicating whether to unlink the seed.
             input_seed (int): The seed value.
             input_incremental_seed (bool): Flag indicating whether to use incremental seed.
-            input_combinatorial (bool): Flag indicating whether to use combinatorial mode.
-            input_combinatorial_shuffle (bool): Flag indicating whether to shuffle the combinatorial results.
-            input_combinatorial_limit (int): Maximum number of combinations (0 = no limit).
-            input_combinatorial_randomsampler_fixed (bool): Flag indicating whether to fix the random sampler across all combinations.
+            input_run_mode (str): The run mode for prompt processing.
+            input_results_limit (int): Maximum number of results (0 = no limit).
+            input_results_shuffle (bool): Flag indicating whether to shuffle the results.
+            input_comb_random_fixed (bool): Flag indicating whether to fix the random sampler across all combinations.
+            input_default_sampler (str): The default sampler for prompt processing.
 
         Returns:
             None
@@ -282,11 +304,12 @@ class PromptPostProcessorA1111Script(scripts.Script):
             cup_remove_extranetwork_tags=getattr(
                 opts, "ppp_rem_removeextranetworktags", PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
-            do_combinatorial=input_combinatorial,
-            combinatorial_shuffle=input_combinatorial_shuffle,
-            combinatorial_limit=max(num_seeds, int(input_combinatorial_limit)) if input_combinatorial else 0,
-            combinatorial_randomsampler_fixed=input_combinatorial_randomsampler_fixed,
             results_file=getattr(opts, "ppp_gen_resultsfile", PromptPostProcessor.DEFAULT_RESULTS_FILE),
+            run_mode=RUN_MODE(input_run_mode if input_run_mode else PromptPostProcessor.DEFAULT_RUN_MODE),
+            results_limit=min(num_seeds, int(input_results_limit)),
+            results_shuffle=input_results_shuffle,
+            comb_random_fixed=input_comb_random_fixed,
+            default_sampler=DEFAULT_SAMPLER(input_default_sampler if input_default_sampler else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER)
         )
         if not self.ppp_init:
             self.ppp_init = True
@@ -317,10 +340,16 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 "PPP unlink seed": input_unlink_seed,
                 "PPP prompt seed": input_seed,
                 "PPP incremental seed": input_incremental_seed,
-                "PPP combinatorial": input_combinatorial,
-                "PPP combinatorial random sampler fixed": input_combinatorial_randomsampler_fixed,
+                "PPP run mode": input_run_mode,
+                "PPP default sampler": input_default_sampler,
             }
         )
+        if input_run_mode == RUN_MODE.combinatorial.value:
+            p.extra_generation_params.update(
+                {
+                    "PPP combinatorial random fixed": input_comb_random_fixed,
+                }
+            )
 
         log(
             self.ppp_logger,
@@ -362,16 +391,24 @@ class PromptPostProcessorA1111Script(scripts.Script):
             self.ppp_debug_level, wildcards_folders if options.process_wildcards else None
         )
         self.extranetwork_mappings_obj.refresh_extranetwork_mappings(self.ppp_debug_level, enmappings_folders)
-        ppp = PromptPostProcessor(
-            self.ppp_logger,
-            env_info,
-            options,
-            self.grammar_content,
-            self.ppp_interrupt,
-            self.wildcards_obj,
-            self.extranetwork_mappings_obj,
-        )
-        hash_fullenv = hash((ppp.envinfo_hash, ppp.options_hash, self.wildcards_obj, self.extranetwork_mappings_obj))
+        if self.ppp is None:
+            self.ppp = PromptPostProcessor(
+                self.ppp_logger,
+                env_info,
+                options,
+                self.grammar_content,
+                self.ppp_interrupt,
+                self.wildcards_obj,
+                self.extranetwork_mappings_obj,
+            )
+        else:
+            self.ppp.update(
+                env_info,
+                options,
+                self.wildcards_obj,
+                self.extranetwork_mappings_obj,
+            )
+        hash_fullenv = hash((self.ppp.envinfo_hash, self.ppp.options_hash, self.wildcards_obj, self.extranetwork_mappings_obj))
 
         if input_force_equal_seeds:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Forcing equal seeds")
@@ -424,16 +461,20 @@ class PromptPostProcessorA1111Script(scripts.Script):
             if hiresfix_exists:
                 prompts_list[i].append(None)
 
-        ppp.process_prompts_group_start()
-        if input_combinatorial:
+        self.ppp.process_prompts_group_start()
+        if input_run_mode in (RUN_MODE.multiple.value, RUN_MODE.combinatorial.value):
             seed_for_comb = calculated_seeds[0] if calculated_seeds else 0
             regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
             hiresfix_copy = (rph.copy() if rph else None, rnh.copy() if rnh else None)
             regular_changes = False
             hiresfix_changes = False
             if regular_exists:
-                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "processing prompts combinatorially (regular)")
-                comb_results = ppp.process_prompt(
+                if input_run_mode == RUN_MODE.combinatorial.value:
+                    msg = "processing prompts combinatorially (regular)"
+                else:
+                    msg = "processing prompts for multiple results (regular)"
+                log(self.ppp_logger, self.ppp_debug_level, logging.INFO, msg)
+                comb_results = self.ppp.process_prompt(
                     rpr[0],
                     rnr[0],
                     seed_for_comb,
@@ -447,7 +488,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 for i in range(len(rpr)):  # pylint: disable=consider-using-enumerate
                     posp, negp, _ = comb_results[i % num_comb]
                     prompts_list[i][0] = (posp, negp)
-                extra_params["PPP combination"] = [str(1 + (i % num_comb)) for i in range(len(rpr))]
+                if input_run_mode == RUN_MODE.combinatorial.value:
+                    field_name = "PPP combination"
+                else:
+                    field_name = "PPP result"
+                extra_params[field_name] = [str(1 + (i % num_comb)) for i in range(len(rpr))]
             if hiresfix_exists:
                 hiresfix_equal = regular_exists and rph == rpr and rnh == rnr
                 if hiresfix_equal:
@@ -455,18 +500,22 @@ class PromptPostProcessorA1111Script(scripts.Script):
                         self.ppp_logger,
                         self.ppp_debug_level,
                         logging.INFO,
-                        "hiresfix prompts are the same as regular prompts, skipping combinatorial processing for hiresfix",
+                        "hiresfix prompts are the same as regular prompts, skipping processing for hiresfix",
                     )
                     for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
                         prompts_list[i][1] = prompts_list[i][0]
                 else:
+                    if input_run_mode == RUN_MODE.combinatorial.value:
+                        msg = "processing prompts combinatorially (hiresfix)"
+                    else:
+                        msg = "processing prompts for multiple results (hiresfix)"
                     log(
                         self.ppp_logger,
                         self.ppp_debug_level,
                         logging.INFO,
-                        "processing prompts combinatorially (hiresfix)",
+                        msg,
                     )
-                    comb_results_hr = ppp.process_prompt(
+                    comb_results_hr = self.ppp.process_prompt(
                         rph[0],
                         rnh[0],
                         seed_for_comb,
@@ -480,7 +529,11 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     for i in range(len(rph)):  # pylint: disable=consider-using-enumerate
                         posp, negp, _ = comb_results_hr[i % num_comb_hr]
                         prompts_list[i][1] = (posp, negp)
-                    extra_params["PPP HR combination"] = [str(1 + (i % num_comb_hr)) for i in range(len(rph))]
+                    if input_run_mode == RUN_MODE.combinatorial.value:
+                        field_name = "PPP HR combination"
+                    else:
+                        field_name = "PPP HR result"
+                    extra_params[field_name] = [str(1 + (i % num_comb_hr)) for i in range(len(rph))]
         else:
             # processes prompts
             for index, grouplist in enumerate(prompts_list):
@@ -508,7 +561,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                             }
                         else:
                             input_vars = None
-                        results = ppp.process_prompt(
+                        results = self.ppp.process_prompt(
                             prompt,
                             negative_prompt,
                             seed,
@@ -527,7 +580,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     else:
                         log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "result already in cache")
                     prompts_list[index][typeindex] = cached
-        ppp.process_prompts_group_end()
+        self.ppp.process_prompts_group_end()
 
         # updates the prompts
         regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
@@ -538,7 +591,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             for typeindex, groupprompts in enumerate(grouplist):
                 if groupprompts is None:
                     continue
-                (posp, negp) = groupprompts
+                posp, negp = groupprompts
                 if typeindex == 0:
                     if rpr[index].strip() != posp.strip() or rnr[index].strip() != negp.strip():
                         regular_changes = True

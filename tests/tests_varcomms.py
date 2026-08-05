@@ -1,5 +1,3 @@
-from dataclasses import replace
-
 from ppp import PromptPostProcessor  # type: ignore
 from ppp_classes import ONWARNING_CHOICES  # type: ignore
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
@@ -57,18 +55,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             OutputTuple("", "", {"v1": ""}),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    on_warning=ONWARNING_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, on_warning=ONWARNING_CHOICES.warn),
         )
 
     # Variable in extranetworks
@@ -690,18 +677,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             OutputTuple("not OK", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    on_warning=ONWARNING_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, on_warning=ONWARNING_CHOICES.warn),
         )
 
     def test_cmd_if_undefined_var_int_compare_stop(self):  # undefined var integer compare with on_warning=stop
@@ -721,18 +697,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             OutputTuple("not OK", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    on_warning=ONWARNING_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, on_warning=ONWARNING_CHOICES.warn),
         )
 
     def test_cmd_if_nonnumeric_var_int_compare_stop(self):  # non-numeric var integer compare with on_warning=stop
@@ -752,18 +717,7 @@ class TestVarCommands(TestPromptPostProcessorBase):
                 "",
             ),
             OutputTuple("not OK", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    on_warning=ONWARNING_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, on_warning=ONWARNING_CHOICES.warn),
         )
 
     # Input variables

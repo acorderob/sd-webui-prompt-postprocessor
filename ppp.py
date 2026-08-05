@@ -21,6 +21,7 @@ from ppp_classes import (
     ModelConfig,
     ModelDetectConfig,
     PPPException,
+    RUN_MODE,
     VariantConfig,
     PPPConfig,
     IFWILDCARDS_CHOICES,
@@ -78,10 +79,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_CUP_MERGE_ATTENTION = defopt["cup_merge_attention"]
     DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS = defopt["cup_remove_extranetwork_tags"]
     DEFAULT_STRICT_OPERATORS = defopt["strict_operators"]
-    DEFAULT_DO_COMBINATORIAL = defopt["do_combinatorial"]
-    DEFAULT_COMBINATORIAL_SHUFFLE = defopt["combinatorial_shuffle"]
-    DEFAULT_COMBINATORIAL_LIMIT = defopt["combinatorial_limit"]
-    DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED = defopt["combinatorial_randomsampler_fixed"]
+    DEFAULT_RUN_MODE = defopt["run_mode"].value
+    DEFAULT_RESULTS_SHUFFLE = defopt["results_shuffle"]
+    DEFAULT_RESULTS_LIMIT = defopt["results_limit"]
+    DEFAULT_COMB_RANDOM_FIXED = defopt["comb_random_fixed"]
+    DEFAULT_DEFAULT_SAMPLER = defopt["default_sampler"].value
     DEFAULT_RESULTS_FILE = defopt["results_file"]
 
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
@@ -309,7 +311,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             if user_config_file == "":
                 if app == SUPPORTED_APPS.comfyui.value:
                     try:
-                        import folder_paths  # type: ignore
+                        import folder_paths  # type: ignore # pylint: disable=import-outside-toplevel,import-error
 
                         user_dir = folder_paths.get_user_directory()
                         if user_dir and Path(user_dir).is_dir():
@@ -1126,21 +1128,27 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
         final_results: list[tuple[str, str, dict[str, Any]]] = []
         for i, r in enumerate(results):
-            if self.state.options.do_combinatorial:
+            if self.state.options.run_mode == RUN_MODE.combinatorial:
                 self.log(logging.INFO, f"Combination {i + 1}:")
+            elif self.state.options.run_mode == RUN_MODE.multiple:
+                self.log(logging.INFO, f"Result {i + 1}:")
             final_results.append(self.__postprocess_result(r))
-        if self.state.options.do_combinatorial:
+        if self.state.options.run_mode == RUN_MODE.combinatorial:
             self.log(logging.INFO, f"Total combinations: {len(final_results)}")
-            if self.state.options.combinatorial_shuffle:
-                rng.shuffle(final_results)
-                self.log(logging.INFO, "Combinations shuffled")
+        if self.state.options.results_shuffle:
+            rng.shuffle(final_results)
+            self.log(logging.INFO, "Results shuffled")
         return final_results
 
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
         filtered_sysvars = {k: v for k, v in self.state.variables.all_system.items() if not k.startswith("_input_")}
         self.log(logging.DEBUG, f"System variables: {filtered_sysvars}", DEBUG_LEVEL.minimal)
-        self.log(logging.INFO, f"Combinatorial: {self.state.options.do_combinatorial}")
+        self.log(logging.INFO, f"Run mode: {self.state.options.run_mode.name}")
+        if self.state.options.run_mode == RUN_MODE.combinatorial:
+            self.log(logging.INFO, f"Up to {self.state.options.results_limit} combinations")
+        elif self.state.options.run_mode == RUN_MODE.multiple:
+            self.log(logging.INFO, f"Up to {self.state.options.results_limit} results")
 
     def _expand_filename(self) -> Path:
         """Expand %...% tokens in a filename template and resolve relative paths against the extension logs folder."""

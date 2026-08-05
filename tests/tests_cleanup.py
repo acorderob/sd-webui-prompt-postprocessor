@@ -1,7 +1,5 @@
 import logging
-from dataclasses import replace
 
-from ppp import PromptPostProcessor
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -37,36 +35,17 @@ class TestCleanup(TestPromptPostProcessorBase):
         self.process(
             InputTuple("this is a <lora:test:1> test__yaml/wildcard7__", ""),
             OutputTuple("this is a test", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    cup_remove_extranetwork_tags=True,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, cup_remove_extranetwork_tags=True),
         )
 
     def test_cl_dontremoveseparatorsoneol(self):  # don't remove separators on eol
         self.process(
             InputTuple("this is a test,\nsecond line", ""),
             OutputTuple("this is a test,\nsecond line", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    cup_extra_separators2=False,
-                    cup_extra_separators_include_eol=False,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                cup_extra_separators2=False,
+                cup_extra_separators_include_eol=False,
             ),
         )
 
@@ -84,27 +63,19 @@ class TestCleanup(TestPromptPostProcessorBase):
                         (d:0.9)""",
                 "",
             ),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    cup_empty_constructs=False,
-                    cup_extra_separators=True,
-                    cup_extra_separators2=False,
-                    cup_extra_separators_include_eol=False,
-                    cup_extra_spaces=False,
-                    cup_breaks=False,
-                    cup_breaks_eol=False,
-                    cup_ands=False,
-                    cup_ands_eol=False,
-                    cup_extranetwork_tags=False,
-                    cup_merge_attention=False,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                cup_empty_constructs=False,
+                cup_extra_separators=True,
+                cup_extra_separators2=False,
+                cup_extra_separators_include_eol=False,
+                cup_extra_spaces=False,
+                cup_breaks=False,
+                cup_breaks_eol=False,
+                cup_ands=False,
+                cup_ands_eol=False,
+                cup_extranetwork_tags=False,
+                cup_merge_attention=False,
             ),
         )
 

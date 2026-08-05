@@ -1,6 +1,4 @@
-from dataclasses import replace
-
-from ppp import PromptPostProcessor  # type: ignore
+from ppp_classes import DEFAULT_SAMPLER, RUN_MODE  # type: ignore
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -22,7 +20,6 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical(self):  # cyclical sampler cycles through all choices
-        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("the choices are: {@choice1|choice2|choice3}", ""),
             [
@@ -31,11 +28,10 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("the choices are: choice3", ""),
                 OutputTuple("the choices are: choice1", ""),  # cycles back
             ],
-            ppp=ppp_instance,
+            ppp="nocup",
         )
 
     def test_ch_cyclical_multiple_constructs(self):  # two independent @ constructs cycle together
-        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("{@a|b} {@c|d}", ""),
             [
@@ -45,7 +41,7 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("b d", ""),
                 OutputTuple("a c", ""),  # cycles back
             ],
-            ppp=ppp_instance,
+            ppp="nocup",
         )
 
     def test_ch_cyclical_resets_on_prompt_change(self):  # state resets when the prompt pair changes
@@ -67,7 +63,6 @@ class TestChoices(TestPromptPostProcessorBase):
         )
 
     def test_ch_cyclical_mixed_samplers(self):  # @ construct cycles while a ~ construct alongside is unaffected
-        ppp_instance = self.init_ppp("nocup")
         self.process(
             InputTuple("{@a|b|c} {x|y}", ""),
             [
@@ -76,7 +71,7 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("c x", ""),
                 OutputTuple("a y", ""),  # @ cycles back
             ],
-            ppp=ppp_instance,
+            ppp="nocup",
         )
 
     def test_ch_choices_withcomments(self):  # choices with comments and multiline
@@ -138,18 +133,7 @@ class TestChoices(TestPromptPostProcessorBase):
         self.process(
             InputTuple("<lora:test1:1><lora:test2:{0.2|0.5|0.7|1}>", ""),
             OutputTuple("", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    cup_remove_extranetwork_tags=True,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
-            ),
+            ppp=self.init_ppp(None, cup_remove_extranetwork_tags=True),
         )
 
     def test_ch_cmd_includewildcard(self):
@@ -172,23 +156,15 @@ class TestChoices(TestPromptPostProcessorBase):
                 OutputTuple("choice3, option1, a", ""),
                 OutputTuple("choice3, option2, a", "", {"v": "option2"}),
             ],
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    do_combinatorial=True,
-                    combinatorial_randomsampler_fixed=False,  # allow different random choices across combinations
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                run_mode=RUN_MODE.combinatorial,
+                comb_random_fixed=False,  # allow different random choices across combinations
             ),
         )
 
-    def test_ch_combinatorial_random_consistent(self):  # ~ sampler picks one value shared across all combinations
-        ppp_instance = self.init_ppp("nocup", combinatorial=True)
+    def test_ch_comb_random_consistent(self):  # ~ sampler picks one value shared across all combinations
+        ppp_instance = self.init_ppp("nocup", run_mode=RUN_MODE.combinatorial)
         ppp_instance.process_prompts_group_start()
         result = ppp_instance.process_prompt("{~a|b|c} {x|y}", "", seed=1)
         ppp_instance.process_prompts_group_end()
@@ -198,4 +174,35 @@ class TestChoices(TestPromptPostProcessorBase):
             len(rnd_choices),
             1,
             f"The ~ sampler must yield the same value across all combinations, got: {rnd_choices}",
+        )
+
+    # Default sampler
+
+    def test_ch_default_sampler_cyclical_single(self):
+        self.process(
+            InputTuple("{choice1|choice2|choice3}", ""),
+            [
+                OutputTuple("choice1", ""),
+                OutputTuple("choice2", ""),
+                OutputTuple("choice3", ""),
+                OutputTuple("choice1", ""),
+            ],
+            ppp=self.init_ppp("nocup", default_sampler=DEFAULT_SAMPLER.cyclical),
+        )
+
+    def test_ch_default_sampler_cyclical_multiple(self):
+        self.process(
+            InputTuple("{choice1|choice2|choice3}", ""),
+            [
+                OutputTuple("choice1", ""),
+                OutputTuple("choice2", ""),
+                OutputTuple("choice3", ""),
+                OutputTuple("choice1", ""),
+            ],
+            ppp=self.init_ppp(
+                "nocup",
+                default_sampler=DEFAULT_SAMPLER.cyclical,
+                run_mode=RUN_MODE.multiple,
+                results_limit=4,
+            ),
         )

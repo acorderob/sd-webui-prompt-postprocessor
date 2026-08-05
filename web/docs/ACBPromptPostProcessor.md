@@ -15,14 +15,13 @@ Main PPP node that processes prompts.
 * **process_wildcards**: Activates the wildcard processing.
 * **do_cleanup**: Activates the cleanup processing.
 * **cleanup_variables**: Do a cleanup of the output variables (depends on do_cleanup).
-* **do_combinatorial**: Activates combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
-* **combinatorial_shuffle**: It shuffles the combinatorial results.
-* **combinatorial_limit**: Limit for the number of generated combinations.
+* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
+* **run_mode**: Sets how the process works. `single` or `multiple` for regular one or more results, or `combinatorial` for combinatorial mode, where the output are all the combinations of choices/wildcards of the prompt.
 * **wc_options**: Connection to a Wildcards options node.
 * **stn_options**: Connection to a Send-To-Negative options node.
 * **cup_options**: Connection to a Cleanup options node.
 * **en_options**: Connection to a ExtraNetworkMapping options node.
-* **results_file**: Filename to save processing results. Supports `%datetime%`, `%date%`, `%time%`, and `%host%` tokens. The file extension determines the format: `.yaml`/`.yml`, `.jsonl`, `.csv`, or plain text for any other extension. Relative paths are resolved against the extension's `logs` folder. Leave empty to disable.
+* **rm_options**: Connection to a Run Mode options node.
 
 The options nodes are optional. If you don't need to change any of the default values then you don't need to use them.
 

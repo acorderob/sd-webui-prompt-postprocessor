@@ -10,8 +10,10 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent))
 
+# pylint: disable=wrong-import-position
 from .ppp_comfyui import (
     PromptPostProcessorComfyUINode,
+    PromptPostProcessorRunModeOptionsComfyUINode,
     PromptPostProcessorWildcardOptionsComfyUINode,
     PromptPostProcessorENMappingOptionsComfyUINode,
     PromptPostProcessorSTNOptionsComfyUINode,
@@ -22,6 +24,7 @@ from .ppp_comfyui import (
 
 NODE_CLASS_MAPPINGS = {
     "ACBPromptPostProcessor": PromptPostProcessorComfyUINode,
+    "ACBPPPRunModeOptions": PromptPostProcessorRunModeOptionsComfyUINode,
     "ACBPPPWildcardOptions": PromptPostProcessorWildcardOptionsComfyUINode,
     "ACBPPPENMappingOptions": PromptPostProcessorENMappingOptionsComfyUINode,
     "ACBPPPSendToNegativeOptions": PromptPostProcessorSTNOptionsComfyUINode,
@@ -31,6 +34,7 @@ NODE_CLASS_MAPPINGS = {
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ACBPromptPostProcessor": "ACB Prompt Post Processor",
+    "ACBPPPRunModeOptions": "ACB PPP Run Mode Options",
     "ACBPPPWildcardOptions": "ACB PPP Wildcard Options",
     "ACBPPPENMappingOptions": "ACB PPP ExtraNetwork Mapping Options",
     "ACBPPPSendToNegativeOptions": "ACB PPP Send-To-Negative Options",

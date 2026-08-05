@@ -11,7 +11,7 @@ from typing import Callable, Optional
 import lark
 import numpy as np
 
-from ppp_classes import IFWILDCARDS_CHOICES, SUPPORTED_APPS, PPPState
+from ppp_classes import DEFAULT_SAMPLER, IFWILDCARDS_CHOICES, RUN_MODE, SUPPORTED_APPS, PPPState
 from ppp_enmappings import PPPENMappingVariant
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import escape_single_quotes, repr_value
@@ -88,7 +88,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         )
 
     def __reset_run_state(self):
-        """Reset all per-run mutable state for a fresh combinatorial pass."""
+        """Reset all per-run mutable state for a fresh combinatorial/multiple pass."""
         self.__shell = []
         self.__negtags = []
         self.__already_processed = []
@@ -116,33 +116,59 @@ class TreeProcessor(lark.visitors.Interpreter):
         Returns:
             list[tuple[str, list[tuple[str,bool]], dict[str, VariableEntry]]]: A list of
                 (processed prompt, detected wildcards, variables snapshot) triples - one entry per
-                combination in combinatorial mode, or a single entry otherwise. The variables snapshot
+                result in combinatorial/multiple mode, or a single entry otherwise. The variables snapshot
                 is the return value of ``state.variables.backup_user_and_echoed()`` captured after processing.
         """
         self.log(logging.INFO, "Processing prompt...")
 
-        self.__detectedWildcards = []
-        self.__is_negative = False
-        self.__result = ""
+        results: list[tuple[str, list[tuple[str, bool]], tuple]] = []
+        max_results = (
+            1
+            if self.state.options.run_mode == RUN_MODE.single
+            or (self.state.options.run_mode == RUN_MODE.multiple and self.state.options.results_limit < 1)
+            else self.state.options.results_limit
+        )
 
-        if not self.state.options.do_combinatorial:
-            self.__forced_path = list(self.state.cyclical_state.current_path)
-            self.__trace = []
-            self.visit(parsed)
-            self.__finalize_variables()
-            if self.__trace:
-                self.state.cyclical_state.last_trace = self.__trace[:]
-                self.state.cyclical_state.advance()
-            return [(self.__result, self.__detectedWildcards, self.state.variables.backup_user())]
+        initial_vars = self.state.variables.backup_user()
+
+        if self.state.options.run_mode != RUN_MODE.combinatorial:
+            initial_path = list(self.state.cyclical_state.current_path)
+            warned_cycle = False
+            for step in range(max_results):
+                self.__reset_run_state()
+                self.state.variables.restore_user(initial_vars)
+                self.__forced_path = list(self.state.cyclical_state.current_path)
+                self.__trace = []
+                self.visit(parsed)
+                self.__finalize_variables()
+                warn = False
+                if self.__trace:
+                    self.state.cyclical_state.last_trace = self.__trace[:]
+                    self.state.cyclical_state.advance()
+                    if not warned_cycle and (self.state.options.run_mode == RUN_MODE.single or step < max_results - 1):
+                        trace_len = len(self.state.cyclical_state.last_trace)
+                        # Single mode: each start_visit() call advances once, so compare against the
+                        # canonical cycle start (all zeros) to detect a completed global cycle.
+                        # Multiple mode: compare against initial_path to detect the exact repeat point.
+                        if self.state.options.run_mode == RUN_MODE.single:
+                            cycle_start = [0] * trace_len
+                        else:
+                            cycle_start = (initial_path + [0] * trace_len)[:trace_len]
+                        if self.state.cyclical_state.current_path == cycle_start:
+                            warn = True
+                results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user()))
+                if self.state.options.run_mode == RUN_MODE.multiple:
+                    self.log(logging.INFO, f"Added result {len(results)}")
+                if warn:
+                    self.log(logging.WARNING, "Cyclical combinations are repeating; results will start repeating.")
+                    warned_cycle = True
+            return results
 
         # Combinatorial mode: explore every possible path through choices and wildcards via DFS.
         # __forced_path drives which option is selected at each decision point;
         # __trace records how many options were available at each point so the DFS can
         # correctly enumerate unexplored branches after each run.
         # __rand_decisions caches random (~) choices so they stay consistent across all runs.
-        initial_vars = self.state.variables.backup_user()
-        results: list[tuple[str, list[tuple[str, bool]], tuple]] = []
-        limit = self.state.options.combinatorial_limit
         self.__rand_decisions = {}
 
         def _run(forced_path: tuple[int, ...]) -> tuple[int, ...]:
@@ -165,7 +191,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         def _dfs(forced_path: tuple[int, ...]):
             """Recursively explore combinatorial branches via Depth First Search (DFS)."""
             nonlocal limit_reached
-            if 0 < limit <= len(results):
+            if 0 < max_results <= len(results):
                 limit_reached = True
                 return
             trace = _run(forced_path)
@@ -174,12 +200,12 @@ class TreeProcessor(lark.visitors.Interpreter):
             # Iterating in reverse means later (deeper) decision points vary fastest,
             # so the output order is depth-first rather than breadth-first.
             for i in range(len(trace) - 1, len(forced_path) - 1, -1):
-                if 0 < limit <= len(results):
+                if 0 < max_results <= len(results):
                     limit_reached = True
                     return
                 num_options = trace[i]
                 for opt in range(1, num_options):
-                    if 0 < limit <= len(results):
+                    if 0 < max_results <= len(results):
                         limit_reached = True
                         return
                     # Pad with zeros for intermediate decisions so they keep the default.
@@ -188,7 +214,9 @@ class TreeProcessor(lark.visitors.Interpreter):
 
         _dfs(())
         if limit_reached:
-            self.log(logging.WARNING, f"Combinatorial limit of {limit} reached; some combinations have been skipped.")
+            self.log(
+                logging.WARNING, f"Combinatorial limit of {max_results} reached; some combinations have been skipped."
+            )
         return results
 
     def __finalize_variables(self):
@@ -1647,8 +1675,18 @@ class TreeProcessor(lark.visitors.Interpreter):
                                             else_mapping = v
                         num_mappings = len(found_mappings)
                         if num_mappings > 0:
-                            if self.state.options.do_combinatorial:
+                            if num_mappings == 1:
+                                found = found_mappings[0]
+                            elif self.state.options.run_mode == RUN_MODE.combinatorial:
                                 decision_idx = len(self.__trace)
+                                # if self.state.options.default_sampler == DEFAULT_SAMPLER.random:
+                                #     # In combinatorial mode with random sampler, optionally fix the choice.
+                                #     if decision_idx not in self.__rand_decisions or not self.state.options.comb_random_fixed:
+                                #         weights = np.array([float(v.weight or 1) for v in found_mappings])
+                                #         weights /= weights.sum()
+                                #         self.__rand_decisions[decision_idx] = int(self.__rng.choice(num_mappings, p=weights))
+                                #     found = found_mappings[self.__rand_decisions[decision_idx] % num_mappings]
+                                # else:  # cyclical: enumerate all variants
                                 self.__trace.append(num_mappings)
                                 chosen_idx = (
                                     min(self.__forced_path[decision_idx], num_mappings - 1)
@@ -1656,15 +1694,19 @@ class TreeProcessor(lark.visitors.Interpreter):
                                     else 0
                                 )
                                 found = found_mappings[chosen_idx]
-                            elif num_mappings == 1:
-                                found = found_mappings[0]
-                            else:
-                                found = found_mappings[
-                                    self.__rng.choice(
-                                        num_mappings,
-                                        p=[v.weight or 1 for v in found_mappings],
-                                    )
-                                ]
+                            elif self.state.options.default_sampler == DEFAULT_SAMPLER.cyclical:
+                                decision_idx = len(self.__trace)
+                                self.__trace.append(num_mappings)
+                                chosen_idx = (
+                                    self.__forced_path[decision_idx] % num_mappings
+                                    if decision_idx < len(self.__forced_path)
+                                    else 0
+                                )
+                                found = found_mappings[chosen_idx]
+                            else:  # random
+                                weights = np.array([float(v.weight or 1) for v in found_mappings])
+                                weights /= weights.sum()
+                                found = found_mappings[int(self.__rng.choice(num_mappings, p=weights))]
                         else:
                             found = else_mapping
                         # Only cache when at most one mapping matched: with multiple matches,
@@ -1878,7 +1920,11 @@ class TreeProcessor(lark.visitors.Interpreter):
         if options is None:
             options = {}
         specified_sampler = options.get("sampler")
-        sampler: str = specified_sampler if specified_sampler is not None else "~"
+        sampler: str = (
+            specified_sampler
+            if specified_sampler is not None
+            else "@" if self.state.options.default_sampler == DEFAULT_SAMPLER.cyclical else "~"
+        )
         repeating: bool = options.get("repeating", False)
         optional: bool = options.get("optional", False)
         if "count" in options:
@@ -1932,7 +1978,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 to_value = 1
             elif (to_value > len(available_choices) and not repeating) or from_value > to_value:
                 to_value = len(available_choices)
-            if self.state.options.do_combinatorial or sampler == "@":
+            if self.state.options.run_mode == RUN_MODE.combinatorial or sampler == "@":
                 # Enumerate every distinct selection of choices, accounting for count range and repetition.
                 all_selections: list[tuple] = []
                 # When keep_choices_order is False the output depends on the selection order,
@@ -1952,17 +1998,14 @@ class TreeProcessor(lark.visitors.Interpreter):
                         else:
                             all_selections.extend(permutations(available_choices, k))
                 decision_idx = len(self.__trace)
-                if self.state.options.do_combinatorial:
+                if self.state.options.run_mode == RUN_MODE.combinatorial:
                     if specified_sampler == "~":
                         # In combinatorial mode with a explicit random sampler, fix the random choice
                         # once across all DFS runs so every combination uses the same value.
-                        if (
-                            decision_idx not in self.__rand_decisions
-                            or not self.state.options.combinatorial_randomsampler_fixed
-                        ):
+                        if decision_idx not in self.__rand_decisions or not self.state.options.comb_random_fixed:
                             # We need to make a random choice for this decision index and store it for future runs.
-                            # If combinatorial_randomsampler_fixed is True, we only do this once per decision
-                            #   index, so all combinations share the same choice.
+                            # If comb_random_fixed is True, we only do this once per decision index, so all
+                            #   combinations share the same choice.
                             # If False, we do it every time, which allows for different random choices across DFS runs.
                             self.__rand_decisions[decision_idx] = int(self.__rng.choice(len(all_selections)))
                         all_selections = [all_selections[self.__rand_decisions[decision_idx] % len(all_selections)]]
@@ -2051,11 +2094,12 @@ class TreeProcessor(lark.visitors.Interpreter):
                     ),
                 ],
             )
-        self.log(
-            logging.DEBUG,
-            "Unseen wildcards: "
-            + ", ".join([f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]),
-        )
+        if self.__seen_wildcards[seen_wildcards_len:]:
+            self.log(
+                logging.DEBUG,
+                "Unseen wildcards: "
+                + ", ".join([f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]),
+            )
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         return container, results
 
@@ -2397,7 +2441,8 @@ class TreeProcessor(lark.visitors.Interpreter):
             self.__result += wc
         if self.__debug_level == DEBUG_LEVEL.full:
             list_unseen = [f"'{escape_single_quotes(x)}'" for x in self.__seen_wildcards[seen_wildcards_len:]]
-            self.log(logging.DEBUG, f"Unseen wildcards: {', '.join(list_unseen)}")
+            if list_unseen:
+                self.log(logging.DEBUG, f"Unseen wildcards: {', '.join(list_unseen)}")
         self.__seen_wildcards = self.__seen_wildcards[:seen_wildcards_len]
         t2 = time.monotonic_ns()
         self.__debug_end("wildcard", start_result, t2 - t1, f"'{escape_single_quotes(wc)}'")

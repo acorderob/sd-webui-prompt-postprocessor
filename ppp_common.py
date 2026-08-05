@@ -216,6 +216,7 @@ def get_model_config_from_filename(filename: Path) -> object | None:
     Currently only supports ComfyUI models in .safetensors format.
     The path must be relative to a model folder.
     """
+    # pylint: disable=import-outside-toplevel
     try:
         import folder_paths  # type: ignore
         import comfy.utils  # type: ignore

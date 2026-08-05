@@ -47,6 +47,17 @@ class ONWARNING_CHOICES(Enum):
     stop = "stop"
 
 
+class RUN_MODE(Enum):
+    single = "single"
+    multiple = "multiple"
+    combinatorial = "combinatorial"
+
+
+class DEFAULT_SAMPLER(Enum):
+    random = "random"
+    cyclical = "cyclical"
+
+
 # ------------------- Host configuration -------------------
 
 AttentionOption = Literal["ok", "parentheses", "disable", "remove", "error"]
@@ -209,11 +220,12 @@ class PPPStateOptions:
     cup_merge_attention: bool = True
     cup_remove_extranetwork_tags: bool = False
     strict_operators: bool = True
-    do_combinatorial: bool = False
-    combinatorial_shuffle: bool = False
-    combinatorial_limit: int = 100  # 0 = no limit
-    combinatorial_randomsampler_fixed: bool = True  # if True, the random sampler will be fixed across all DFS runs
     results_file: str = ""  # empty = disabled; supports %datetime%, %date%, %time%, %host% tokens
+    run_mode: RUN_MODE = RUN_MODE.single
+    results_limit: int = 100  # 0 = no limit
+    results_shuffle: bool = False
+    comb_random_fixed: bool = True  # if True, the random sampler will be fixed across all DFS runs
+    default_sampler: DEFAULT_SAMPLER = DEFAULT_SAMPLER.random
 
     def __post_init__(self):
         if not self.cup_do_cleanup:

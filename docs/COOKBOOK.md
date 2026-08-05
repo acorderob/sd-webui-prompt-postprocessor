@@ -570,6 +570,40 @@ Relative paths are resolved against the `logs` folder inside the extension direc
 > [!TIP]
 > The `.jsonl` format is the most convenient for programmatic processing. The `.yaml` format is the easiest to read manually.
 
+## Seed behavior per host
+
+The seed determines which choices are picked for wildcards and `~` (random) samplers. Each host handles it differently.
+
+### A1111 and derivatives
+
+By default, PPP uses each image's own seed, which A1111 auto-increments across the batch. Each image therefore gets independently seeded wildcard expansions.
+
+The extension provides options to change this:
+
+- **Force equal seeds**: sets every image seed in the batch to the first one before processing. All images get the same expansion.
+- **Unlink seed**: separates the prompt seed from the image seed. The table below shows how it behaves depending on the seed value and the *Incremental seed* toggle:
+
+  | Seed value | Incremental | Prompt seed per image                    |
+  |------------|-------------|------------------------------------------|
+  | -1         | Yes         | Random base seed, then base+1, base+2, … |
+  | -1         | No          | Independent random seed per image        |
+  | N          | Yes         | N, N+1, N+2, …                           |
+  | N          | No          | N for every image                        |
+
+  If a subseed strength is set, the effective seed is `subseed × strength + seed × (1 − strength)` per image.
+
+In **multiple** or **combinatorial** run mode, all result variants are generated once using the first seed in the batch. The images then cycle through those pre-generated results in order; no additional seed is used for subsequent images.
+
+### ComfyUI
+
+The seed is an explicit node input (default: -1 for random). Each node execution uses exactly the provided seed. There is no batch; each execution processes one prompt independently.
+
+## When the cyclical sampler resets
+
+The `@` (cyclical) sampler tracks its position so each call advances through combinations in order.
+
+The state is retained across executions within the same session. Each execution with the same prompts advances the position. The cycle only resets when either the positive or negative prompt text changes.
+
 ## Keeping references up to date
 
 After updating your loras (deleting old ones, updating to new versions) run the `tools\check_loras.py` script to check if there are broken references in your wildcards or extranetwork mappings.

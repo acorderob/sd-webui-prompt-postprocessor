@@ -6,7 +6,7 @@ from typing import Any, NamedTuple, Optional
 import unittest
 import datetime
 
-from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, PPPStateOptions
+from ppp_classes import DEFAULT_SAMPLER, IFWILDCARDS_CHOICES, ONWARNING_CHOICES, RUN_MODE, PPPStateOptions
 from ppp_enmappings import PPPExtraNetworkMappings  # type: ignore
 from ppp_wildcards import PPPWildcards  # type: ignore
 from ppp import PromptPostProcessor  # type: ignore
@@ -74,11 +74,12 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             cup_extranetwork_tags=True,
             cup_merge_attention=True,
             cup_remove_extranetwork_tags=False,
-            do_combinatorial=False,
-            combinatorial_shuffle=False,
-            combinatorial_limit=0,
-            combinatorial_randomsampler_fixed=True,
             results_file=(Path(__file__).parent / "logs" / "output_%date%.txt") if enable_file_logging else "",
+            run_mode=RUN_MODE.single,
+            results_limit=0,
+            results_shuffle=False,
+            comb_random_fixed=True,
+            default_sampler=DEFAULT_SAMPLER.random,
         )
         self.def_env_info = {
             "app": "tests",
@@ -120,8 +121,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
     def init_ppp(
         self,
         ppp: Optional[str | PromptPostProcessor] = None,
-        combinatorial: bool = False,
-        combinatorial_limit: int = 0,
+        **kwargs,
     ) -> PromptPostProcessor:
         if isinstance(ppp, str):
             if ppp == "nocup":
@@ -143,8 +143,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         cup_ands_eol=False,
                         cup_extranetwork_tags=False,
                         cup_merge_attention=False,
-                        do_combinatorial=combinatorial,
-                        combinatorial_limit=combinatorial_limit,
+                        **kwargs,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -158,8 +157,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     replace(
                         self.defopts,
                         strict_operators=False,
-                        do_combinatorial=combinatorial,
-                        combinatorial_limit=combinatorial_limit,
+                        **kwargs,
                     ),
                     self.grammar_content,
                     self.interrupt,
@@ -174,8 +172,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 self.def_env_info,
                 replace(
                     self.defopts,
-                    do_combinatorial=combinatorial,
-                    combinatorial_limit=combinatorial_limit,
+                    **kwargs,
                 ),
                 self.grammar_content,
                 self.interrupt,
@@ -201,8 +198,6 @@ class TestPromptPostProcessorBase(unittest.TestCase):
         seed: int = 1,
         ppp: Optional[str | PromptPostProcessor] = None,
         interrupted: bool = False,
-        combinatorial: bool = False,
-        combinatorial_limit: int = 0,
         specific_wc_folders: Optional[list[Path]] = None,
         specific_em_folders: Optional[list[Path]] = None,
         input_vars: Optional[dict[str, Any]] = None,
@@ -216,8 +211,6 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             seed (int, optional): The seed value. Defaults to 1.
             ppp (Optional[str | PromptPostProcessor], optional): The PromptPostProcessor instance or type. Defaults to None.
             interrupted (bool, optional): The interrupted flag. Defaults to False.
-            combinatorial (bool, optional): The combinatorial flag. Defaults to False.
-            combinatorial_limit (int, optional): The combinatorial limit. Defaults to 0.
             specific_wc_folders (Optional[list[Path]], optional): A list of specific wildcard folders to refresh. Defaults to None.
             specific_em_folders (Optional[list[Path]], optional): A list of specific extranetwork mapping folders to refresh. Defaults to None.
             input_vars (Optional[dict[str, Any]], optional): A dictionary of input variables. Defaults to None.
@@ -235,13 +228,13 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                 DEBUG_LEVEL.full,
                 specific_em_folders,
             )
-        the_obj: PromptPostProcessor = self.init_ppp(ppp, combinatorial, combinatorial_limit)
+        the_obj: PromptPostProcessor = ppp if isinstance(ppp, PromptPostProcessor) else self.init_ppp(ppp)
         out = (
             [OutputTuple("", "", None)]
             if expected_output is None
             else expected_output if isinstance(expected_output, list) else [expected_output]
         )
-        if the_obj.state.options.do_combinatorial:
+        if the_obj.state.options.run_mode in (RUN_MODE.multiple, RUN_MODE.combinatorial):
             # combinatorial
             errors = []
             the_obj.process_prompts_group_start()
@@ -259,7 +252,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             )
             if not self.interrupted and expected_output is not None:
                 if len(result) != len(out):
-                    errors.append(f"Incorrect number of combinations: got {len(result)} but expected {len(out)}")
+                    errors.append(f"Incorrect number of results: got {len(result)} but expected {len(out)}")
                 for out_prompt, out_negative_prompt, out_variables in out:
                     found = None
                     for r_prompt, r_negative_prompt, r_variables in result:
@@ -269,7 +262,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                     if not found:
                         errors.extend(
                             [
-                                "Combination not found in output",
+                                "Result not found in output",
                                 "Prompt:",
                                 out_prompt,
                                 "Negative Prompt:",
@@ -291,7 +284,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
                         if missing_vars or incorrect_vars:
                             errors.extend(
                                 [
-                                    "Combination found, but variables do not match",
+                                    "Result found, but variables do not match",
                                     "Prompt:",
                                     out_prompt,
                                     "Negative Prompt:",

@@ -65,7 +65,7 @@ def test_cl_combinatorial(self):
                 {}                                  # expected variables (optional)
             ),
         ],
-        combinatorial=True,
+        ppp=self.init_ppp(None, run_mode=RUN_MODE.combinatorial),
     )
 
 ```
@@ -79,7 +79,10 @@ def test_cl_combinatorial(self):
 | `seed` | `int` | Optional, defaults to fixed seed |
 | `ppp` | `PromptPostProcessor \| str \| None` | Supported values `"nocup"`, `"nostrict"` or a specific instance |
 | `interrupted` | `bool` | Expected interrupt flag |
-| `combinatorial` | `bool` | Whether to run a combinatorial generation. If a specific ppp instance is used then it is ignored |
+| `specific_wc_folders` | `list[Path]` | Optional list of specific wildcard folders to use for this test |
+| `specific_em_folders` | `list[Path]` | Optional list of specific extranetwork folders to use for this test |
+| `input_vars` | `dict[str, Any]` | Optional dictionary of input variables to set before processing |
+
 
 ## Assertions
 
@@ -94,23 +97,35 @@ Do not use bare `assert` statements.
 
 ## Default Options & Environment
 
-Override `self.defopts` or `self.def_env_info` to pass non-default options — do not hardcode option dicts from scratch:
+Override `self.defopts` or `self.def_env_info` to pass non-default options — do not hardcode option dicts from scratch.
 
 ```python
-def test_cl_custom(self):
+
+def test_cl_custom1(self):  # only option changes
+    """cleanup with custom separator"""
+    self.process(
+        InputTuple("a, , b", ""),
+        OutputTuple("a | b", ""),
+        ppp=self.init_ppp(
+            None,
+            keep_choices_order=True,
+            cup_do_cleanup=False,
+            run_mode=RUN_MODE.combinatorial,
+        ),
+    )
+
+def test_cl_custom2(self):  # only environment changes
     """cleanup with custom separator"""
     self.process(
         InputTuple("a, , b", ""),
         OutputTuple("a | b", ""),
         ppp=PromptPostProcessor(
             self.ppp_logger,
-            self.def_env_info,
-            replace(
-                self.defopts,
-                keep_choices_order=True,
-                cup_do_cleanup=False,
-                do_combinatorial=True,
-            ),
+            {
+                **self.def_env_info,
+                "model_filename": "./webui/models/Stable-diffusion/testmodel.safetensors",
+            },
+            self.defopts,
             self.grammar_content,
             self.interrupt,
             self.wildcards_obj,

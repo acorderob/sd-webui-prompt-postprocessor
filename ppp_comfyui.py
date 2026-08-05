@@ -1,17 +1,26 @@
 if __name__ == "__main__":
     raise SystemExit("This script must be run from ComfyUI")
 
+# pylint: disable=wrong-import-position,wrong-import-order
 from datetime import datetime
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
-import folder_paths  # type: ignore
-import nodes  # type: ignore
+import folder_paths  # type: ignore # pylint: disable=import-error
+import nodes  # type: ignore # pylint: disable=import-error
 
 from ppp import PromptPostProcessor
-from ppp_classes import IFWILDCARDS_CHOICES, ONWARNING_CHOICES, SUPPORTED_APPS, PPPException, PPPStateOptions
+from ppp_classes import (
+    DEFAULT_SAMPLER,
+    IFWILDCARDS_CHOICES,
+    ONWARNING_CHOICES,
+    SUPPORTED_APPS,
+    PPPException,
+    RUN_MODE,
+    PPPStateOptions,
+)
 from ppp_common import get_model_class_from_filename, load_grammar
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
 from ppp_utils import escape_single_quotes
@@ -190,38 +199,20 @@ class PromptPostProcessorComfyUINode:
                         "label_off": "No",
                     },
                 ),
-                "do_combinatorial": (
-                    "BOOLEAN",
+                "results_file": (
+                    "STRING",
                     {
-                        "default": PromptPostProcessor.DEFAULT_DO_COMBINATORIAL,
-                        "tooltip": "Enable combinatorial mode",
-                        "label_on": "Yes",
-                        "label_off": "No",
+                        "default": PromptPostProcessor.DEFAULT_RESULTS_FILE,
+                        "tooltip": r"Filename to save processing results. Supports %datetime%, %date%, %time%, %host% tokens. Empty = disabled.",
+                        "dynamicPrompts": False,
                     },
                 ),
-                "combinatorial_shuffle": (
-                    "BOOLEAN",
+                "run_mode": (
+                    "COMBO",
                     {
-                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_SHUFFLE,
-                        "tooltip": "Shuffle the combinatorial results",
-                        "label_on": "Yes",
-                        "label_off": "No",
-                    },
-                ),
-                "combinatorial_limit": (
-                    "INT",
-                    {
-                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_LIMIT,
-                        "tooltip": "Limit for combinatorial mode",
-                    },
-                ),
-                "combinatorial_randomsampler_fixed": (
-                    "BOOLEAN",
-                    {
-                        "default": PromptPostProcessor.DEFAULT_COMBINATORIAL_RANDOMSAMPLER_FIXED,
-                        "tooltip": "Fix the value of any specified random samplers across all combinations in combinatorial mode",
-                        "label_on": "Yes",
-                        "label_off": "No",
+                        "options": [e.value for e in RUN_MODE],
+                        "default": PromptPostProcessor.DEFAULT_RUN_MODE,
+                        "tooltip": "Run mode",
                     },
                 ),
                 "wc_options": (
@@ -252,12 +243,11 @@ class PromptPostProcessorComfyUINode:
                         "tooltip": "ExtraNetworks mapping options",
                     },
                 ),
-                "results_file": (
-                    "STRING",
+                "rm_options": (
+                    "PPP_OPTIONS_RM",
                     {
-                        "default": PromptPostProcessor.DEFAULT_RESULTS_FILE,
-                        "tooltip": r"Filename to save processing results. Supports %datetime%, %date%, %time%, %host% tokens. Empty = disabled.",
-                        "dynamicPrompts": False,
+                        "default": None,
+                        "tooltip": "Run mode options",
                     },
                 ),
             },
@@ -292,9 +282,9 @@ class PromptPostProcessorComfyUINode:
         "variables",
     )
     OUTPUT_TOOLTIPS = (
-        "Processed positive prompt (list of prompts if combinatorial mode is enabled)",
-        "Processed negative prompt (list of prompts if combinatorial mode is enabled)",
-        "Output variables (list of dictionaries if combinatorial mode is enabled)",
+        "Processed positive prompt (list of prompts if combinatorial/multiple mode is enabled)",
+        "Processed negative prompt (list of prompts if combinatorial/multiple mode is enabled)",
+        "Output variables (list of dictionaries if combinatorial/multiple mode is enabled)",
     )
 
     FUNCTION = "process"
@@ -313,20 +303,18 @@ class PromptPostProcessorComfyUINode:
         seed,
         debug_level,
         on_warnings,
+        strict_operators,
         process_wildcards,
         do_cleanup,
         cleanup_variables,
-        do_combinatorial,
-        combinatorial_shuffle,
-        combinatorial_limit,
-        combinatorial_randomsampler_fixed,
+        results_file,
+        run_mode,
         model=None,
         wc_options=None,
         stn_options=None,
         cup_options=None,
         en_options=None,
-        strict_operators=None,
-        results_file=None,
+        rm_options=None,
     ):
         modelclass = (
             model.model.model_config.__class__.__name__ if model is not None and not isinstance(model, str) else model
@@ -377,12 +365,14 @@ class PromptPostProcessorComfyUINode:
 
         options = PPPStateOptions(
             debug_level=DEBUG_LEVEL(debug_level),
-            on_warning=ONWARNING_CHOICES(on_warnings) if on_warnings else PromptPostProcessor.DEFAULT_ON_WARNING,
+            on_warning=ONWARNING_CHOICES(on_warnings if on_warnings else PromptPostProcessor.DEFAULT_ON_WARNING),
             strict_operators=(
                 strict_operators if strict_operators is not None else PromptPostProcessor.DEFAULT_STRICT_OPERATORS
             ),
             process_wildcards=process_wildcards,
-            if_wildcards=(wc_options["wc_if_wildcards"] if wc_options else IFWILDCARDS_CHOICES.stop.value),
+            if_wildcards=IFWILDCARDS_CHOICES(
+                wc_options["wc_if_wildcards"] if wc_options else PromptPostProcessor.DEFAULT_IF_WILDCARDS
+            ),
             choice_separator=(
                 wc_options["wc_choice_separator"] if wc_options else PromptPostProcessor.DEFAULT_CHOICE_SEPARATOR
             ),
@@ -433,11 +423,16 @@ class PromptPostProcessorComfyUINode:
                 if cup_options
                 else PromptPostProcessor.DEFAULT_CUP_REMOVE_EXTRANETWORK_TAGS
             ),
-            do_combinatorial=do_combinatorial,
-            combinatorial_shuffle=combinatorial_shuffle,
-            combinatorial_limit=combinatorial_limit,
-            combinatorial_randomsampler_fixed=combinatorial_randomsampler_fixed,
-            results_file=results_file or "",
+            run_mode=RUN_MODE(run_mode if run_mode else PromptPostProcessor.DEFAULT_RUN_MODE),
+            results_file=results_file,
+            results_shuffle=rm_options["results_shuffle"] if rm_options else PromptPostProcessor.DEFAULT_RESULTS_SHUFFLE,
+            results_limit=rm_options["results_limit"] if rm_options else PromptPostProcessor.DEFAULT_RESULTS_LIMIT,
+            comb_random_fixed=(
+                rm_options["comb_random_fixed"] if rm_options else PromptPostProcessor.DEFAULT_COMB_RANDOM_FIXED
+            ),
+            default_sampler=DEFAULT_SAMPLER(
+                rm_options["default_sampler"] if rm_options else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER
+            ),
         )
         self.wildcards_obj.refresh_wildcards(
             options.debug_level,
@@ -479,6 +474,78 @@ class PromptPostProcessorComfyUINode:
 
     def interrupt(self):
         nodes.interrupt_processing(True)
+
+
+class PromptPostProcessorRunModeOptionsComfyUINode:
+    """
+    Node for run mode options.
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "results_limit": (
+                    "INT",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_RESULTS_LIMIT,
+                        "tooltip": "Limit for combinatorial/multiple mode",
+                        "min": 0,
+                    },
+                ),
+                "results_shuffle": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_RESULTS_SHUFFLE,
+                        "tooltip": "Shuffle the results",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
+                "comb_random_fixed": (
+                    "BOOLEAN",
+                    {
+                        "default": PromptPostProcessor.DEFAULT_COMB_RANDOM_FIXED,
+                        "tooltip": "Fix the value of any specified random samplers across all combinations in combinatorial mode",
+                        "label_on": "Yes",
+                        "label_off": "No",
+                    },
+                ),
+                "default_sampler": (
+                    "COMBO",
+                    {
+                        "options": [ds.value for ds in DEFAULT_SAMPLER],
+                        "default": PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER,
+                        "tooltip": "Default choice sampler",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("PPP_OPTIONS_RM",)
+    RETURN_NAMES = ("options",)
+
+    FUNCTION = "process"
+
+    CATEGORY = "ACB"
+
+    def process(
+        self,
+        results_limit: int,
+        results_shuffle: bool,
+        comb_random_fixed: bool,
+        default_sampler: str,
+    ):
+        options = {
+            "results_limit": results_limit,
+            "results_shuffle": results_shuffle,
+            "comb_random_fixed": comb_random_fixed,
+            "default_sampler": default_sampler,
+        }
+        return (options,)
 
 
 class PromptPostProcessorWildcardOptionsComfyUINode:
@@ -1050,6 +1117,7 @@ class PromptPostProcessorWildcardConcatComfyUINode:
 
 
 try:
+    # pylint: disable=import-error
     from server import PromptServer  # type: ignore
     from aiohttp import web as _aiohttp_web  # type: ignore
 

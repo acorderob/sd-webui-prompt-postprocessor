@@ -1,7 +1,5 @@
-from dataclasses import replace
-
 from ppp import PromptPostProcessor
-from ppp_classes import IFWILDCARDS_CHOICES
+from ppp_classes import IFWILDCARDS_CHOICES, RUN_MODE
 from ppp_logging import DEBUG_LEVEL
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
@@ -20,18 +18,10 @@ class TestWildcards(TestPromptPostProcessorBase):
         self.process(
             InputTuple("__bad_wildcard__", "{option1|option2}"),
             OutputTuple("__bad_wildcard__", "{option1|option2}"),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    process_wildcards=False,
-                    if_wildcards=IFWILDCARDS_CHOICES.ignore,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                process_wildcards=False,
+                if_wildcards=IFWILDCARDS_CHOICES.ignore,
             ),
         )
 
@@ -45,18 +35,10 @@ class TestWildcards(TestPromptPostProcessorBase):
                 "this is: a (([complex|simple|regular] test)(test:2):1.5)\nBREAK with [abc:def:5]<lora:xxx:1>",
                 "[neg5], ([|neg6|]:1.65), (neg1:1.65), [neg4::5], normal quality, [neg2(neg3:1.6):5]",
             ),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    process_wildcards=False,
-                    if_wildcards=IFWILDCARDS_CHOICES.remove,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                process_wildcards=False,
+                if_wildcards=IFWILDCARDS_CHOICES.remove,
             ),
         )
 
@@ -64,18 +46,10 @@ class TestWildcards(TestPromptPostProcessorBase):
         self.process(
             InputTuple("__bad_wildcard__", "{option1|option2}"),
             OutputTuple(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", "{option1|option2}"),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    process_wildcards=False,
-                    if_wildcards=IFWILDCARDS_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                process_wildcards=False,
+                if_wildcards=IFWILDCARDS_CHOICES.warn,
             ),
         )
 
@@ -86,18 +60,10 @@ class TestWildcards(TestPromptPostProcessorBase):
                 PromptPostProcessor.WILDCARD_STOP.format("__bad_wildcard__") + "__bad_wildcard__",
                 "{option1|option2}",
             ),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    process_wildcards=False,
-                    if_wildcards=IFWILDCARDS_CHOICES.stop,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                process_wildcards=False,
+                if_wildcards=IFWILDCARDS_CHOICES.stop,
             ),
             interrupted=True,
         )
@@ -106,18 +72,10 @@ class TestWildcards(TestPromptPostProcessorBase):
         self.process(
             InputTuple("${v=__bad_wildcard__}${v}", ""),
             OutputTuple(PromptPostProcessor.WILDCARD_WARNING + "__bad_wildcard__", ""),
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    process_wildcards=False,
-                    if_wildcards=IFWILDCARDS_CHOICES.warn,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                process_wildcards=False,
+                if_wildcards=IFWILDCARDS_CHOICES.warn,
             ),
         )
 
@@ -516,7 +474,7 @@ inv.alid2:
                 OutputTuple("the choices are: choice3, choice2, option1", "", {"v": "option1"}),
                 OutputTuple("the choices are: choice3, choice2, option2", "", {"v": "option2"}),
             ],
-            combinatorial=True,
+            ppp=self.init_ppp(None, run_mode=RUN_MODE.combinatorial),
         )
 
     def test_wc_combinatorial_2(self):  # combinatorial wildcard
@@ -569,8 +527,7 @@ inv.alid2:
                 OutputTuple("choice1-choice3", ""),
                 OutputTuple("choice3-choice1", ""),
             ],
-            ppp="nocup",
-            combinatorial=True,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.combinatorial),
         )
 
     def test_wc_combinatorial_3(self):  # combinatorial wildcard (keep choice order)
@@ -588,19 +545,11 @@ inv.alid2:
                 ## choices 1 and 3
                 OutputTuple("choice1-choice3", ""),
             ],
-            ppp=PromptPostProcessor(
-                self.ppp_logger,
-                self.def_env_info,
-                replace(
-                    self.defopts,
-                    keep_choices_order=True,
-                    cup_do_cleanup=False,
-                    do_combinatorial=True,
-                ),
-                self.grammar_content,
-                self.interrupt,
-                self.wildcards_obj,
-                self.extranetwork_maps_obj,
+            ppp=self.init_ppp(
+                None,
+                keep_choices_order=True,
+                cup_do_cleanup=False,
+                run_mode=RUN_MODE.combinatorial,
             ),
         )
 
@@ -627,8 +576,7 @@ inv.alid2:
                 OutputTuple("choice1-choice3", ""),
                 OutputTuple("choice3-choice1", ""),
             ],
-            ppp="nocup",
-            combinatorial=True,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.combinatorial),
         )
 
     def test_wc_combinatorial_5(self):  # combinatorial nested wildcards and multiselection enmappings
@@ -650,6 +598,5 @@ inv.alid2:
                 OutputTuple("<lora:loraany1:0.8> trigger1, trigger2, ", ""),
                 OutputTuple("<lora:loraany2:1> trigger3, trigger4, ", ""),
             ],
-            ppp="nocup",
-            combinatorial=True,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.combinatorial),
         )
