@@ -190,7 +190,7 @@ models:
             a1111: null
             forge: null
             forgeneo: null
-            reforge: null
+            reforge: { class: ["LTXV"] }
             sdnext: null
             comfyui: { class: ["LTXV", "LTXAV"] }
     cosmos: # Cosmos
@@ -341,11 +341,11 @@ models:
         detect:
             a1111: null
             forge: null
-            forgeneo: null
+            forgeneo: { class: ["Krea2"] }
             reforge: null
             sdnext: null
             comfyui: { class: ["Krea2"] }
-    Ideogram4: # Ideogram4
+    ideogram4: # Ideogram4
         detect:
             a1111: null
             forge: null
@@ -353,7 +353,7 @@ models:
             reforge: null
             sdnext: null
             comfyui: { class: ["Ideogram4"] }
-    Lens: # Lens
+    lens: # Lens
         detect:
             a1111: null
             forge: null
@@ -361,7 +361,7 @@ models:
             reforge: null
             sdnext: null
             comfyui: { class: ["Lens"] }
-    Boogu: # Boogu
+    boogu: # Boogu
         detect:
             a1111: null
             forge: null
@@ -369,3 +369,19 @@ models:
             reforge: null
             sdnext: null
             comfyui: { class: ["Boogu"] }
+    mageflow: # MageFlow
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["MageFlow"] }
+    pid: # PiD
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: { class: ["PiD"] }
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["PiD"] }

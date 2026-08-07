@@ -61,9 +61,9 @@ The outputs are lists, and in combinatorial/multiple modes there will be multipl
 
 The run_mode can be explained like this:
 
-* single: only one result is returned.
-* multiple: multiple results are returned, the count is in results_limit.
-* combinatorial: all the combinations are returned, up to results_limit.
+* **single**: only one result is returned.
+* **multiple**: multiple results are returned, the count is in results_limit.
+* **combinatorial**: all the combinations are returned, up to results_limit.
 
 In single and multiple modes the default choice sampler is the one set in default_sampler. In combinatorial mode the default sampling is equivalent to cyclical. In all modes specified samplers are respected. The value of random samplers in combinatorial mode depends on comb_random_fixed.
 
@@ -174,6 +174,18 @@ Options for extranetworks mapping, in case you want to change them from the defa
 * **Shuffle results**: It shuffles the results.
 * **Fix random sampler across combinations**: If checked all specified random samplers will have a fixed value across the combinations.
 * **Default sampler**: The default choice sampler when not specified.
+
+The `Run mode` can be explained like this:
+
+* **single**: only one result is returned (for each image).
+* **multiple**: multiple results are returned, the count is in `Results limit` (but limited by the number of images). The results are assigned to the images. If there are more images than results, the results wrap.
+* **combinatorial**: all the combinations are returned, up to `Results limit` (but limited by the number of images). The results are assigned to the images. If there are more images than results, the results wrap.
+
+In single and multiple modes the default choice sampler is the one set in `Default sampler`. In combinatorial mode the default sampling is equivalent to cyclical. In all modes specified samplers are respected. The value of random samplers in combinatorial mode depends on `Fix random sampler across combinations`.
+
+Multiple mode with a default of cyclical sampler is very similar to combinatorial. The only difference is that `Fix random sampler across combinations` does not apply and random samplers are thus not cached. There is no need for this mode with a random default sampler, since it would be the same as in single mode.
+
+Single mode with a default of cyclical sampler can be used as similar to combinatorial but in separated runs instead of one.
 
 ### General settings
 

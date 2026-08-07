@@ -472,7 +472,6 @@ class PromptPostProcessorComfyUINode:
             jobinfo={"job_timestamp": datetime.now().isoformat()},
         )
         self.ppp.process_prompts_group_end()
-
         return tuple(zip(*results))  # unzip the list of tuples into tuple of lists
 
     def interrupt(self):
@@ -996,13 +995,13 @@ class PromptPostProcessorWildcardConcatComfyUINode:
             lf = PromptPostProcessorLogFactory()
             cls._ppp = PromptPostProcessor(
                 lf.log,
-                {
-                    "app": SUPPORTED_APPS.comfyui.value,
-                    "models_path": folder_paths.models_dir,
-                    "model_filename": "",
-                    "model_class": "",
-                    "property_base": None,
-                },
+                PPPEnvInfo(
+                    app=SUPPORTED_APPS.comfyui,
+                    models_path=folder_paths.models_dir,
+                    model_filename="",
+                    model_class="",
+                    property_base=None,
+                ),
                 PPPStateOptions(debug_level=DEBUG_LEVEL.minimal),
                 wildcards_obj=PPPWildcards(lf.log),
             )
