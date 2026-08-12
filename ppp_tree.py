@@ -160,7 +160,7 @@ class TreeProcessor(lark.visitors.Interpreter):
                 if self.state.options.run_mode == RUN_MODE.multiple:
                     self.log(logging.INFO, f"Added result {len(results)}")
                 if warn:
-                    self.log(logging.WARNING, "Cyclical combinations are repeating; results will start repeating.")
+                    self.log(logging.WARNING, "Cyclical combinations are repeating; results may start repeating.")
                     warned_cycle = True
             return results
 

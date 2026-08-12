@@ -65,11 +65,13 @@ The run_mode can be explained like this:
 * **multiple**: multiple results are returned, the count is in results_limit.
 * **combinatorial**: all the combinations are returned, up to results_limit.
 
-In single and multiple modes the default choice sampler is the one set in default_sampler. In combinatorial mode the default sampling is equivalent to cyclical. In all modes specified samplers are respected. The value of random samplers in combinatorial mode depends on comb_random_fixed.
+In `single` and `multiple` modes the default choice sampler is the one set in `default_sampler`. In `combinatorial` mode the default sampling is equivalent to `cyclical`. In all modes specified samplers are respected. The value of random samplers in `combinatorial` mode depends on `comb_random_fixed`.
 
-Multiple mode with a default of cyclical sampler is very similar to combinatorial. The only difference is that comb_ramdom_fixed does not apply and random samplers are thus not cached.
+`Multiple` mode with a default of `cyclical` sampler is very similar to `combinatorial`. The only difference is that `comb_ramdom_fixed` does not apply and random samplers are thus not cached.
 
 Single mode with a default of cyclical sampler can be used as similar to combinatorial but in separated *ComfyUI* runs instead of one.
+
+In `multiple` and `combinatorial` modes, the prompt seed does not reset on each image. And, in `ComfyUI`, the image seed is the same for all images.
 
 ### ACB PPP Select Variable node
 
