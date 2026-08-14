@@ -248,7 +248,7 @@ models:
             forgeneo: { class: ["WAN21_T2V", "WAN21_I2V"] }
             reforge: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V"] }
             sdnext: { class: ["WanPipeline"] }
-            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V", "WAN21_FlowRVS", "WAN21_SCAIL", "WAN22_WanDancer", "WAN21_CausalAR_T2V", "WAN21_SCAIL2"] }
+            comfyui: { class: ["WAN21_T2V", "WAN21_I2V", "WAN21_FunControl2V", "WAN21_Camera", "WAN22_Camera", "WAN21_Vace", "WAN21_HuMo", "WAN22_S2V", "WAN22_Animate", "WAN22_T2V", "WAN21_FlowRVS", "WAN21_SCAIL", "WAN22_WanDancer", "WAN21_CausalAR_T2V", "WAN21_SCAIL2", "WAN_Animate2"] }
     hidream: # HiDream
         detect:
             a1111: null
@@ -385,3 +385,11 @@ models:
             reforge: null
             sdnext: null
             comfyui: { class: ["PiD"] }
+    minimaxh3: # MiniMaxH3
+        detect:
+            a1111: null
+            forge: null
+            forgeneo: null
+            reforge: null
+            sdnext: null
+            comfyui: { class: ["MiniMaxH3"] }
