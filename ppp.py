@@ -38,6 +38,7 @@ from ppp_tree import TreeProcessor
 from ppp_utils import escape_single_quotes, get_version_from_pyproject
 from ppp_common import (
     WARN_STOP_WHERE,
+    clamp_host_bits,
     get_model_class_from_filename,
     load_grammar,
     parse_prompt,
@@ -86,6 +87,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
     DEFAULT_COMB_RANDOM_FIXED = defopt["comb_random_fixed"]
     DEFAULT_DEFAULT_SAMPLER = defopt["default_sampler"].value
     DEFAULT_RESULTS_FILE = defopt["results_file"]
+    DEFAULT_NEXT_SEED = defopt["next_seed"].value
 
     WILDCARD_WARNING = '(WARNING TEXT "INVALID WILDCARD" IN BRIGHT RED:1.5)\nBREAK '
     WILDCARD_STOP = "INVALID WILDCARD! {0}\nBREAK "
@@ -956,7 +958,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
             var_keys = sorted(variables_snapshot.keys())
             for k in var_keys:
                 entry = variables_snapshot[k]
-                if entry.last_echoed_evaluated_value is None and entry.value is not None:
+                if (
+                    entry.last_echoed_evaluated_value is None
+                    and entry.value is not None
+                    and not k.startswith("_output_")
+                ):
                     unechoed_variables.append(k)
                 ev = entry.last_echoed_evaluated_value if entry.last_echoed_evaluated_value is not None else entry.value
                 if ev is not None:
@@ -1050,7 +1056,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self,
         prompt: str,
         negative_prompt: str,
-        seed: int,
+        starting_seed: int | list[int],
         jobinfo: Any = None,
         input_vars: dict[str, Any] | None = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
@@ -1060,7 +1066,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Args:
             prompt (str): The prompt.
             negative_prompt (str): The negative prompt.
-            seed (int): The seed for the random number generator.
+            starting_seed (int | list[int]): The starting seed for the random number generator.
             jobinfo (Any): Additional job information to be stored in the input state.
             input_vars (dict[str, Any] | None): Additional input variables to be set as system variables with the "_input_" prefix.
 
@@ -1070,10 +1076,11 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self.state.variables.clear_user()
 
         # We update the input state
-        # Truncate the seed to the host's configured bit width (-1 because we only want
-        # positive numbers) so the value stays within the range the host expects
-        # (e.g., 32-bit for SD-WebUI, 64-bit for ComfyUI).
-        self.state.inputs.seed = int(seed & ((1 << (self.state.host_config.seed_bits - 1)) - 1))
+        self.state.inputs.seed = (
+            clamp_host_bits(self.state.host_config.seed_bits, starting_seed)
+            if not isinstance(starting_seed, list)
+            else [clamp_host_bits(self.state.host_config.seed_bits, s) for s in starting_seed]
+        )
         self.state.inputs.pos_prompt = prompt
         self.state.inputs.neg_prompt = negative_prompt
         self.state.inputs.jobinfo = jobinfo
@@ -1103,7 +1110,9 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         filtered_sysvars_inputs = {k: v for k, v in self.state.variables.all_system.items() if k.startswith("_input_")}
         self.log(logging.INFO, f"Inputs: {filtered_sysvars_inputs}")
 
-        rng = np.random.default_rng(self.state.inputs.seed)
+        rng = np.random.default_rng(
+            self.state.inputs.seed if not isinstance(self.state.inputs.seed, list) else self.state.inputs.seed[0]
+        )
 
         # Parse both prompts
         processor = TreeProcessor(self.state, rng, on_model_info_update=self.__on_model_info_update)
@@ -1150,13 +1159,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
 
     def process_prompts_group_start(self):
         """Start of a prompt processing group."""
-        filtered_sysvars = {k: v for k, v in self.state.variables.all_system.items() if not k.startswith("_input_")}
+        filtered_sysvars = {
+            k: v for k, v in self.state.variables.all_system.items() if not k.startswith(("_input_", "_output_"))
+        }
         self.log(logging.DEBUG, f"System variables: {filtered_sysvars}", DEBUG_LEVEL.minimal)
         self.log(logging.INFO, f"Run mode: {self.state.options.run_mode.name}")
         if self.state.options.run_mode == RUN_MODE.combinatorial:
-            self.log(logging.INFO, f"Up to {self.state.options.results_limit} combinations")
+            if self.state.options.results_limit > 0:
+                self.log(logging.INFO, f"Up to {self.state.options.results_limit} combinations")
+            else:
+                self.log(logging.INFO, "No combinations limit")
         elif self.state.options.run_mode == RUN_MODE.multiple:
-            self.log(logging.INFO, f"Up to {self.state.options.results_limit} results")
+            if self.state.options.results_limit < 1:
+                self.state.options.results_limit = 1
+            self.log(logging.INFO, f"Returning {self.state.options.results_limit} results")
 
     def _expand_filename(self) -> Path:
         """Expand %...% tokens in a filename template and resolve relative paths against the extension logs folder."""
@@ -1193,10 +1209,15 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
                         "system_variables": {
                             k: v
                             for k, v in all_variables.items()
-                            if k.startswith("_") and not k.startswith("_opt_") and not k.startswith("_input_")
+                            if k.startswith("_")
+                            and not k.startswith("_opt_")
+                            and not k.startswith(("_input_", "_output_"))
                         },
                         "inputs": {
                             k.removeprefix("_input_"): v for k, v in all_variables.items() if k.startswith("_input_")
+                        },
+                        "outputs": {
+                            k.removeprefix("_output_"): v for k, v in all_variables.items() if k.startswith("_output_")
                         },
                         "prompt_results": {"prompt": result_prompt, "negative_prompt": result_neg_prompt},
                         "user_variables": {k: v for k, v in all_variables.items() if not k.startswith("_")},
@@ -1264,7 +1285,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         self,
         original_prompt: str,
         original_negative_prompt: str,
-        seed: int = -1,
+        starting_seed: int | list[int] = -1,
         jobinfo: Any = None,
         input_vars: dict[str, Any] | None = None,
     ) -> list[tuple[str, str, dict[str, Any]]]:
@@ -1274,7 +1295,7 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         Args:
             original_prompt (str): The original prompt.
             original_negative_prompt (str): The original negative prompt.
-            seed (int): The seed.
+            starting_seed (int | list[int]): The starting seed or list of starting seeds.
             jobinfo (Any): Optional job information, available as `_input_jobinfo`.
             input_vars (dict[str, Any] | None): Optional dictionary of input variables to set before processing.
 
@@ -1283,15 +1304,20 @@ class PromptPostProcessor:  # pylint: disable=too-few-public-methods,too-many-in
         """
         results: list[tuple[str, str, dict[str, Any]]]
         try:
-            if seed == -1:
-                seed = np.random.randint(0, 2 ** (self.state.host_config.seed_bits - 1), dtype=np.int64)
+            if isinstance(starting_seed, list):
+                starting_seed = [
+                    np.random.randint(0, 1 << (self.state.host_config.seed_bits - 1), dtype=np.int64) if s == -1 else s
+                    for s in starting_seed
+                ]
+            elif starting_seed == -1:
+                starting_seed = np.random.randint(0, 1 << (self.state.host_config.seed_bits - 1), dtype=np.int64)
             prompt = original_prompt
             negative_prompt = original_negative_prompt
             t1 = time.monotonic_ns()
             if self.state.cyclical_state.last_prompt_pair != (original_prompt, original_negative_prompt):
                 self.state.cyclical_state.reset()
                 self.state.cyclical_state.last_prompt_pair = (original_prompt, original_negative_prompt)
-            results = self.__processprompts(prompt, negative_prompt, seed, jobinfo, input_vars or {})
+            results = self.__processprompts(prompt, negative_prompt, starting_seed, jobinfo, input_vars or {})
             t2 = time.monotonic_ns()
             self.log(logging.INFO, f"Process prompt pair time: {(t2 - t1) / 1_000_000_000:.3f} seconds")
             # self.log(logging.DEBUG,f"Wildcards memory usage: {self.state.wildcards_obj.__sizeof__()}")

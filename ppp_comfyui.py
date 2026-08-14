@@ -20,6 +20,7 @@ from ppp_classes import (
     SUPPORTED_APPS,
     PPPException,
     RUN_MODE,
+    NEXT_SEED,
     PPPStateOptions,
 )
 from ppp_common import get_model_class_from_filename, load_grammar
@@ -436,6 +437,7 @@ class PromptPostProcessorComfyUINode:
             default_sampler=DEFAULT_SAMPLER(
                 rm_options["default_sampler"] if rm_options else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER
             ),
+            next_seed=NEXT_SEED(rm_options["next_seed"] if rm_options else PromptPostProcessor.DEFAULT_NEXT_SEED),
         )
         self.wildcards_obj.refresh_wildcards(
             options.debug_level,
@@ -524,6 +526,14 @@ class PromptPostProcessorRunModeOptionsComfyUINode:
                         "tooltip": "Default choice sampler",
                     },
                 ),
+                "next_seed": (
+                    "COMBO",
+                    {
+                        "options": [e.value for e in NEXT_SEED],
+                        "default": PromptPostProcessor.DEFAULT_NEXT_SEED,
+                        "tooltip": "Next seed strategy",
+                    },
+                ),
             },
         }
 
@@ -540,12 +550,14 @@ class PromptPostProcessorRunModeOptionsComfyUINode:
         results_shuffle: bool,
         comb_random_fixed: bool,
         default_sampler: str,
+        next_seed: str,
     ):
         options = {
             "results_limit": results_limit,
             "results_shuffle": results_shuffle,
             "comb_random_fixed": comb_random_fixed,
             "default_sampler": default_sampler,
+            "next_seed": next_seed,
         }
         return (options,)
 

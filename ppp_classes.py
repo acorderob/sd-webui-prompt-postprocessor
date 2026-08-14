@@ -58,6 +58,13 @@ class DEFAULT_SAMPLER(Enum):
     cyclical = "cyclical"
 
 
+class NEXT_SEED(Enum):
+    randomize = "randomize"
+    input = "input"
+    increment = "increment"
+    decrement = "decrement"
+
+
 # ------------------- Host configuration -------------------
 
 AttentionOption = Literal["ok", "parentheses", "disable", "remove", "error"]
@@ -226,6 +233,7 @@ class PPPStateOptions:
     results_shuffle: bool = False
     comb_random_fixed: bool = True  # if True, the random sampler will be fixed across all DFS runs
     default_sampler: DEFAULT_SAMPLER = DEFAULT_SAMPLER.random
+    next_seed: NEXT_SEED = NEXT_SEED.randomize  # how to determine the next seed for each prompt
 
     def __post_init__(self):
         if not self.cup_do_cleanup:
@@ -248,7 +256,7 @@ class PPPStateOptions:
 class PPPStateInputs:
     """Structured inputs for a single prompt processing call."""
 
-    seed: int = -1
+    seed: int | list[int] = -1
     pos_prompt: str = ""
     neg_prompt: str = ""
     jobinfo: Any = None

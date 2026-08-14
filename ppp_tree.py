@@ -11,11 +11,11 @@ from typing import Callable, Optional
 import lark
 import numpy as np
 
-from ppp_classes import DEFAULT_SAMPLER, IFWILDCARDS_CHOICES, RUN_MODE, SUPPORTED_APPS, PPPState
+from ppp_classes import DEFAULT_SAMPLER, IFWILDCARDS_CHOICES, NEXT_SEED, RUN_MODE, SUPPORTED_APPS, PPPState
 from ppp_enmappings import PPPENMappingVariant
 from ppp_logging import DEBUG_LEVEL, log
 from ppp_utils import escape_single_quotes, repr_value
-from ppp_common import WARN_STOP_WHERE, parse_prompt, warn_or_stop
+from ppp_common import WARN_STOP_WHERE, clamp_host_bits, parse_prompt, warn_or_stop
 from ppp_variables import ScalarValue, VariableEntry
 from ppp_wildcards import PPPWildcard
 
@@ -62,6 +62,9 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__on_model_info_update = on_model_info_update
         self.__debug_level = state.options.debug_level
         self.__rng = rng
+        self.__current_input_seed = (
+            self.state.inputs.seed if not isinstance(self.state.inputs.seed, list) else self.state.inputs.seed[0]
+        )
         self.__shell: list[TreeProcessor.AccumulatedShell] = []  # type: ignore
         self.__negtags: list[TreeProcessor.NegTag] = []  # type: ignore
         self.__already_processed: list[str] = []
@@ -71,6 +74,7 @@ class TreeProcessor(lark.visitors.Interpreter):
         self.__add_at: dict[str, list] = {"start": [], "insertion_point": [[] for _ in range(10)], "end": []}
         self.__insertion_at: list[tuple[int, int]] = [None for _ in range(10)]
         self.__detectedWildcards: list[tuple[str, bool]] = []
+        self.__current_run_index = 0
         self.__result = ""
         self.__forced_path: list[int] = []
         self.__trace: list[int] = []
@@ -102,6 +106,35 @@ class TreeProcessor(lark.visitors.Interpreter):
         if self.state.extranetwork_mappings_obj is not None:
             self.state.extranetwork_mappings_obj.cached_mappings.clear()
 
+    def __prepare_next_rng(self):
+        """
+        Prepare the random number generator for a new run.
+
+        Note: All random generation should use default_rng to be reproducible.
+        """
+        if self.state.options.next_seed == NEXT_SEED.input:
+            # Use the input seed for every run, so the output is deterministic for a given input.
+            self.__current_input_seed = (
+                self.state.inputs.seed
+                if not isinstance(self.state.inputs.seed, list)
+                else self.state.inputs.seed[self.__current_run_index % len(self.state.inputs.seed)]
+            )
+            self.__rng = np.random.default_rng(self.__current_input_seed)
+        elif self.state.options.next_seed == NEXT_SEED.increment:
+            # Increment the seed for each run, so the output varies for a given input.
+            self.__current_input_seed = clamp_host_bits(self.state.host_config.seed_bits, self.__current_input_seed + 1)
+            self.__rng = np.random.default_rng(self.__current_input_seed)
+        elif self.state.options.next_seed == NEXT_SEED.decrement:
+            # Decrement the seed for each run, so the output varies for a given input.
+            self.__current_input_seed = clamp_host_bits(self.state.host_config.seed_bits, self.__current_input_seed - 1)
+            self.__rng = np.random.default_rng(self.__current_input_seed)
+        elif self.state.options.next_seed == NEXT_SEED.randomize:
+            # Randomize the seed for each run, so the output varies for a given input.
+            self.__current_input_seed = self.__rng.integers(
+                0, 1 << (self.state.host_config.seed_bits - 1), dtype=np.int64
+            )
+            self.__rng = np.random.default_rng(self.__current_input_seed)
+
     def start_visit(
         self,
         parsed: lark.Tree,
@@ -128,6 +161,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             or (self.state.options.run_mode == RUN_MODE.multiple and self.state.options.results_limit < 1)
             else self.state.options.results_limit
         )
+        self.__current_run_index = 0
 
         initial_vars = self.state.variables.backup_user()
 
@@ -135,6 +169,7 @@ class TreeProcessor(lark.visitors.Interpreter):
             initial_path = list(self.state.cyclical_state.current_path)
             warned_cycle = False
             for step in range(max_results):
+                self.log(logging.DEBUG, f"Using seed {self.__current_input_seed}")
                 self.__reset_run_state()
                 self.state.variables.restore_user(initial_vars)
                 self.__forced_path = list(self.state.cyclical_state.current_path)
@@ -156,12 +191,14 @@ class TreeProcessor(lark.visitors.Interpreter):
                             cycle_start = (initial_path + [0] * trace_len)[:trace_len]
                         if self.state.cyclical_state.current_path == cycle_start:
                             warn = True
-                results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user()))
+                results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user_and_output()))
                 if self.state.options.run_mode == RUN_MODE.multiple:
                     self.log(logging.INFO, f"Added result {len(results)}")
                 if warn:
-                    self.log(logging.WARNING, "Cyclical combinations are repeating; results may start repeating.")
+                    self.log(logging.WARNING, "Cyclical combinations are repeating; prompt results will start repeating.")
                     warned_cycle = True
+                self.__current_run_index += 1
+                self.__prepare_next_rng()
             return results
 
         # Combinatorial mode: explore every possible path through choices and wildcards via DFS.
@@ -173,17 +210,20 @@ class TreeProcessor(lark.visitors.Interpreter):
 
         def _run(forced_path: tuple[int, ...]) -> tuple[int, ...]:
             self.log(logging.DEBUG, f"Running combinatorial path: {forced_path}")
+            self.log(logging.DEBUG, f"Using seed {self.__current_input_seed}")
             self.__forced_path = list(forced_path)
             self.__trace = []
             self.__reset_run_state()
             self.state.variables.restore_user(initial_vars)
             self.visit(parsed)
             self.__finalize_variables()
-            results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user()))
+            results.append((self.__result, self.__detectedWildcards.copy(), self.state.variables.backup_user_and_output()))
             if len(results) == 1:
                 first_run_estimate = reduce(lambda x, y: x * y, self.__trace, 1)
                 self.log(logging.INFO, f"Estimated combinations (lower bound): {first_run_estimate}")
             self.log(logging.INFO, f"Added combination {len(results)}")
+            self.__current_run_index += 1
+            self.__prepare_next_rng()
             return tuple(self.__trace)
 
         limit_reached = False
@@ -232,6 +272,8 @@ class TreeProcessor(lark.visitors.Interpreter):
                 name, specifier = self.__separate_arrayref(k)
                 value = self.get_final_scalar_variable(name, specifier)
                 self.state.variables.set_user(k, value)
+        # Set the system variable for the current input seed so it can be used afterwards if needed.
+        self.state.variables.set_system("_output_seed", int(self.__current_input_seed))
 
     def __visit(
         self,

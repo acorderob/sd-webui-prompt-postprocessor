@@ -8,6 +8,7 @@ Provides run mode options to the main PPP node.
 * **results_shuffle**: It shuffles the results.
 * **comb_random_fixed**: If True all specified random samplers will have a fixed value across the combinations.
 * **default_sampler**: The default choice sampler when not specified (in non combinatorial mode). Also applies to extranetwork mapping selection.
+* **next_seed**: Choose what to do with the seed in the following prompts in `multiple` or `combinatorial` mode. Value can be: `randomize`, `input`, `increment`, `decrement`.
 
 ## Outputs
 

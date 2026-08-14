@@ -9,6 +9,7 @@ import datetime
 from ppp_classes import (
     DEFAULT_SAMPLER,
     IFWILDCARDS_CHOICES,
+    NEXT_SEED,
     ONWARNING_CHOICES,
     PPPEnvInfo,
     RUN_MODE,
@@ -88,6 +89,7 @@ class TestPromptPostProcessorBase(unittest.TestCase):
             results_shuffle=False,
             comb_random_fixed=True,
             default_sampler=DEFAULT_SAMPLER.random,
+            next_seed=NEXT_SEED.randomize,
         )
         self.def_env_info = PPPEnvInfo(
             app=SUPPORTED_APPS.tests,

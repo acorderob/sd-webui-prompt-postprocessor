@@ -138,6 +138,13 @@ class VariableRepository:
             }
         )
 
+    def backup_user_and_output(self) -> dict[str, VariableEntry]:
+        """Return a per-entry shallow-copy snapshot of all user variables and output variables."""
+        return {
+            name: VariableEntry(entry.value, entry.last_echoed_value, entry.last_echoed_evaluated_value)
+            for name, entry in self._vars.items()
+        } | {name: VariableEntry(entry) for name, entry in self._system.items() if name.startswith("_output_")}
+
     # ---- Combined queries ----
 
     def get(self, name: str, default: Any = None) -> Any:

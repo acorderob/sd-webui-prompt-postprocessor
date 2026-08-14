@@ -67,7 +67,7 @@ The only command available is `include wildcard`, which will include the choices
 These are examples of formats you can use to insert a choice construct:
 
 | Construct                                         | Result                                                                                                                                |
-| ---------                                         | ------                                                                                                                                |
+|---------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `{choice1\|5::choice2\|3::choice3}`               | select 1 choice, two of them have weights                                                                                             |
 | `{3$$choice1\|5 if _is_sd1::choice2\|choice3}`    | select 3 choices, one has a weight and a condition                                                                                    |
 | `{2-3$$2::choice1\|choice2\|choice3}`             | select 2 to 3 choices, one of them has a weight                                                                                       |
@@ -116,7 +116,7 @@ The variable value only applies during the evaluation of the selected choices an
 These are examples of formats you can use to insert a wildcard:
 
 | Construct                            | Result                                                                   |
-| ---------                            | ------                                                                   |
+|--------------------------------------|--------------------------------------------------------------------------|
 | `__wildcard__`                       | select 1 choice                                                          |
 | `__path/wildcard'0'__`               | select the first choice                                                  |
 | `__path/wildcard'1-2'__`             | select the second or third choice                                        |
@@ -198,7 +198,7 @@ This command can be used to set a default filter for a wildcard, before it is us
 The format is:
 
 | Construct                                     | Meaning            |
-| ---------                                     | -------            |
+|-----------------------------------------------|--------------------|
 | `<ppp:setwcdeffilter 'identifier' 'filter'/>` | Sets a filter      |
 | `<ppp:setwcdeffilter 'identifier'/>`          | Removes the filter |
 
@@ -217,25 +217,26 @@ All these variables can be used to output content or behave differently based on
 Names starting with an underscore are reserved for system variables:
 
 | System variable          | Value                                                                                                                                                                                                                                                                                                                                 |
-| ---------------          | -----                                                                                                                                                                                                                                                                                                                                 |
-| `_model`                 | the model identifier (`sd1`, `sd2`, `sdxl`, `sd3`, `flux`, `auraflow`). `_sd` also works but is deprecated.                                                                                                                                                                                                                           |
-| `_modelname`             | the model filename (without path). Do not confuse with the `modelname` input in *ComfyUI* which matches actually to the `_modelfullname` variable. `_sdname` also works but is deprecated.                                                                                                                                            |
-| `_modelfullname`         | the model filename (with path). `_sdfullname` also works but is deprecated. In *ComfyUI* this variable can also be **set** to override the filename used for model detection (see below).                                                                                                                                             |
-| `_modelclass`            | the class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. |
-| `_is_kkkk`               | true if the model is of kind *kkkk* (the model identifier, f.e. sdxl; those set in the ppp_config.yaml file)                                                                                                                                                                                                                          |
-| `_is_vvvv`               | true if the model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                     |
-| `_is_pure_kkkk`          | true if the model is of kind *kkkk* and not a variant.                                                                                                                                                                                                                                                                                |
-| `_is_variant_kkkk`       | true if the model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                    |
-| `_is_sd`                 | true if the model is any version of SD                                                                                                                                                                                                                                                                                                |
-| `_is_ssd`                | true if the model is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                                      |
-| `_is_sdxl_no_ssd`        | true if the model is SDXL and not an SSD model.                                                                                                                                                                                                                                                                                       |
-| `_is_sdxl_no_pony`       | true if the model is SDXL and not a Pony model (the `pony` variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                               |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `_model`                 | The model identifier (`sd1`, `sd2`, `sdxl`, `sd3`, `flux`, `auraflow`). `_sd` also works but is deprecated.                                                                                                                                                                                                                           |
+| `_modelname`             | The model filename (without path). Do not confuse with the `modelname` input in *ComfyUI* which matches actually to the `_modelfullname` variable. `_sdname` also works but is deprecated.                                                                                                                                            |
+| `_modelfullname`         | The model filename (with path). `_sdfullname` also works but is deprecated. In *ComfyUI* this variable can also be **set** to override the filename used for model detection (see below).                                                                                                                                             |
+| `_modelclass`            | The class used for the model. Note that this is dependent on the webui. In A1111 all SD versions use the same class. Can be used for new models that are not supported yet with the `_is_*` variables. The debug setting will show all system variables when generating in case you need to see which one to use for a certain model. |
+| `_is_kkkk`               | True if the model is of kind *kkkk* (the model identifier, f.e. sdxl; those set in the ppp_config.yaml file)                                                                                                                                                                                                                          |
+| `_is_vvvv`               | True if the model matches the *vvvv* model variant definition (based on its filename). Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                     |
+| `_is_pure_kkkk`          | True if the model is of kind *kkkk* and not a variant.                                                                                                                                                                                                                                                                                |
+| `_is_variant_kkkk`       | True if the model version is any variant of model kind *kkkk* and not the pure version. Note that the corresponding variable for the model kind will also be true.                                                                                                                                                                    |
+| `_is_sd`                 | True if the model is any version of SD                                                                                                                                                                                                                                                                                                |
+| `_is_ssd`                | True if the model is SSD (Segmind Stable Diffusion 1B). Note that for an SSD model `_is_sdxl` will also be true.                                                                                                                                                                                                                      |
+| `_is_sdxl_no_ssd`        | True if the model is SDXL and not an SSD model.                                                                                                                                                                                                                                                                                       |
+| `_is_sdxl_no_pony`       | True if the model is SDXL and not a Pony model (the `pony` variant must be defined in settings). Kept to maintain compatibility with previous versions.                                                                                                                                                                               |
 | `_opt_...`               | All the options.                                                                                                                                                                                                                                                                                                                      |
-| `_input_seed`            | The seed used.                                                                                                                                                                                                                                                                                                                        |
+| `_input_seed`            | The starting seed used.                                                                                                                                                                                                                                                                                                               |
 | `_input_pos_prompt`      | The original positive prompt.                                                                                                                                                                                                                                                                                                         |
 | `_input_neg_prompt`      | The original negative prompt.                                                                                                                                                                                                                                                                                                         |
 | `_input_prev_pos_prompt` | The positive prompt result of the previous phase. Available only in the hires fix phase in A1111 compatible hosts and with no combinatorial generation.                                                                                                                                                                               |
 | `_input_prev_neg_prompt` | The negative prompt result of the previous phase. Available only in the hires fix phase in A1111 compatible hosts and with no combinatorial generation.                                                                                                                                                                               |
+| `_output_seed`           | The seed used for the specific result. This variable changes for each result depending on the `next_seed` option. You can feed it to the ksampler.                                                                                                                                                                                    |
 
 > [!NOTE]
 > The model path is relative to the checkpoint/difussion_models folder, just as it appears in the load nodes.
@@ -260,14 +261,14 @@ The `add` and `ifundefined` modifiers are mutually exclusive and cannot be used 
 The *Dynamic Prompts* format also works:
 
 | Construct       | Meaning              |
-| ---------       | -------              |
+|-----------------|----------------------|
 | `${var=value}`  | regular evaluation   |
 | `${var=!value}` | immediate evaluation |
 
 If also supports the addition and undefined check as an extension of the *Dynamic Prompts* format:
 
 | Construct        | Meaning                              |
-| ---------        | -------                              |
+|------------------|--------------------------------------|
 | `${var+=value}`  | equivalent to `add`                  |
 | `${var+=!value}` | equivalent to `evaluate add`         |
 | `${var?=value}`  | equivalent to `ifundefined`          |
@@ -301,14 +302,14 @@ This command prints the value of a variable, or the specified default if it does
 The format is:
 
 | Construct                              |
-| ---------                              |
+|----------------------------------------|
 | `<ppp:echo varname/>`                  |
 | `<ppp:echo varname>default<ppp:/echo>` |
 
 The *Dynamic Prompts* format is:
 
 | Construct            |
-| ---------            |
+|----------------------|
 | `${varname}`         |
 | `${varname:default}` |
 
@@ -321,7 +322,7 @@ There is support for array variables. They use brackets `[]` to differenciate fr
 They can be initialized in several ways:
 
 | Construct                  | Meaning                                                          |
-| ---------                  | -------                                                          |
+|----------------------------|------------------------------------------------------------------|
 | `${var[]=value}`           | initialize and set the first value                               |
 | `${var[]=*()}`             | initialize an empty array                                        |
 | `${var[]=*var2[]}`         | initialize an array from another array                           |
@@ -341,13 +342,13 @@ And they can be accesed/echoed with:
 * A hash inside the brackets is used to get the length of the array
 * An ampersand followed by a string inside the brackets (with quotes) is used to get the full array joined with a separator.
 
-| Construct                  | Meaning                                                          |
-| ---------                  | -------                                                          |
-| `${var[]}`                 | echo all elements with a default separator                       |
-| `${var[&' / ']}`           | echo all elements with a specific separator                      |
-| `${var[n]}`                | echo an element from the array                                   |
-| `${var[n]:default}`        | echo an element with a default                                   |
-| `${var[#]}`                | echo the length of the array                                     |
+| Construct           | Meaning                                     |
+|---------------------|---------------------------------------------|
+| `${var[]}`          | echo all elements with a default separator  |
+| `${var[&' / ']}`    | echo all elements with a specific separator |
+| `${var[n]}`         | echo an element from the array              |
+| `${var[n]:default}` | echo an element with a default              |
+| `${var[#]}`         | echo the length of the array                |
 
 ## If command
 
@@ -362,7 +363,7 @@ Any `elif`s (there can be multiple) and the `else` are optional.
 The `conditionN` is a boolean expression, which can use `and`, `or`, `not` and grouping with parentheses, and where the simplest expression can be:
 
 | Construct                           | Meaning                                                                         |
-| ---------                           | -------                                                                         |
+|-------------------------------------|---------------------------------------------------------------------------------|
 | `operand`                           | check truthyness of the operand, meaning not zero, empty string nor empty array |
 | `operand1 [not] operation operand2` | compare the operands                                                            |
 
@@ -379,7 +380,7 @@ The supported operations are: `eq`, `ne`, `gt`, `lt`, `ge`, `le`, `in`, `any_in`
 This list shows what they do depending on the kind of operand (R = regular variable, A = array variable).
 
 | Operation      | R1 op R2                 | A1 op A2          | A1 op R2                                       | R1 op A2                                       |
-| ---------      | --------                 | --------          | --------                                       | --------                                       |
+|----------------|--------------------------|-------------------|------------------------------------------------|------------------------------------------------|
 | `eq`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
 | `ne`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
 | `gt`           | OK                       | OK (pairwise)     | Error in strict mode, all A1 with R2 otherwise | Error in strict mode, R1 with all A2 otherwise |
@@ -469,10 +470,10 @@ extnettype:
 
 Used like this:
 
-| Construct                                              | Meaning                              |
-| ---------                                              | -------                              |
-| `<ppp:ext $lora mappingname/>`                         | Mapping without additional triggers  |
-| `<ppp:ext $lora mappingname>inline triggers<ppp:/ext>` | Mapping with additional triggers     |
+| Construct                                              | Meaning                             |
+|--------------------------------------------------------|-------------------------------------|
+| `<ppp:ext $lora mappingname/>`                         | Mapping without additional triggers |
+| `<ppp:ext $lora mappingname>inline triggers<ppp:/ext>` | Mapping with additional triggers    |
 
 Each mapping can have any number of elements in its list of mappings. There are no mandatory properties for a mapping. The properties mean the following:
 
@@ -491,7 +492,7 @@ See the file in the tests folder as an example.
 The new format for this command is like this:
 
 | Construct                             | Meaning                                                                              |
-| ---------                             | -------                                                                              |
+|---------------------------------------|--------------------------------------------------------------------------------------|
 | `<ppp:stn position>content<ppp:/stn>` | send to negative prompt                                                              |
 | `<ppp:stn iN/>`                       | insertion point to be used in the negative prompt as destination for the pN position |
 

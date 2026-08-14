@@ -26,6 +26,7 @@ from ppp_classes import (
     SUPPORTED_APPS,
     SUPPORTED_APPS_NAMES,
     RUN_MODE,
+    NEXT_SEED,
     PPPStateOptions,
 )
 from ppp_logging import DEBUG_LEVEL, PromptPostProcessorLogFactory, log
@@ -143,8 +144,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 * A seed of -1 and "Incremental seed" unchecked will use a random seed for each prompt.
                 * Any other seed value and "Incremental seed" checked will use the specified seed for the first prompt and consecutive values for the rest.
                 * Any other seed value and "Incremental seed" unchecked will use the specified seed for all the prompts.
-
-                Seeds are only used for the wildcards and choice constructs.
             """)
             gr.HTML("<br>")
             with gr.Row(equal_height=True):
@@ -313,6 +312,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
             default_sampler=DEFAULT_SAMPLER(
                 input_default_sampler if input_default_sampler else PromptPostProcessor.DEFAULT_DEFAULT_SAMPLER
             ),
+            next_seed=NEXT_SEED.input,  # we use the calculated seeds
         )
         if not self.ppp_init:
             self.ppp_init = True
@@ -426,10 +426,10 @@ class PromptPostProcessorA1111Script(scripts.Script):
         if input_unlink_seed:
             log(self.ppp_logger, self.ppp_debug_level, logging.INFO, "Using unlinked seed")
             if input_incremental_seed:
-                first_seed = np.random.randint(0, 2**32, dtype=np.int64) if input_seed == -1 else input_seed
+                first_seed = np.random.randint(0, 1 << self.ppp.state.host_config.seed_bits, dtype=np.int64) if input_seed == -1 else input_seed
                 calculated_seeds = [first_seed + i for i in range(num_seeds)]
             elif input_seed == -1:
-                calculated_seeds = np.random.randint(0, 2**32, size=num_seeds, dtype=np.int64)
+                calculated_seeds = np.random.randint(0, 1 << self.ppp.state.host_config.seed_bits, size=num_seeds, dtype=np.int64)
             else:
                 calculated_seeds = [input_seed for _ in range(num_seeds)]
         else:
@@ -468,7 +468,6 @@ class PromptPostProcessorA1111Script(scripts.Script):
 
         self.ppp.process_prompts_group_start()
         if input_run_mode in (RUN_MODE.multiple.value, RUN_MODE.combinatorial.value):
-            seed_for_comb = calculated_seeds[0] if calculated_seeds else 0
             regular_copy = (rpr.copy() if rpr else None, rnr.copy() if rnr else None)
             hiresfix_copy = (rph.copy() if rph else None, rnh.copy() if rnh else None)
             regular_changes = False
@@ -482,7 +481,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                 comb_results = self.ppp.process_prompt(
                     rpr[0],
                     rnr[0],
-                    seed_for_comb,
+                    calculated_seeds,
                     jobinfo={
                         "job_timestamp": shared.state.job_timestamp,
                         "job": shared.state.job,
@@ -523,7 +522,7 @@ class PromptPostProcessorA1111Script(scripts.Script):
                     comb_results_hr = self.ppp.process_prompt(
                         rph[0],
                         rnh[0],
-                        seed_for_comb,
+                        calculated_seeds,
                         jobinfo={
                             "job_timestamp": shared.state.job_timestamp,
                             "job": shared.state.job,

@@ -496,6 +496,52 @@ You can leave the model and modelname inputs disconnected/empty and set the `_mo
 
 You can also set and extract user variables for other ksampler inputs, like sampler, scheduler, steps, cfg and latent size.
 
+## Seed behavior
+
+The seed determines which choices are picked for wildcards/choices with `~` (random) samplers and other random selections.
+
+This seed can be different than the one used for the image.
+
+Each host handles it differently.
+
+### A1111 and derivatives
+
+By default, PPP uses the same seed for image and prompt, which A1111 auto-increments across the batch. Each image therefore gets independently seeded wildcard expansions.
+
+The seeds are pre-calculated before the prompt postprocess begins.
+
+The extension provides options to change this:
+
+- **Force equal seeds**: sets every seed in the batch to the first one before processing. All images get the same expansion.
+- **Unlink seed**: separates the prompt seed from the image seed. The table below shows how it behaves depending on the seed value and the *Incremental seed* toggle:
+
+  | Seed value | Incremental | Prompt seed per image                    |
+  |------------|-------------|------------------------------------------|
+  | -1         | Yes         | Random base seed, then base+1, base+2, … |
+  | -1         | No          | Independent random seed per image        |
+  | N          | Yes         | N, N+1, N+2, …                           |
+  | N          | No          | N for every image                        |
+
+  If a subseed strength is set, the effective seed is `subseed × strength + seed × (1 − strength)` per image.
+
+In **multiple** or **combinatorial** run mode, results are generated using their corresponding seed in the batch, both for prompts and images. The `next_seed` option is set to `input` with these hosts (and a list of them is provided) because we need the image seeds pre-calculated.
+
+### ComfyUI
+
+The seed is an explicit node input (default: -1 for random, which gets an actual value as soon as possible and is considered the starting seed). In multiple result modes (`multiple` and `combinatorial`) the `next_seed` option is used to calculate the rest of the seeds.
+
+Each result seed is added as the output variable `_output_seed`, so it can be extracted and used as the image seed.
+
+## When the cyclical sampler resets
+
+The `@` (cyclical) sampler tracks its position so each call advances through combinations in order.
+
+The state is retained across executions within the same session. Each execution with the same prompts advances the position. The cycle only resets when either the positive or negative prompt text changes.
+
+## Keeping references up to date
+
+After updating your loras (deleting old ones, updating to new versions) run the `tools\check_loras.py` script to check if there are broken references in your wildcards or extranetwork mappings.
+
 ## Debugging tips
 
 When something isn't generating as expected, the debug setting is your first tool. Enable it in the extension settings; it will log all system variables at generation time, which tells you exactly what values are available for your conditions.
@@ -550,12 +596,12 @@ Common use cases:
 
 Set the `results_file` option (in the extension settings for *A1111*, or the `results_file` input on the main node for *ComfyUI*) to a filename. The extension determines the output format from the file extension:
 
-| Extension        | Format                                             |
-|------------------|----------------------------------------------------|
-| `.yaml` / `.yml` | YAML list of records                               |
-| `.jsonl`         | JSON Lines, one JSON object per line               |
-| `.csv`           | CSV with a header row (semicolon-delimited)        |
-| anything else    | Plain text with labelled sections                  |
+| Extension        | Format                                      |
+|------------------|---------------------------------------------|
+| `.yaml` / `.yml` | YAML list of records                        |
+| `.jsonl`         | JSON Lines, one JSON object per line        |
+| `.csv`           | CSV with a header row (semicolon-delimited) |
+| anything else    | Plain text with labelled sections           |
 
 Each record contains five sections: `options` (the PPP settings that were active), `inputs` (seed, prompts), `system` (system variables like `_modelclass`), `results` (the final positive and negative prompts), and `variables` (any user variables that were set).
 
@@ -569,41 +615,3 @@ Relative paths are resolved against the `logs` folder inside the extension direc
 
 > [!TIP]
 > The `.jsonl` format is the most convenient for programmatic processing. The `.yaml` format is the easiest to read manually.
-
-## Seed behavior per host
-
-The seed determines which choices are picked for wildcards and `~` (random) samplers. Each host handles it differently.
-
-### A1111 and derivatives
-
-By default, PPP uses each image's own seed, which A1111 auto-increments across the batch. Each image therefore gets independently seeded wildcard expansions.
-
-The extension provides options to change this:
-
-- **Force equal seeds**: sets every image seed in the batch to the first one before processing. All images get the same expansion.
-- **Unlink seed**: separates the prompt seed from the image seed. The table below shows how it behaves depending on the seed value and the *Incremental seed* toggle:
-
-  | Seed value | Incremental | Prompt seed per image                    |
-  |------------|-------------|------------------------------------------|
-  | -1         | Yes         | Random base seed, then base+1, base+2, … |
-  | -1         | No          | Independent random seed per image        |
-  | N          | Yes         | N, N+1, N+2, …                           |
-  | N          | No          | N for every image                        |
-
-  If a subseed strength is set, the effective seed is `subseed × strength + seed × (1 − strength)` per image.
-
-In **multiple** or **combinatorial** run mode, all result variants are generated once using the first seed in the batch. The images then cycle through those pre-generated results in order; no additional seed is used for subsequent images.
-
-### ComfyUI
-
-The seed is an explicit node input (default: -1 for random). Each node execution uses exactly the provided seed. There is no batch; each execution processes one prompt independently.
-
-## When the cyclical sampler resets
-
-The `@` (cyclical) sampler tracks its position so each call advances through combinations in order.
-
-The state is retained across executions within the same session. Each execution with the same prompts advances the position. The cycle only resets when either the positive or negative prompt text changes.
-
-## Keeping references up to date
-
-After updating your loras (deleting old ones, updating to new versions) run the `tools\check_loras.py` script to check if there are broken references in your wildcards or extranetwork mappings.

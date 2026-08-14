@@ -1,4 +1,4 @@
-from ppp_classes import DEFAULT_SAMPLER, RUN_MODE  # type: ignore
+from ppp_classes import DEFAULT_SAMPLER, NEXT_SEED, RUN_MODE  # type: ignore
 from .base_tests import OutputTuple, InputTuple, TestPromptPostProcessorBase
 
 if __name__ == "__main__":
@@ -151,9 +151,9 @@ class TestChoices(TestPromptPostProcessorBase):
             [
                 OutputTuple("choice1, option1, a", ""),
                 OutputTuple("choice1, option2, b", ""),
-                OutputTuple("choice2, option1, b", ""),
+                OutputTuple("choice2, option1, a", ""),
                 OutputTuple("choice2, option2, b", ""),
-                OutputTuple("choice3, option1, a", ""),
+                OutputTuple("choice3, option1, b", ""),
                 OutputTuple("choice3, option2, a", "", {"v": "option2"}),
             ],
             ppp=self.init_ppp(
@@ -166,7 +166,7 @@ class TestChoices(TestPromptPostProcessorBase):
     def test_ch_comb_random_consistent(self):  # ~ sampler picks one value shared across all combinations
         ppp_instance = self.init_ppp("nocup", run_mode=RUN_MODE.combinatorial)
         ppp_instance.process_prompts_group_start()
-        result = ppp_instance.process_prompt("{~a|b|c} {x|y}", "", seed=1)
+        result = ppp_instance.process_prompt("{~a|b|c} {x|y}", "", starting_seed=1)
         ppp_instance.process_prompts_group_end()
         self.assertEqual(len(result), 2, "Expected exactly 2 combinations ({x|y} expands to 2)")
         rnd_choices = {r_prompt.split()[0] for r_prompt, _, _ in result}
@@ -174,6 +174,26 @@ class TestChoices(TestPromptPostProcessorBase):
             len(rnd_choices),
             1,
             f"The ~ sampler must yield the same value across all combinations, got: {rnd_choices}",
+        )
+
+    # Multiple
+
+    def test_ch_multiple(self):
+        self.process(
+            InputTuple("{choice1|choice2|choice3}, ${v:{option1|option2}}, {~a|b}", ""),
+            [
+                OutputTuple("choice2, option2, a", ""),
+                OutputTuple("choice1, option1, b", ""),
+                OutputTuple("choice1, option2, b", ""),
+                OutputTuple("choice3, option1, b", ""),
+                OutputTuple("choice1, option1, a", ""),
+                OutputTuple("choice2, option1, a", "", {"v": "option1"}),
+            ],
+            ppp=self.init_ppp(
+                None,
+                run_mode=RUN_MODE.multiple,
+                results_limit=6,
+            ),
         )
 
     # Default sampler
@@ -206,3 +226,50 @@ class TestChoices(TestPromptPostProcessorBase):
                 results_limit=4,
             ),
         )
+
+    # next_seed / _output_seed
+
+    def test_ch_next_seed_input(self):  # input mode keeps the same seed for every result
+        self.process(
+            InputTuple("{@a|b|c}", ""),
+            [
+                OutputTuple("a", "", {"_output_seed": 1}),
+                OutputTuple("b", "", {"_output_seed": 1}),
+                OutputTuple("c", "", {"_output_seed": 1}),
+            ],
+            seed=1,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.multiple, results_limit=3, next_seed=NEXT_SEED.input),
+        )
+
+    def test_ch_next_seed_increment(self):  # increment mode increases the seed by 1 for each result
+        self.process(
+            InputTuple("{@a|b|c}", ""),
+            [
+                OutputTuple("a", "", {"_output_seed": 1}),
+                OutputTuple("b", "", {"_output_seed": 2}),
+                OutputTuple("c", "", {"_output_seed": 3}),
+            ],
+            seed=1,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.multiple, results_limit=3, next_seed=NEXT_SEED.increment),
+        )
+
+    def test_ch_next_seed_decrement(self):  # decrement mode decreases the seed by 1 for each result
+        self.process(
+            InputTuple("{@a|b|c}", ""),
+            [
+                OutputTuple("a", "", {"_output_seed": 3}),
+                OutputTuple("b", "", {"_output_seed": 2}),
+                OutputTuple("c", "", {"_output_seed": 1}),
+            ],
+            seed=3,
+            ppp=self.init_ppp("nocup", run_mode=RUN_MODE.multiple, results_limit=3, next_seed=NEXT_SEED.decrement),
+        )
+
+    def test_ch_next_seed_randomize(self):  # randomize mode produces a distinct seed for every result
+        ppp_instance = self.init_ppp("nocup", run_mode=RUN_MODE.multiple, results_limit=3, next_seed=NEXT_SEED.randomize)
+        ppp_instance.process_prompts_group_start()
+        results = ppp_instance.process_prompt("{@a|b|c}", "", starting_seed=1)
+        ppp_instance.process_prompts_group_end()
+        seeds = [r_vars.get("_output_seed") for _, _, r_vars in results]
+        self.assertEqual(len(seeds), 3, f"Expected 3 results, got {len(seeds)}")
+        self.assertEqual(len(set(seeds)), 3, f"Expected 3 distinct seeds, got: {seeds}")

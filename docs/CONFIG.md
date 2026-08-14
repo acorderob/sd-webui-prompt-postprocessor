@@ -71,8 +71,6 @@ In `single` and `multiple` modes the default choice sampler is the one set in `d
 
 Single mode with a default of cyclical sampler can be used as similar to combinatorial but in separated *ComfyUI* runs instead of one.
 
-In `multiple` and `combinatorial` modes, the prompt seed does not reset on each image. And, in `ComfyUI`, the image seed is the same for all images.
-
 ### ACB PPP Select Variable node
 
 Lets you extract the variables used from the output (or just one of them). You can use this to send only part of the prompt to, for example, a detailer node. For example:
@@ -115,6 +113,11 @@ Options for the run mode, in case you want to change them from the defaults.
 * **results_shuffle**: It shuffles the results.
 * **comb_random_fixed**: If True all specified random samplers will have a fixed value across the combinations.
 * **default_sampler**: The default choice sampler when not specified (in non combinatorial mode). Also applies to extranetwork mapping selection.
+* **next_seed**: Choose what to do with the seed in the following prompts in `multiple` or `combinatorial` mode. Value can be:
+  * `randomize`: Next prompts will have a random seed (default).
+  * `input`: Next prompts will have the same seed as the input (or first prompt).
+  * `increment`: The seeds in next prompts will increment.
+  * `decrement`: The seeds in next prompts will decrement.
 
 ### ACB PPP Wildcard Options node
 
@@ -185,7 +188,7 @@ The `Run mode` can be explained like this:
 
 In single and multiple modes the default choice sampler is the one set in `Default sampler`. In combinatorial mode the default sampling is equivalent to cyclical. In all modes specified samplers are respected. The value of random samplers in combinatorial mode depends on `Fix random sampler across combinations`.
 
-Multiple mode with a default of cyclical sampler is very similar to combinatorial. The only difference is that `Fix random sampler across combinations` does not apply and random samplers are thus not cached. There is no need for this mode with a random default sampler, since it would be the same as in single mode.
+Multiple mode with a default of cyclical sampler is very similar to combinatorial. The only difference is that `Fix random sampler across combinations` does not apply and random samplers are thus not cached. There is no reason to use this mode with a random default sampler, since it would be the same as in single mode.
 
 Single mode with a default of cyclical sampler can be used as similar to combinatorial but in separated runs instead of one.
 

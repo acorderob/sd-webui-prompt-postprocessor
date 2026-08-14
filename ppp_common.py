@@ -360,3 +360,17 @@ def convert_sdnext_styles_to_wildcard(inp: Path, out: Path):
             f.write(f"# Converted from {name}\n")
             yaml_writer = _YAML()
             yaml_writer.dump(wcs, f)
+
+
+def clamp_host_bits(bits: int, seed: int) -> int:
+    """
+    Clamp the seed to the host's configured bit width so the value stays within the range the host expects (and positive).
+
+    Args:
+        bits (int): The host's configured bit width.
+        seed (int): The seed to clamp.
+
+    Returns:
+        int: The clamped seed.
+    """
+    return int(seed & ((1 << bits ) - 1))
